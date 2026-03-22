@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+credentials.json
+service-account.json
+client_secret*.json
+google-credentials.json
+secrets.json
+*.key
+*.p12
+*.pfx
