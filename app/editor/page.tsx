@@ -612,23 +612,10 @@ function EditorPageContent() {
 export default function EditorPage() {
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
-  if (!clientId) {
-    return (
-      <main className="min-h-screen bg-zinc-950 px-6 py-10 text-zinc-100">
-        <div className="mx-auto max-w-3xl rounded-2xl border border-zinc-800 bg-zinc-900/70 p-6">
-          <h1 className="mb-3 text-xl font-semibold">Editor 暫時無法使用 Google 功能</h1>
-          <p className="text-sm leading-7 text-zinc-300">
-            缺少 <code>NEXT_PUBLIC_GOOGLE_CLIENT_ID</code>。
-            請到 Vercel 專案設定補上環境變數後重新部署。
-          </p>
-        </div>
-      </main>
-    );
-  }
-
   return (
-    <GoogleOAuthProvider clientId={clientId}>
-      <EditorPageContent />
-    </GoogleOAuthProvider>
+    <main className="min-h-screen bg-black p-8 text-white">
+      <div>DEBUG clientId: {clientId ? clientId : "MISSING"}</div>
+      <div>DEBUG length: {clientId ? clientId.length : 0}</div>
+    </main>
   );
 }
