@@ -15,10 +15,15 @@ export default function RootLayout({
 }>) {
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
+  console.log("SERVER clientId =", clientId);
+
   const content = (
     <>
       <SiteNavigation />
       {children}
+      <div style={{ display: "none" }} id="debug-client-id">
+        {clientId ? `clientId exists: ${clientId}` : "clientId missing"}
+      </div>
     </>
   );
 
