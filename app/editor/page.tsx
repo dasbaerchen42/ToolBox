@@ -1,21 +1,23 @@
 "use client";
 
-console.log("CLIENT env =", process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
-
 import { useEffect, useMemo, useState } from "react";
-import { STORAGE_KEY, WritingDoc, createNewDoc } from "@/lib/storage";
+import {
+  GoogleOAuthProvider,
+  useGoogleLogin,
+  type TokenResponse,
+} from "@react-oauth/google";
+import { STORAGE_KEY, type WritingDoc, createNewDoc } from "@/lib/storage";
 import {
   ACTIVE_DOC_KEY,
-  EditorPreferences,
+  type EditorPreferences,
   PREFERENCES_KEY,
-  ThemeName,
+  type ThemeName,
   defaultPreferences,
 } from "@/lib/preferences";
 import EditorSidebar from "@/components/editor/editor-sidebar";
 import EditorToolbar from "@/components/editor/editor-toolbar";
 import EditorSettingsPanel from "@/components/editor/editor-settings-panel";
 import EditorTextarea from "@/components/editor/editor-textarea";
-import { useGoogleLogin } from "@react-oauth/google";
 import EditorStatusPanel from "@/components/editor/editor-status-panel";
 import { validateContent } from "@/lib/validators";
 import EditorStatsBar from "@/components/editor/editor-stats-bar";
@@ -135,19 +137,20 @@ const themeMap: Record<ThemeName, ThemeConfig> = {
   },
 };
 
-export default function EditorPage() {
+function EditorPageContent() {
   const [docs, setDocs] = useState<WritingDoc[]>([]);
   const [activeDocId, setActiveDocId] = useState<string>("");
   const [preferences, setPreferences] =
     useState<EditorPreferences>(defaultPreferences);
 
   useEffect(() => {
+    try {
       const savedDocs = localStorage.getItem(STORAGE_KEY);
       const savedPreferences = localStorage.getItem(PREFERENCES_KEY);
       const savedActiveDocId = localStorage.getItem(ACTIVE_DOC_KEY);
 
       if (savedPreferences) {
-        setPreferences(JSON.parse(savedPreferences));
+        setPreferences(JSON.parse(savedPreferences) as EditorPreferences);
       }
 
       if (savedDocs) {
@@ -167,13 +170,28 @@ export default function EditorPage() {
           setActiveDocId(savedActiveDocId);
         } else if (normalizedDocs.length > 0) {
           setActiveDocId(normalizedDocs[0].id);
+        } else {
+          const firstDoc = createNewDoc();
+          setDocs([firstDoc]);
+          setActiveDocId(firstDoc.id);
         }
       } else {
         const firstDoc = createNewDoc();
         setDocs([firstDoc]);
         setActiveDocId(firstDoc.id);
       }
-    }, []);
+    } catch (error) {
+      console.error("Failed to load editor data from localStorage:", error);
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(PREFERENCES_KEY);
+      localStorage.removeItem(ACTIVE_DOC_KEY);
+
+      const firstDoc = createNewDoc();
+      setDocs([firstDoc]);
+      setActiveDocId(firstDoc.id);
+      setPreferences(defaultPreferences);
+    }
+  }, []);
 
   useEffect(() => {
     if (docs.length > 0) {
@@ -196,22 +214,25 @@ export default function EditorPage() {
   }, [docs, activeDocId]);
 
   const theme = themeMap[preferences.theme];
-    const validationResult = activeDoc
+
+  const validationResult = activeDoc
     ? validateContent(activeDoc.mode, activeDoc.content)
     : {
         status: "idle" as const,
         title: "狀態",
         messages: ["尚未選擇文件。"],
       };
-      const editorStats = activeDoc
-      ? getEditorStats(activeDoc.content)
-      : getEditorStats("");  
-    const exportToGoogleDocs = useGoogleLogin({
+
+  const editorStats = activeDoc
+    ? getEditorStats(activeDoc.content)
+    : getEditorStats("");
+
+  const exportToGoogleDocs = useGoogleLogin({
     scope: [
       "https://www.googleapis.com/auth/documents",
       "https://www.googleapis.com/auth/drive.file",
     ].join(" "),
-    onSuccess: async (tokenResponse) => {
+    onSuccess: async (tokenResponse: TokenResponse) => {
       try {
         if (!activeDoc) {
           alert("目前沒有可匯出的文件。");
@@ -230,10 +251,6 @@ export default function EditorPage() {
             ? activeDoc.content
             : "（這份文件目前沒有內容）";
 
-        console.log("準備匯出的標題：", titleToExport);
-        console.log("準備匯出的內容：", contentToExport);
-
-        // 1. 建立 Google 文件
         const createResponse = await fetch(
           "https://docs.googleapis.com/v1/documents",
           {
@@ -256,7 +273,6 @@ export default function EditorPage() {
         const createdDoc = await createResponse.json();
         const documentId = createdDoc.documentId as string;
 
-        // 2. 寫入內容
         const updateResponse = await fetch(
           `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
           {
@@ -300,15 +316,14 @@ export default function EditorPage() {
     },
   });
 
-    const importFromGoogleDocs = useGoogleLogin({
+  const importFromGoogleDocs = useGoogleLogin({
     scope: [
       "https://www.googleapis.com/auth/documents.readonly",
       "https://www.googleapis.com/auth/drive.readonly",
     ].join(" "),
-    onSuccess: async (tokenResponse) => {
+    onSuccess: async (tokenResponse: TokenResponse) => {
       try {
         const accessToken = tokenResponse.access_token;
-
         const input = window.prompt("請貼上 Google Docs 文件連結：");
 
         if (!input) {
@@ -339,82 +354,74 @@ export default function EditorPage() {
         }
 
         const docData = await response.json();
-
         const title = docData.title || "匯入的文件";
 
-          function getAllTabs(tabs: any[] = []): any[] {
-            const result: any[] = [];
+        function getAllTabs(tabs: any[] = []): any[] {
+          const result: any[] = [];
 
-            for (const tab of tabs) {
-              result.push(tab);
+          for (const tab of tabs) {
+            result.push(tab);
 
-              if (tab.childTabs?.length) {
-                result.push(...getAllTabs(tab.childTabs));
-              }
+            if (tab.childTabs?.length) {
+              result.push(...getAllTabs(tab.childTabs));
             }
-
-            return result;
           }
 
-          function readStructuralElements(elements: any[] = []): string {
-            let text = "";
+          return result;
+        }
 
-            for (const element of elements) {
-              // 一般段落
-              if (element.paragraph?.elements) {
-                text += element.paragraph.elements
-                  .map((el: any) => el.textRun?.content || "")
-                  .join("");
-              }
+        function readStructuralElements(elements: any[] = []): string {
+          let text = "";
 
-              // 表格
-              if (element.table?.tableRows) {
-                for (const row of element.table.tableRows) {
-                  for (const cell of row.tableCells || []) {
-                    text += readStructuralElements(cell.content || []);
-                  }
+          for (const element of elements) {
+            if (element.paragraph?.elements) {
+              text += element.paragraph.elements
+                .map((el: any) => el.textRun?.content || "")
+                .join("");
+            }
+
+            if (element.table?.tableRows) {
+              for (const row of element.table.tableRows) {
+                for (const cell of row.tableCells || []) {
+                  text += readStructuralElements(cell.content || []);
                 }
               }
-
-              // 目錄
-              if (element.tableOfContents?.content) {
-                text += readStructuralElements(element.tableOfContents.content);
-              }
             }
 
-            return text;
+            if (element.tableOfContents?.content) {
+              text += readStructuralElements(element.tableOfContents.content);
+            }
           }
 
-          let textContent = "";
+          return text;
+        }
 
-          // 新版：讀所有 tabs
-          if (docData.tabs?.length) {
-            const allTabs = getAllTabs(docData.tabs);
+        let textContent = "";
 
-            textContent = allTabs
-              .map((tab: any, index: number) => {
-                const tabTitle = tab.tabProperties?.title || `分頁 ${index + 1}`;
-                const tabBody = tab.documentTab?.body?.content || [];
-                const tabText = readStructuralElements(tabBody).trim();
+        if (docData.tabs?.length) {
+          const allTabs = getAllTabs(docData.tabs);
 
-                return `# ${tabTitle}\n\n${tabText}`;
-              })
-              .join("\n\n---\n\n");
-          } else {
-            // 舊版相容：沒有 tabs 時仍讀 body
-            const bodyContent = docData.body?.content || [];
-            textContent = readStructuralElements(bodyContent).trim();
-          }
+          textContent = allTabs
+            .map((tab: any, index: number) => {
+              const tabTitle = tab.tabProperties?.title || `分頁 ${index + 1}`;
+              const tabBody = tab.documentTab?.body?.content || [];
+              const tabText = readStructuralElements(tabBody).trim();
 
-        const now = new Date().toISOString();
+              return `# ${tabTitle}\n\n${tabText}`;
+            })
+            .join("\n\n---\n\n");
+        } else {
+          const bodyContent = docData.body?.content || [];
+          textContent = readStructuralElements(bodyContent).trim();
+        }
+
+        const baseDoc = createNewDoc();
 
         const importedDoc: WritingDoc = {
-          id: crypto.randomUUID(),
+          ...baseDoc,
           title,
           content: textContent.trim(),
           mode: "plain",
-          createdAt: now,
-          updatedAt: now,
         };
 
         setDocs((prev) => [importedDoc, ...prev]);
@@ -559,7 +566,7 @@ export default function EditorPage() {
                 <CollapsibleSection title="Status" defaultOpen={true} theme={theme}>
                   <div className="space-y-3">
                     <div className={`text-sm ${theme.mutedText}`}>
-                    ［最後儲存時間］{formatDateTime24h(activeDoc.updatedAt)}
+                      ［最後儲存時間］{formatDateTime24h(activeDoc.updatedAt)}
                     </div>
                     <EditorStatsBar stats={editorStats} theme={theme} />
                   </div>
@@ -599,5 +606,29 @@ export default function EditorPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+export default function EditorPage() {
+  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+
+  if (!clientId) {
+    return (
+      <main className="min-h-screen bg-zinc-950 px-6 py-10 text-zinc-100">
+        <div className="mx-auto max-w-3xl rounded-2xl border border-zinc-800 bg-zinc-900/70 p-6">
+          <h1 className="mb-3 text-xl font-semibold">Editor 暫時無法使用 Google 功能</h1>
+          <p className="text-sm leading-7 text-zinc-300">
+            缺少 <code>NEXT_PUBLIC_GOOGLE_CLIENT_ID</code>。
+            請到 Vercel 專案設定補上環境變數後重新部署。
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <GoogleOAuthProvider clientId={clientId}>
+      <EditorPageContent />
+    </GoogleOAuthProvider>
   );
 }
