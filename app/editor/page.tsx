@@ -1,5 +1,7 @@
 "use client";
 
+console.log("CLIENT env =", process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
+
 import { useEffect, useMemo, useState } from "react";
 import { STORAGE_KEY, WritingDoc, createNewDoc } from "@/lib/storage";
 import {
