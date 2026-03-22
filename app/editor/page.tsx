@@ -608,14 +608,11 @@ function EditorPageContent() {
     </main>
   );
 }
-
 export default function EditorPage() {
-  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-
   return (
-    <main className="min-h-screen bg-black p-8 text-white">
-      <div>DEBUG clientId: {clientId ? clientId : "MISSING"}</div>
-      <div>DEBUG length: {clientId ? clientId.length : 0}</div>
+    <main style={{ padding: 24 }}>
+      <h1>EDITOR SAFE MODE</h1>
+      <p>No Google OAuth here.</p>
     </main>
   );
 }
