@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Das Baerchen Tool Box
+
+A web-based writing toolbox built with Next.js and TypeScript.
+
+It includes a writing editor, utility tools, and Google Docs related integration through Google OAuth.
+
+## Features
+
+- Writing editor
+- Fullwidth conversion tool
+- Knife tool
+- Google OAuth integration
+- Built with Next.js App Router
+
+## Tech Stack
+
+- Next.js
+- React
+- TypeScript
+- Tailwind CSS
+- Google OAuth
 
 ## Getting Started
 
-First, run the development server:
+### 1. Clone the repository
 
 ```bash
+git clone https://github.com/YOUR_GITHUB_USERNAME/YOUR_REPOSITORY_NAME.git
+cd YOUR_REPOSITORY_NAME
+2. Install dependencies
+npm install
+3. Set up environment variables
+
+Create a .env.local file in the project root:
+
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_google_client_id_here
+
+You can copy from .env.example.
+
+4. Run the development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Environment Variables
+NEXT_PUBLIC_GOOGLE_CLIENT_ID
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Google OAuth Client ID used by the frontend.
 
-## Learn More
+This value is public-facing by design, but it should still be restricted in Google Cloud Console by setting the correct Authorized JavaScript origins.
 
-To learn more about Next.js, take a look at the following resources:
+Deployment
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+This project can be deployed on Vercel.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Before deploying, make sure:
 
-## Deploy on Vercel
+NEXT_PUBLIC_GOOGLE_CLIENT_ID is set in Vercel Environment Variables
+Google OAuth Authorized JavaScript origins include:
+http://localhost:3000
+your Vercel production domain
+Security Notes
+Do not commit .env.local
+Do not commit credential JSON files or private keys
+Sensitive files are excluded through .gitignore
+License
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Personal project / custom license
