@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { GoogleOAuthProvider } from "@react-oauth/google";
+import {
+  GoogleOAuthProvider,
+  useGoogleLogin,
+  type TokenResponse,
+} from "@react-oauth/google";
 import { STORAGE_KEY, type WritingDoc, createNewDoc } from "@/lib/storage";
 import {
   ACTIVE_DOC_KEY,
@@ -139,6 +143,221 @@ function EditorPageContent() {
   const [preferences, setPreferences] =
     useState<EditorPreferences>(defaultPreferences);
 
+  const activeDoc = useMemo(() => {
+    return docs.find((doc) => doc.id === activeDocId) || null;
+  }, [docs, activeDocId]);
+
+  const exportToGoogleDocs = useGoogleLogin({
+    scope: [
+      "https://www.googleapis.com/auth/documents",
+      "https://www.googleapis.com/auth/drive.file",
+    ].join(" "),
+    onSuccess: async (tokenResponse: TokenResponse) => {
+      try {
+        if (!activeDoc) {
+          alert("目前沒有可匯出的文件。");
+          return;
+        }
+
+        const accessToken = tokenResponse.access_token;
+
+        const titleToExport =
+          activeDoc.title && activeDoc.title.trim()
+            ? activeDoc.title
+            : "未命名文件";
+
+        const contentToExport =
+          activeDoc.content && activeDoc.content.trim()
+            ? activeDoc.content
+            : "（這份文件目前沒有內容）";
+
+        const createResponse = await fetch(
+          "https://docs.googleapis.com/v1/documents",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              title: titleToExport,
+            }),
+          }
+        );
+
+        if (!createResponse.ok) {
+          const errorText = await createResponse.text();
+          throw new Error(`建立文件失敗：${errorText}`);
+        }
+
+        const createdDoc = await createResponse.json();
+        const documentId = createdDoc.documentId as string;
+
+        const updateResponse = await fetch(
+          `https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              requests: [
+                {
+                  insertText: {
+                    location: {
+                      index: 1,
+                    },
+                    text: contentToExport,
+                  },
+                },
+              ],
+            }),
+          }
+        );
+
+        if (!updateResponse.ok) {
+          const errorText = await updateResponse.text();
+          throw new Error(`寫入內容失敗：${errorText}`);
+        }
+
+        alert("已成功匯出到 Google Docs！");
+        window.open(
+          `https://docs.google.com/document/d/${documentId}/edit`,
+          "_blank"
+        );
+      } catch (error) {
+        console.error("匯出失敗：", error);
+        alert("匯出失敗，請按 F12 查看 Console 錯誤。");
+      }
+    },
+    onError: () => {
+      alert("Google 授權失敗。");
+    },
+  });
+
+  const importFromGoogleDocs = useGoogleLogin({
+    scope: [
+      "https://www.googleapis.com/auth/documents.readonly",
+      "https://www.googleapis.com/auth/drive.readonly",
+    ].join(" "),
+    onSuccess: async (tokenResponse: TokenResponse) => {
+      try {
+        const accessToken = tokenResponse.access_token;
+        const input = window.prompt("請貼上 Google Docs 文件連結：");
+
+        if (!input) {
+          return;
+        }
+
+        const match = input.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
+
+        if (!match) {
+          alert("看起來不是有效的 Google Docs 連結。");
+          return;
+        }
+
+        const documentId = match[1];
+
+        const response = await fetch(
+          `https://docs.googleapis.com/v1/documents/${documentId}?includeTabsContent=true`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`讀取 Google Docs 失敗：${errorText}`);
+        }
+
+        const docData = await response.json();
+        const title = docData.title || "匯入的文件";
+
+        function getAllTabs(tabs: any[] = []): any[] {
+          const result: any[] = [];
+
+          for (const tab of tabs) {
+            result.push(tab);
+
+            if (tab.childTabs?.length) {
+              result.push(...getAllTabs(tab.childTabs));
+            }
+          }
+
+          return result;
+        }
+
+        function readStructuralElements(elements: any[] = []): string {
+          let text = "";
+
+          for (const element of elements) {
+            if (element.paragraph?.elements) {
+              text += element.paragraph.elements
+                .map((el: any) => el.textRun?.content || "")
+                .join("");
+            }
+
+            if (element.table?.tableRows) {
+              for (const row of element.table.tableRows) {
+                for (const cell of row.tableCells || []) {
+                  text += readStructuralElements(cell.content || []);
+                }
+              }
+            }
+
+            if (element.tableOfContents?.content) {
+              text += readStructuralElements(element.tableOfContents.content);
+            }
+          }
+
+          return text;
+        }
+
+        let textContent = "";
+
+        if (docData.tabs?.length) {
+          const allTabs = getAllTabs(docData.tabs);
+
+          textContent = allTabs
+            .map((tab: any, index: number) => {
+              const tabTitle = tab.tabProperties?.title || `分頁 ${index + 1}`;
+              const tabBody = tab.documentTab?.body?.content || [];
+              const tabText = readStructuralElements(tabBody).trim();
+
+              return `# ${tabTitle}\n\n${tabText}`;
+            })
+            .join("\n\n---\n\n");
+        } else {
+          const bodyContent = docData.body?.content || [];
+          textContent = readStructuralElements(bodyContent).trim();
+        }
+
+        const baseDoc = createNewDoc();
+
+        const importedDoc: WritingDoc = {
+          ...baseDoc,
+          title,
+          content: textContent.trim(),
+          mode: "plain",
+        };
+
+        setDocs((prev) => [importedDoc, ...prev]);
+        setActiveDocId(importedDoc.id);
+
+        alert("已成功從 Google Docs 匯入！");
+      } catch (error) {
+        console.error("匯入失敗：", error);
+        alert("匯入失敗，請按 F12 查看 Console 錯誤。");
+      }
+    },
+    onError: () => {
+      alert("Google 授權失敗。");
+    },
+  });
+
   useEffect(() => {
     try {
       const savedDocs = localStorage.getItem(STORAGE_KEY);
@@ -204,10 +423,6 @@ function EditorPageContent() {
   useEffect(() => {
     localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences));
   }, [preferences]);
-
-  const activeDoc = useMemo(() => {
-    return docs.find((doc) => doc.id === activeDocId) || null;
-  }, [docs, activeDocId]);
 
   const theme = themeMap[preferences.theme];
 
@@ -341,8 +556,8 @@ function EditorPageContent() {
                       操作
                     </label>
                     <EditorToolbar
-                      onImport={() => alert("Import test")}
-                      onExport={() => alert("Export test")}
+                      onImport={importFromGoogleDocs}
+                      onExport={exportToGoogleDocs}
                       theme={theme}
                     />
                   </div>
