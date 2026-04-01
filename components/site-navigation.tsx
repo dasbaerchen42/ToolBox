@@ -40,8 +40,14 @@ export default function SiteNavigation() {
         </div>
 
         {/* 右側：專屬小熊記號 (利用 ml-auto 推到最右邊) */}
-        <div className="ml-auto hidden cursor-default items-center text-[11px] tracking-[0.08em] text-gray-400 opacity-50 transition-opacity duration-500 hover:opacity-100 dark:text-zinc-500 md:flex">
-          <span>A tired bear's project.</span>
+        <div className="ml-auto hidden items-center text-[11px] tracking-[0.08em] text-gray-400 opacity-50 transition-opacity duration-500 hover:opacity-100 dark:text-zinc-500 md:flex">
+          <a 
+            href="https://dasbaerchen.vercel.app" 
+            target="_blank" 
+            rel="noopener noreferrer"
+          >
+            A tired bear's project © 小熊寶 Das Baerchen
+          </a>
         </div>
 
       </div>
