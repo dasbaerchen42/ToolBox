@@ -15,14 +15,27 @@ async function copyText(text: string) {
 ========================= */
 
 function convertSocialText(input: string) {
-  if (!input.trim()) return "";
+  // 如果輸入是空的，直接回傳空字串
+  if (!input) return "";
 
   return input
     .split("\n")
     .map((line) => {
-      // 保留使用者原本的前後空白與縮排，只在每行末尾補 zero-width space
-      if (line === "") return "";
-      return `${line}\u200B`;
+      // 1. 處理空行：如果這行完全沒東西，或只有空白，就塞入盲文空白
+      if (line.trim() === "") {
+        return "\u2800";
+      }
+
+      // 2. 處理開頭縮排：抓出開頭的半形空白，替換成「零寬空格 + 半形空白」
+      const leadingSpaceMatch = line.match(/^ +/);
+      if (leadingSpaceMatch) {
+        const spaceCount = leadingSpaceMatch[0].length;
+        const safeSpaces = "\u200B ".repeat(spaceCount);
+        return line.replace(/^ +/, safeSpaces);
+      }
+
+      // 3. 其他正常的行，保持原樣即可，不需要在句尾加東西
+      return line;
     })
     .join("\n");
 }
@@ -287,7 +300,7 @@ function SocialTool({ theme }: { theme: ThemeMode }) {
       <div className="mb-4">
         <h2 className="text-lg font-semibold tracking-[0.08em]">社群排版</h2>
         <p className={`mt-1 text-sm tracking-[0.04em] ${t.muted}`}>
-          保留你原本輸入的空白、空行、縮排，按下轉換後在每行尾端補上隱形字元
+          保留你原本輸入的空白、空行、縮排，按下轉換後補上隱形字元。
         </p>
       </div>
 
