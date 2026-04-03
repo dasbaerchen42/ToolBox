@@ -112,31 +112,6 @@ export default function HomePage() {
             })}
           </div>
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          {tools.map((tool) => {
-            const isExternal = tool.href.startsWith("http");
-            const Tag = isExternal ? "a" : Link;
-            return (
-              <Tag
-                key={tool.href}
-                href={tool.href}
-                {...(isExternal ? { target: "_blank", rel: "noreferrer" } : {})}
-                className={`rounded-3xl border p-5 transition ${
-                  theme === "dark"
-                    ? "border-zinc-800 bg-zinc-900 hover:bg-zinc-800/80"
-                    : "border-stone-300 bg-white hover:bg-stone-50"
-                }`}
-              >
-                <h2 className="text-lg font-semibold tracking-[0.06em]">
-                  {tool.title}
-                </h2>
-                <p className={`mt-2 text-sm leading-7 tracking-[0.04em] ${t.muted}`}>
-                  {tool.desc}
-                </p>
-              </Tag>
-            );
-          })}
-        </div>
       </div>
       {/* 這裡是專屬小熊的彩蛋頁尾 */}
       <footer className="mt-20 pb-8 text-center px-4">
