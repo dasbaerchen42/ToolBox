@@ -87,7 +87,7 @@ export default function HomePage() {
         <div className="mt-8">
           <p className={`text-xs tracking-[0.12em] mb-3 ${t.muted}`}>遊戲</p>
           <div className="grid gap-4 md:grid-cols-2">
-            {tools.map((tool) => {
+            {games.map((tool) => {
               const isExternal = tool.href.startsWith("http");
               const Tag = isExternal ? "a" : Link;
               return (
