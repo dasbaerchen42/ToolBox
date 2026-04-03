@@ -27,6 +27,11 @@ const tools = [
     desc: "全形、半形與標點處理",
     href: "/tools/fullwidth",
   },
+  {
+  title: "兒童節抽籤",
+  desc: "抽一張卡，讓他們說一句只給你的話",
+  href: "/gacha",
+  },
 ];
 
 export default function HomePage() {
