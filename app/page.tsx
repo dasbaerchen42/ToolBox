@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useState } from "react";
-// 引入我們做好的共用標題與主題
 import ToolHeader from "@/components/editor/ToolHeader";
 import { getThemeClasses, type ThemeMode } from "@/lib/theme";
 
@@ -27,10 +26,18 @@ const tools = [
     desc: "全形、半形與標點處理",
     href: "/tools/fullwidth",
   },
+];
+
+const games = [
   {
-  title: "兒童節抽籤",
-  desc: "抽一張卡，讓他們說一句只給你的話",
-  href: "/gacha",
+    title: "兒童節角色抽籤",
+    desc: "抽一張卡，讓他們說一句給你的話",
+    href: "/gacha",
+  },
+  {
+    title: "發條驛站 · 恩佐的輓歌",
+    desc: "關於時間、溫度與廢土的文字生存 Roguelike 小遊戲",
+    href: "https://the-clockwork-station.vercel.app/",
   },
 ];
 
@@ -42,35 +49,93 @@ export default function HomePage() {
     <main className={`min-h-screen p-6 flex flex-col ${t.page}`}>
       <div className="mx-auto w-full max-w-5xl flex-1">
         
-        {/* 這裡換成乾淨俐落的共用標題元件 */}
         <ToolHeader 
-          title="創作工具箱"
-          description="寫作、排版、切割與轉換工具集合"
+          title="創作區｜工具箱"
+          description="圓夢的地方：小工具、小遊戲，以及可能更多的未來。"
           theme={theme}
           setTheme={setTheme}
           t={t}
         />
-
-        {/* 這裡的卡片為了保留你原本設計的 hover 滑動變色效果，我幫你用條件式加上去了 */}
+        {/* 工具區 */}
         <div className="grid gap-4 md:grid-cols-2">
-          {tools.map((tool) => (
-            <Link
-              key={tool.href}
-              href={tool.href}
-              className={`rounded-3xl border p-5 transition ${
-                theme === "dark" 
-                  ? "border-zinc-800 bg-zinc-900 hover:bg-zinc-800/80" 
-                  : "border-stone-300 bg-white hover:bg-stone-50"
-              }`}
-            >
-              <h2 className="text-lg font-semibold tracking-[0.06em]">
-                {tool.title}
-              </h2>
-              <p className={`mt-2 text-sm leading-7 tracking-[0.04em] ${t.muted}`}>
-                {tool.desc}
-              </p>
-            </Link>
-          ))}
+          {tools.map((tool) => {
+            const isExternal = tool.href.startsWith("http");
+            const Tag = isExternal ? "a" : Link;
+            return (
+              <Tag
+                key={tool.href}
+                href={tool.href}
+                {...(isExternal ? { target: "_blank", rel: "noreferrer" } : {})}
+                className={`rounded-3xl border p-5 transition ${
+                  theme === "dark"
+                    ? "border-zinc-800 bg-zinc-900 hover:bg-zinc-800/80"
+                    : "border-stone-300 bg-white hover:bg-stone-50"
+                }`}
+              >
+                <h2 className="text-lg font-semibold tracking-[0.06em]">
+                  {tool.title}
+                </h2>
+                <p className={`mt-2 text-sm leading-7 tracking-[0.04em] ${t.muted}`}>
+                  {tool.desc}
+                </p>
+              </Tag>
+            );
+          })}
+        </div>
+
+        {/* 遊戲區 */}
+        <div className="mt-8">
+          <p className={`text-xs tracking-[0.12em] mb-3 ${t.muted}`}>遊戲</p>
+          <div className="grid gap-4 md:grid-cols-2">
+            {tools.map((tool) => {
+              const isExternal = tool.href.startsWith("http");
+              const Tag = isExternal ? "a" : Link;
+              return (
+                <Tag
+                  key={tool.href}
+                  href={tool.href}
+                  {...(isExternal ? { target: "_blank", rel: "noreferrer" } : {})}
+                  className={`rounded-3xl border p-5 transition ${
+                    theme === "dark"
+                      ? "border-zinc-800 bg-zinc-900 hover:bg-zinc-800/80"
+                      : "border-stone-300 bg-white hover:bg-stone-50"
+                  }`}
+                >
+                  <h2 className="text-lg font-semibold tracking-[0.06em]">
+                    {tool.title}
+                  </h2>
+                  <p className={`mt-2 text-sm leading-7 tracking-[0.04em] ${t.muted}`}>
+                    {tool.desc}
+                  </p>
+                </Tag>
+              );
+            })}
+          </div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {tools.map((tool) => {
+            const isExternal = tool.href.startsWith("http");
+            const Tag = isExternal ? "a" : Link;
+            return (
+              <Tag
+                key={tool.href}
+                href={tool.href}
+                {...(isExternal ? { target: "_blank", rel: "noreferrer" } : {})}
+                className={`rounded-3xl border p-5 transition ${
+                  theme === "dark"
+                    ? "border-zinc-800 bg-zinc-900 hover:bg-zinc-800/80"
+                    : "border-stone-300 bg-white hover:bg-stone-50"
+                }`}
+              >
+                <h2 className="text-lg font-semibold tracking-[0.06em]">
+                  {tool.title}
+                </h2>
+                <p className={`mt-2 text-sm leading-7 tracking-[0.04em] ${t.muted}`}>
+                  {tool.desc}
+                </p>
+              </Tag>
+            );
+          })}
         </div>
       </div>
       {/* 這裡是專屬小熊的彩蛋頁尾 */}
