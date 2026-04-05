@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 import { notFound } from "next/navigation";
 import { getThemeClasses, type ThemeMode } from "@/lib/theme";
 import { getCharacter } from "@/lib/stories";
