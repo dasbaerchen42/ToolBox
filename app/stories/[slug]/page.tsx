@@ -1,20 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, use } from "react";
 import { notFound } from "next/navigation";
 import ToolHeader from "@/components/editor/ToolHeader";
 import { getThemeClasses, type ThemeMode } from "@/lib/theme";
 import { getCharacter } from "@/lib/stories";
 
 interface Props {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;  // ← 改成 Promise
 }
 
 export default function CharacterStoriesPage({ params }: Props) {
+  const { slug } = use(params);  // ← 用 use() 解開
   const [theme, setTheme] = useState<ThemeMode>("light");
   const t = getThemeClasses(theme);
-  const char = getCharacter(params.slug);
+  const char = getCharacter(slug);  // ← 用解開的 slug
 
   if (!char) notFound();
 
@@ -92,7 +93,7 @@ export default function CharacterStoriesPage({ params }: Props) {
                     .map((story) => (
                       <StoryCard
                         key={story.id}
-                        slug={params.slug}
+                        slug={slug}
                         story={story}
                         theme={theme}
                         t={t}
@@ -123,7 +124,7 @@ export default function CharacterStoriesPage({ params }: Props) {
                     .map((story) => (
                       <StoryCard
                         key={story.id}
-                        slug={params.slug}
+                        slug={slug}
                         story={story}
                         theme={theme}
                         t={t}
