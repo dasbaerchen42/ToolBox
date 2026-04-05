@@ -7,7 +7,7 @@ import { getThemeClasses, type ThemeMode } from "@/lib/theme";
 import { getCharacter } from "@/lib/stories";
 
 interface Props {
-  params: { slug: string; storyId: string };
+  params: Promise<{ slug: string; storyId: string }>;
 }
 
 // 故事內容目前用靜態方式管理
@@ -15,22 +15,23 @@ interface Props {
 import { storyContents } from "@/lib/storyContents";
 
 export default function StoryPage({ params }: Props) {
+  const { slug, storyId } = use(params);
   const [theme, setTheme] = useState<ThemeMode>("light");
   const t = getThemeClasses(theme);
 
-  const char = getCharacter(params.slug);
+  const char = getCharacter(slug);
   if (!char) notFound();
 
-  const story = char.stories.find((s) => s.id === params.storyId);
+  const story = char.stories.find((s) => s.id === storyId);
   if (!story) notFound();
 
-  const content = storyContents[`${params.slug}/${params.storyId}`];
+  const content = storyContents[`${slug}/${storyId}`];
 
   const allStories = [...char.stories].sort((a, b) => {
     if (a.type !== b.type) return a.type === "main" ? -1 : 1;
     return a.order - b.order;
   });
-  const currentIndex = allStories.findIndex((s) => s.id === params.storyId);
+  const currentIndex = allStories.findIndex((s) => s.id === storyId);
   const prevStory = currentIndex > 0 ? allStories[currentIndex - 1] : null;
   const nextStory =
     currentIndex < allStories.length - 1 ? allStories[currentIndex + 1] : null;
@@ -46,7 +47,7 @@ export default function StoryPage({ params }: Props) {
         }`}
       >
         <Link
-          href={`/stories/${params.slug}`}
+          href={`/stories/${slug}`}
           className={`opacity-50 hover:opacity-100 transition ${t.muted}`}
         >
           ← {char.name}
@@ -118,7 +119,7 @@ export default function StoryPage({ params }: Props) {
           <div className="flex gap-3">
             {prevStory ? (
               <Link
-                href={`/stories/${params.slug}/${prevStory.id}`}
+                href={`/stories/${slug}/${prevStory.id}`}
                 className={`flex-1 rounded-2xl border px-4 py-3 text-xs tracking-[0.08em] transition ${
                   theme === "dark"
                     ? "border-zinc-800 hover:bg-zinc-800/80"
@@ -134,7 +135,7 @@ export default function StoryPage({ params }: Props) {
 
             {nextStory ? (
               <Link
-                href={`/stories/${params.slug}/${nextStory.id}`}
+                href={`/stories/${slug}/${nextStory.id}`}
                 className={`flex-1 rounded-2xl border px-4 py-3 text-xs tracking-[0.08em] transition text-right ${
                   theme === "dark"
                     ? "border-zinc-800 hover:bg-zinc-800/80"
@@ -151,7 +152,7 @@ export default function StoryPage({ params }: Props) {
 
           {/* 返回列表 */}
           <Link
-            href={`/stories/${params.slug}`}
+            href={`/stories/${slug}`}
             className={`text-center text-xs tracking-[0.1em] opacity-40 hover:opacity-70 transition ${t.muted}`}
           >
             返回 {char.name} 的故事列表
