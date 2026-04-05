@@ -78,9 +78,7 @@ export default function StoryPage({ params }: Props) {
         {/* 故事內容 */}
         {content ? (
           <div
-            className={`prose prose-sm max-w-none leading-[2.2] tracking-[0.06em] ${
-              theme === "dark" ? "prose-invert" : ""
-            }`}
+            className={`text-sm max-w-none leading-[2.2] tracking-[0.06em] ${t.page}`}
             style={{ whiteSpace: "pre-wrap" }}
           >
             {content}
