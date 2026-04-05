@@ -5,7 +5,7 @@ import { useState } from "react";
 import { notFound } from "next/navigation";
 import { getThemeClasses, type ThemeMode } from "@/lib/theme";
 import { getCharacter } from "@/lib/stories";
-
+import { useState, use } from "react";
 interface Props {
   params: Promise<{ slug: string; storyId: string }>;
 }
