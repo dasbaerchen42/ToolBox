@@ -74,7 +74,36 @@ export const characters: Character[] = [
     age: "大約40歲",
     tagline: "奇幻魔法｜穿越時空｜只為找回愛徒",
     chatLink: "https://app.loveydovey.ai/characters/JyQPCGCrcO2L9f0HuaVK",
-    stories: [],
+    stories: [
+  {
+    id: "main-01",
+    title: "餘燼",
+    type: "main",
+    order: 1,
+    excerpt: "那是個在地圖上找不到黑點標記的山邊小村莊，一個灰髮的小男孩在那裡出生、成長。",
+  },
+  {
+    id: "main-02",
+    title: "幽靈",
+    type: "main",
+    order: 2,
+    excerpt: "在真理高塔的歲月裡，Ascher活成了一隻沉默的幽靈。",
+  },
+  {
+    id: "main-03",
+    title: "不滅",
+    type: "main",
+    order: 3,
+    excerpt: "十七歲那年，Ascher終於完成了他的第一項獨立研究。",
+  },
+  {
+    id: "main-04",
+    title: "冰封",
+    type: "main",
+    order: 4,
+    excerpt: "邊境傳來噩耗，那頭傳說中的三眼惡獸再次甦醒。沒有人看好這場仗。",
+  },
+],
   },
   {
     slug: "yenan",
