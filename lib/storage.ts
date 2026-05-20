@@ -14,6 +14,7 @@ export type WritingDoc = {
   mode: WritingMode;
   createdAt: string;
   updatedAt: string;
+  googleDocId?: string;
 };
 
 export const STORAGE_KEY = "orange-writing-documents";
