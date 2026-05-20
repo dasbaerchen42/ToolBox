@@ -60,6 +60,7 @@ export default function CharacterStoriesPage({ params }: Props) {
         }
       : null
   );
+  const [loading, setLoading] = useState(!hardcodedChar);
 
   useEffect(() => {
     fetch(`/api/stories/${slug}`)
@@ -75,10 +76,17 @@ export default function CharacterStoriesPage({ params }: Props) {
           });
         }
       })
-      .catch(() => {
-        // Supabase 未設定時 fallback 到硬編碼資料
-      });
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [slug]);
+
+  if (loading) {
+    return (
+      <main className={`min-h-screen p-6 flex items-center justify-center ${getThemeClasses("light").page}`}>
+        <p className="text-sm opacity-40">載入中…</p>
+      </main>
+    );
+  }
 
   if (!char) return notFound();
 
