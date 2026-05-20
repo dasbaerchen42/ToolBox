@@ -6,11 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "jest",
+    "test:watch": "jest --watch"
   },
   "dependencies": {
-    "@vercel/analytics": "^1.5.0",
     "@react-oauth/google": "^0.13.4",
+    "@supabase/supabase-js": "^2.106.0",
+    "@vercel/analytics": "^1.5.0",
     "jszip": "^3.10.1",
     "next": "16.2.1",
     "react": "19.2.4",
@@ -19,12 +22,16 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
+    "jest": "^30.4.2",
+    "jest-environment-jsdom": "^30.4.1",
     "tailwindcss": "^4",
+    "ts-jest": "^29.4.10",
     "typescript": "^5"
   }
 }

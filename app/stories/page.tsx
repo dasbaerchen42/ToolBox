@@ -1,14 +1,47 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ToolHeader from "@/components/editor/ToolHeader";
 import { getThemeClasses, type ThemeMode } from "@/lib/theme";
-import { characters } from "@/lib/stories";
+import { characters as fallbackCharacters } from "@/lib/stories";
+
+type CharacterCard = {
+  slug: string;
+  name: string;
+  job: string;
+  age: string;
+  tagline: string;
+  coming_soon?: boolean;
+  comingSoon?: boolean;
+};
 
 export default function StoriesPage() {
   const [theme, setTheme] = useState<ThemeMode>("light");
+  const [characters, setCharacters] = useState<CharacterCard[]>(
+    fallbackCharacters.map((c) => ({
+      slug: c.slug,
+      name: c.name,
+      job: c.job,
+      age: c.age,
+      tagline: c.tagline,
+      comingSoon: c.comingSoon,
+    }))
+  );
   const t = getThemeClasses(theme);
+
+  useEffect(() => {
+    fetch("/api/characters")
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setCharacters(data);
+        }
+      })
+      .catch(() => {
+        // Supabase 未設定時靜默 fallback 到硬編碼資料
+      });
+  }, []);
 
   return (
     <main className={`min-h-screen p-6 flex flex-col ${t.page}`}>
@@ -32,7 +65,6 @@ export default function StoriesPage() {
                   : "border-stone-300 bg-white hover:bg-stone-50"
               }`}
             >
-              {/* 圖片佔位區，之後放圖片 */}
               <div
                 className={`w-full aspect-[3/4] rounded-2xl mb-1 flex items-center justify-center text-xs tracking-widest ${
                   theme === "dark"
@@ -60,10 +92,8 @@ export default function StoriesPage() {
                 </p>
               )}
 
-              {char.comingSoon && (
-                <span
-                  className={`text-xs tracking-widest mt-auto ${t.muted} opacity-50`}
-                >
+              {(char.coming_soon || char.comingSoon) && (
+                <span className={`text-xs tracking-widest mt-auto ${t.muted} opacity-50`}>
                   即將開放
                 </span>
               )}
