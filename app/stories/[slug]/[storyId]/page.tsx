@@ -36,10 +36,17 @@ export default function StoryPage({ params }: Props) {
   const [allStories, setAllStories] = useState<StoryItem[]>(
     hardcodedChar?.stories.map((s) => ({ id: s.id, title: s.title, type: s.type, order: s.order })) ?? []
   );
-  const [notFoundState, setNotFoundState] = useState(!hardcodedChar && !hardcodedStory);
+  const [loading, setLoading] = useState(!hardcodedStory);
+  const [notFoundState, setNotFoundState] = useState(false);
 
   useEffect(() => {
-    // 從公開 API 讀取故事內容（只回傳已發布的）
+    let finished = 0;
+    const tryDone = () => {
+      finished += 1;
+      if (finished === 2) setLoading(false);
+    };
+
+    // 公開 API 讀取故事內容（只回傳已發布的）
     fetch(`/api/story/${storyId}`)
       .then((res) => res.ok ? res.json() : null)
       .then((data) => {
@@ -47,9 +54,14 @@ export default function StoryPage({ params }: Props) {
           setStoryTitle(data.title);
           setStoryType(data.type);
           setContent(data.content || null);
+        } else if (!hardcodedStory) {
+          setNotFoundState(true);
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!hardcodedStory) setNotFoundState(true);
+      })
+      .finally(tryDone);
 
     // 取角色資料（含故事列表）
     fetch(`/api/stories/${slug}`)
@@ -65,13 +77,19 @@ export default function StoryPage({ params }: Props) {
             order: s.order_index ?? s.order ?? 0,
           }));
           setAllStories(stories);
-          if (stories.length > 0) {
-            setNotFoundState(false);
-          }
         }
       })
-      .catch(() => {});
-  }, [slug, storyId]);
+      .catch(() => {})
+      .finally(tryDone);
+  }, [slug, storyId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (loading) {
+    return (
+      <main className={`min-h-screen flex items-center justify-center ${t.page}`}>
+        <p className="text-sm opacity-40">載入中…</p>
+      </main>
+    );
+  }
 
   if (notFoundState) return notFound();
 
