@@ -114,12 +114,18 @@ export default function HomePage() {
         </div>
       </div>
       {/* 這裡是專屬小熊的彩蛋頁尾 */}
-      <footer className="mt-20 pb-8 text-center px-4">
+      <footer className="mt-20 pb-8 text-center px-4 space-y-4">
         <p className={`mx-auto max-w-lg text-xs font-light leading-relaxed tracking-[0.08em] ${t.muted} opacity-60 transition-opacity duration-500 hover:opacity-100 cursor-default`}>
           Once upon a time, a tired bear sat coding in the woods.<br className="hidden sm:block" />
           As a soft fog wrapped around the trees, <br className="hidden sm:block" />
           the bear wandered out to a silent lake just for breathing.
         </p>
+        <Link
+          href="/privacy"
+          className={`text-xs tracking-widest opacity-30 hover:opacity-60 transition-opacity ${t.muted}`}
+        >
+          隱私權政策
+        </Link>
       </footer>
     </main>
   );

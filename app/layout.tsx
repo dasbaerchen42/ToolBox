@@ -4,8 +4,11 @@ import SiteNavigation from "@/components/site-navigation";
 import { Analytics } from "@vercel/analytics/react";
 
 export const metadata: Metadata = {
-  title: "My Writing App",
-  description: "A writing tool with Google Docs integration",
+  title: "Das Baerchen Tool Box",
+  description: "寫作工具集・故事館・Das Baerchen",
+  verification: {
+    google: "iussrliej7Z_Mq1_thPKiAdmcmkJwLCtLS7Qli4in3k",
+  },
 };
 
 export default function RootLayout({
