@@ -18,6 +18,8 @@
 | 尋找/取代 | 純文字比對(不做 regex),含區分大小寫開關;跳選反白 + 「第 n / 共 m 筆」計數 |
 | 還原/重做 | **自建歷史堆疊**(不依賴瀏覽器內建 undo、不用已廢棄的 execCommand),實體按鈕 + 攔截 Ctrl+Z / Ctrl+Shift+Z(Ctrl+Y) |
 | 方案三雜項修正 | **全做**(清單見 Phase 5) |
+| 圖示風格 | 手寫 inline SVG,**圓胖可愛**:粗線 stroke-width 2.2–2.5、`stroke-linecap/linejoin="round"`、造型矮胖圓潤、`currentColor` 跟主題連動,不引入圖示庫 |
+| 全站字體 | 換 **jf open 粉圓(Huninn)**——即交接文件品牌層 `--font-round` 原案。優先 `next/font/google`(自動 CJK 切片),沒收錄則 `next/font/local` 自架 woff2。編輯器內部字體選單不受影響,順手加「粉圓」選項 |
 
 ## 動工前置(每次 session 接手都要)
 
@@ -61,6 +63,7 @@
    - `selected/listSelected` → accent 系;`unselected/listUnselected` → paper-bg-2 系;`divider` → border-light。
 2. **`app/editor/page.tsx`**:刪掉 130 行 `themeMap`,`ThemeConfig` 改為同樣的 token 常數一份(欄位名不變:pageBg/panelBg/…),元件 props 不動。
 3. **`app/layout.tsx`**:`<html data-theme="huninn">` + `<head>` 注入 `BOOTSTRAP_SCRIPT`(dangerouslySetInnerHTML)。
+   同時做**全站字體切換**:`next/font` 載入 Huninn(jf open 粉圓;查 `node_modules/next/dist/docs/` 確認此版寫法,Google Fonts 沒收錄就 `next/font/local` 自架 woff2),`<body>` 移除 `font-mono` 改套粉圓體變數;`globals.css` 的 `font-family: Arial...` 同步移除,並補品牌層 token(`--radius: 3px`、`--font-round`)。
 4. **`components/site-navigation.tsx`**:改用 token class,移除所有 `dark:` 前綴 → 導覽列跟全站主題一致。
 5. **`lib/preferences.ts`**:`EditorPreferences` 移除 `theme` 欄位與 `ThemeName`(讀舊 JSON 多出的欄位無害,直接忽略);`defaultPreferences` 同步刪。
 6. 各頁面移除 `useState<ThemeMode>` 與 `ToolHeader` 的淺/深按鈕(`ToolHeader` 的 `theme/setTheme` props 拿掉,只留標題描述)。
@@ -76,7 +79,7 @@
    - client component;初始高亮用 `getCurrentThemeId()`。
 2. **`app/editor/page.tsx` 設定面板**:`editor-settings-panel.tsx` 的「主題配色」select 移除(全站統一由導覽列管),其餘設定不動。
 
-**驗證**:切 preset 無閃爍(重整後 bootstrap 直接套);自訂低對比色會被自動推開;隨機存滿 5 筆會擠掉最舊。
+**驗證**:切 preset 無閃爍(重整後 bootstrap 直接套);自訂低對比色會被自動推開;隨機存滿 5 筆會擠掉最舊;全站(含導覽列)顯示粉圓體、編輯區仍尊重使用者字體選擇(字體選單多「粉圓」選項,`components/editor/editor-textarea.tsx` 的 `getFontFamily` 加對應 case,`lib/preferences.ts` 的 `FontFamilyName` 加 `"round"`)。
 
 ## Phase 4:編輯器尋找/取代 + 還原/重做
 
@@ -87,6 +90,7 @@
    - 提供 `record(content)`, `undo()`, `redo()`, `canUndo`, `canRedo`;undo/redo 回傳內容由呼叫端經 `updateActiveDoc` 寫回(寫回時不再 record,需防迴圈 flag)。
 3. **`components/editor/editor-find-replace.tsx`**(新):
    - 常駐小工具列:還原、重做按鈕 + 「尋找/取代」開關;展開後:尋找輸入框、上一筆/下一筆、「第 n / 共 m 筆」、區分大小寫開關、取代輸入框、取代單筆、全部取代、關閉(Esc)。
+   - **圖示**:自製 `components/editor/editor-icons.tsx` inline SVG 小組(放大鏡、上下箭頭、取代、還原/重做迴轉箭頭、關閉),依「已拍板決策」的圓胖風格:粗圓線、圓端點、矮胖造型、`currentColor`;按鈕大圓角/`rounded-full`。
    - 跳筆:計算 match 位置 → `textarea.setSelectionRange(start, end)` + focus + 捲動置中(用 scrollTop 估算或 selection 後讀取)。
    - 取代單筆:取代目前選中那筆後跳下一筆;全部取代:一次寫回並回報取代筆數。
    - 快捷鍵:textarea 與工具列範圍內攔 Ctrl/Cmd+F(開尋找)、Ctrl/Cmd+Z(undo)、Ctrl/Cmd+Shift+Z 與 Ctrl/Cmd+Y(redo),`preventDefault` 避免與瀏覽器內建歷史打架。
