@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   GoogleOAuthProvider,
   useGoogleLogin,
@@ -12,6 +12,7 @@ import EditorSidebar from "@/components/editor/editor-sidebar";
 import EditorToolbar from "@/components/editor/editor-toolbar";
 import EditorSettingsPanel from "@/components/editor/editor-settings-panel";
 import EditorTextarea from "@/components/editor/editor-textarea";
+import EditorFindReplace from "@/components/editor/editor-find-replace";
 import EditorStatusPanel from "@/components/editor/editor-status-panel";
 import { validateContent } from "@/lib/validators";
 import EditorStatsBar from "@/components/editor/editor-stats-bar";
@@ -21,6 +22,7 @@ import { formatDateTime24h } from "@/lib/datetime";
 import { exportDoc, importDoc, extractDocId } from "@/lib/google-docs";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useEditorPreferences } from "@/hooks/useEditorPreferences";
+import { useEditorHistory } from "@/hooks/useEditorHistory";
 
 function EditorPageContent() {
   const {
@@ -42,6 +44,56 @@ function EditorPageContent() {
     adjustLetterSpacing,
     getEditorWidthClass,
   } = useEditorPreferences();
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [findOpen, setFindOpen] = useState(false);
+  const history = useEditorHistory(activeDocId);
+
+  // 文件首次出現時建立歷史基底快照
+  useEffect(() => {
+    if (activeDoc) history.init(activeDoc.id, activeDoc.content);
+  }, [activeDoc, history]);
+
+  function handleContentChange(value: string) {
+    updateActiveDoc({ content: value });
+    history.record(activeDocId, value);
+  }
+
+  function handleReplaceContent(value: string) {
+    updateActiveDoc({ content: value });
+    history.commit(activeDocId, value); // 取代必定獨立成一步,可一鍵還原
+  }
+
+  function doUndo() {
+    const prev = history.undo(activeDocId);
+    if (prev !== null) updateActiveDoc({ content: prev });
+  }
+
+  function doRedo() {
+    const next = history.redo(activeDocId);
+    if (next !== null) updateActiveDoc({ content: next });
+  }
+
+  // 攔截快捷鍵走自建歷史(瀏覽器內建 undo 會被程式化取代弄斷,不能混用)
+  function handleEditorKeyDown(e: React.KeyboardEvent) {
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && !e.shiftKey && e.key.toLowerCase() === "f") {
+      e.preventDefault();
+      setFindOpen(true);
+    } else if (mod && !e.shiftKey && e.key.toLowerCase() === "z") {
+      e.preventDefault();
+      doUndo();
+    } else if (
+      (mod && e.shiftKey && e.key.toLowerCase() === "z") ||
+      (mod && e.key.toLowerCase() === "y")
+    ) {
+      e.preventDefault();
+      doRedo();
+    } else if (e.key === "Escape" && findOpen) {
+      setFindOpen(false);
+      textareaRef.current?.focus();
+    }
+  }
 
   const exportToGoogleDocs = useGoogleLogin({
     scope: [
@@ -204,13 +256,33 @@ function EditorPageContent() {
                 </CollapsibleSection>
               </header>
 
-              <EditorTextarea
-                content={activeDoc.content}
-                onChange={(value) => updateActiveDoc({ content: value })}
-                preferences={preferences}
-                theme={theme}
-                widthClass={getEditorWidthClass()}
-              />
+              <div
+                onKeyDown={handleEditorKeyDown}
+                className="flex min-h-0 flex-1 flex-col"
+              >
+                <div className={`mx-auto w-full ${getEditorWidthClass()}`}>
+                  <EditorFindReplace
+                    content={activeDoc.content}
+                    textareaRef={textareaRef}
+                    onReplaceContent={handleReplaceContent}
+                    open={findOpen}
+                    setOpen={setFindOpen}
+                    onUndo={doUndo}
+                    onRedo={doRedo}
+                    canUndo={history.canUndo}
+                    canRedo={history.canRedo}
+                    theme={theme}
+                  />
+                </div>
+                <EditorTextarea
+                  ref={textareaRef}
+                  content={activeDoc.content}
+                  onChange={handleContentChange}
+                  preferences={preferences}
+                  theme={theme}
+                  widthClass={getEditorWidthClass()}
+                />
+              </div>
 
               <CollapsibleSection title="Hint" defaultOpen={true} theme={theme}>
                 <EditorStatusPanel result={validationResult} theme={theme} />

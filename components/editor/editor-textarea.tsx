@@ -1,3 +1,4 @@
+import { forwardRef } from "react";
 import { EditorPreferences } from "@/lib/preferences";
 
 type EditorTextareaProps = {
@@ -28,31 +29,30 @@ function getFontFamily(fontFamily: EditorPreferences["fontFamily"]) {
   }
 }
 
-export default function EditorTextarea({
-  content,
-  onChange,
-  preferences,
-  theme,
-  widthClass,
-}: EditorTextareaProps) {
-  return (
-    <div className={`mx-auto w-full flex-1 ${widthClass}`}>
-      <div
-        className={`rounded-3xl border p-4 shadow-sm ${theme.border} ${theme.textareaBg}`}
-      >
-        <textarea
-          value={content}
-          onChange={(e) => onChange(e.target.value)}
-          style={{
-            fontSize: `${preferences.fontSize}px`,
-            lineHeight: preferences.lineHeight,
-            letterSpacing: `${preferences.letterSpacing}px`,
-            fontFamily: getFontFamily(preferences.fontFamily),
-          }}
-          className={`h-[70vh] w-full resize-none bg-transparent outline-none ${theme.text}`}
-          placeholder="在這裡開始寫字……"
-        />
+const EditorTextarea = forwardRef<HTMLTextAreaElement, EditorTextareaProps>(
+  function EditorTextarea({ content, onChange, preferences, theme, widthClass }, ref) {
+    return (
+      <div className={`mx-auto w-full flex-1 ${widthClass}`}>
+        <div
+          className={`rounded-3xl border p-4 shadow-sm ${theme.border} ${theme.textareaBg}`}
+        >
+          <textarea
+            ref={ref}
+            value={content}
+            onChange={(e) => onChange(e.target.value)}
+            style={{
+              fontSize: `${preferences.fontSize}px`,
+              lineHeight: preferences.lineHeight,
+              letterSpacing: `${preferences.letterSpacing}px`,
+              fontFamily: getFontFamily(preferences.fontFamily),
+            }}
+            className={`h-[70vh] w-full resize-none bg-transparent outline-none ${theme.text}`}
+            placeholder="在這裡開始寫字……"
+          />
+        </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
+);
+
+export default EditorTextarea;

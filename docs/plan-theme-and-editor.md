@@ -135,6 +135,13 @@
 
 - **2026-07-04 Phase 3 完成**:新增 `components/theme-menu.tsx` 掛在導覽列右側——七款 preset(emoji+名稱+4 色圓點預覽)、4 色自訂(`<input type="color">`,即時套用含 ensureReadable 對比防呆)、🎲 隨機配色 + 保存(上限 5 組 FIFO)+ 收藏清單(可套用/刪除)。點外面或 Esc 關閉;localStorage 掛載後才讀避免 hydration 不一致。編譯 + 型別 + ESLint(新檔)通過。
 
+- **2026-07-04 Phase 4 完成**:編輯器尋找/取代 + 還原/重做。
+  - `components/editor/editor-icons.tsx`:圓胖 SVG 圖示組(還原/重做/放大鏡/上下箭頭/取代/關閉,stroke 2.4 圓端點、currentColor)。
+  - `hooks/useEditorHistory.ts`:每文件一條快照堆疊(上限 100 步),打字 800ms 合併一步、取代 `commit()` 必獨立成步;Map 用惰性 useState 建立以符合 react-hooks/refs 規範。
+  - `components/editor/editor-find-replace.tsx`:常駐工具列(還原/重做 + 尋找/取代開關),展開後尋找框(Enter 下一筆/Shift+Enter 上一筆)、「第 n / 共 m 筆」、Aa 區分大小寫、取代單筆/全部取代;跳選反白 + 比例估算捲動置中;activeIndex 渲染期夾值。
+  - `editor-textarea.tsx` 改 forwardRef;editor page 接線:Ctrl/Cmd+F 開尋找、Ctrl/Cmd+Z / Ctrl/Cmd+Shift+Z(或 Y)走自建歷史(preventDefault 掉原生 undo 避免兩套打架)、Esc 關閉。
+  - 驗證:Compiled + TypeScript + ESLint 乾淨;jest 51 tests 全過。
+
 ## 中斷接續指引
 
 - 每完成一個 Phase 就 commit + push,commit 訊息前綴 `feat(theme):` / `feat(editor):` / `fix:` 並標 Phase 編號。
