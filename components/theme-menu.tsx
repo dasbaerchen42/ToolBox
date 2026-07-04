@@ -123,7 +123,10 @@ export default function ThemeMenu() {
         aria-label="選擇主題"
         className="flex items-center gap-2 rounded-full border border-(--border-light) bg-(--paper-bg-2) px-3 py-2 text-sm tracking-[0.04em] text-(--ink-primary) transition hover:bg-(--paper-bg-3)"
       >
-        <span aria-hidden>{currentPreset?.emoji ?? "🎨"}</span>
+        <span
+          aria-hidden
+          className="inline-block h-3.5 w-3.5 rounded-full bg-(--accent)"
+        />
         <span className="hidden sm:inline">
           {currentId === "custom" ? "自訂" : currentPreset?.name ?? "主題"}
         </span>
@@ -145,10 +148,7 @@ export default function ThemeMenu() {
                     : "border-transparent hover:bg-(--paper-bg-3)"
                 }`}
               >
-                <span className="flex items-center gap-2">
-                  <span aria-hidden>{p.emoji}</span>
-                  {p.name}
-                </span>
+                <span>{p.name}</span>
                 <SwatchDots input={p.input} />
               </button>
             ))}
@@ -182,7 +182,7 @@ export default function ThemeMenu() {
               onClick={rollRandom}
               className="flex-1 rounded-2xl border border-(--border-dark) px-3 py-2 text-sm tracking-[0.04em] transition hover:bg-(--paper-bg-3)"
             >
-              🎲 隨機配色
+              隨機配色
             </button>
             <button
               type="button"
