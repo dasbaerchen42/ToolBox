@@ -13,7 +13,7 @@ import KnifeSettingsPanel from "./_components/KnifeSettingsPanel";
 import KnifeSectionList from "./_components/KnifeSectionList";
 import KnifePreviewPanel from "./_components/KnifePreviewPanel";
 // 這裡引入我們剛剛做好的全域主題設定！
-import { getThemeClasses, type ThemeMode } from "@/lib/theme";
+import { getThemeClasses } from "@/lib/theme";
 
 type EncodingOption =
   | "utf-8"
@@ -52,7 +52,6 @@ const encodingOptions: { value: EncodingOption; label: string }[] = [
 
 export default function KnifePage() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(true);
-  const [theme, setTheme] = useState<ThemeMode>("light");
   const [input, setInput] = useState("");
   const [targetChars, setTargetChars] = useState(100000);
   const [tolerancePct, setTolerancePct] = useState(5);
@@ -72,7 +71,7 @@ export default function KnifePage() {
   const noticeTimerRef = useRef<number | null>(null);
 
   // 這裡會自動去吃 lib/theme.ts 裡面的設定囉
-  const t = getThemeClasses(theme);
+  const t = getThemeClasses();
 
   const totalChars = useMemo(() => input.length, [input]);
 
@@ -245,11 +244,9 @@ export default function KnifePage() {
 
       <div className="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-8">
         
-        <ToolHeader 
+        <ToolHeader
           title="文字切割刀"
           description="上傳 TXT、依規則切段、微調章節，再一次匯出為 ZIP。讓整理長文的過程保留一點呼吸。"
-          theme={theme}
-          setTheme={setTheme}
           t={t}
         />
 

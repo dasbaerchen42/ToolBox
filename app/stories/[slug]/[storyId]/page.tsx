@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getThemeClasses, type ThemeMode } from "@/lib/theme";
+import { getThemeClasses } from "@/lib/theme";
 import { getCharacter } from "@/lib/stories";
 import { storyContents } from "@/lib/storyContents";
 import { useState, use, useEffect } from "react";
@@ -21,8 +21,7 @@ type StoryItem = {
 
 export default function StoryPage({ params }: Props) {
   const { slug, storyId } = use(params);
-  const [theme, setTheme] = useState<ThemeMode>("light");
-  const t = getThemeClasses(theme);
+  const t = getThemeClasses();
 
   const hardcodedChar = getCharacter(slug);
   const hardcodedStory = hardcodedChar?.stories.find((s) => s.id === storyId);
@@ -104,11 +103,7 @@ export default function StoryPage({ params }: Props) {
   return (
     <main className={`min-h-screen flex flex-col ${t.page}`}>
       <nav
-        className={`sticky top-0 z-10 border-b px-6 py-3 flex items-center justify-between text-xs tracking-[0.1em] backdrop-blur ${
-          theme === "dark"
-            ? "border-zinc-800 bg-zinc-950/80"
-            : "border-stone-200 bg-white/80"
-        }`}
+        className="sticky top-0 z-10 border-b border-(--border-light) bg-(--surface) px-6 py-3 flex items-center justify-between text-xs tracking-[0.1em] backdrop-blur"
       >
         <Link
           href={`/stories/${slug}`}
@@ -116,12 +111,6 @@ export default function StoryPage({ params }: Props) {
         >
           ← {charName}
         </Link>
-        <button
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          className={`opacity-40 hover:opacity-80 transition text-xs ${t.muted}`}
-        >
-          {theme === "dark" ? "淺色" : "深色"}
-        </button>
       </nav>
 
       <article className="mx-auto w-full max-w-2xl px-6 py-12 flex-1">
@@ -145,7 +134,7 @@ export default function StoryPage({ params }: Props) {
           <p className={`text-sm opacity-40 ${t.muted}`}>故事內容準備中。</p>
         )}
 
-        <div className={`mt-16 mb-10 border-t ${theme === "dark" ? "border-zinc-800" : "border-stone-200"}`} />
+        <div className={`mt-16 mb-10 border-t ${t.divider}`} />
 
         <div className="flex flex-col gap-4">
           {chatLink && (
@@ -153,11 +142,7 @@ export default function StoryPage({ params }: Props) {
               href={chatLink}
               target="_blank"
               rel="noreferrer"
-              className={`rounded-2xl border px-5 py-3 text-sm tracking-[0.1em] transition text-center ${
-                theme === "dark"
-                  ? "border-zinc-700 hover:bg-zinc-800"
-                  : "border-stone-300 hover:bg-stone-50"
-              }`}
+              className={`rounded-2xl border px-5 py-3 text-sm tracking-[0.1em] transition text-center ${t.secondary}`}
             >
               去找他聊聊 →
             </a>
@@ -167,11 +152,7 @@ export default function StoryPage({ params }: Props) {
             {prevStory ? (
               <Link
                 href={`/stories/${slug}/${prevStory.id}`}
-                className={`flex-1 rounded-2xl border px-4 py-3 text-xs tracking-[0.08em] transition ${
-                  theme === "dark"
-                    ? "border-zinc-800 hover:bg-zinc-800/80"
-                    : "border-stone-200 hover:bg-stone-50"
-                }`}
+                className={`flex-1 rounded-2xl border px-4 py-3 text-xs tracking-[0.08em] transition ${t.listUnselected}`}
               >
                 <span className={`block opacity-40 mb-1 ${t.muted}`}>← 上一篇</span>
                 <span className="text-sm">{prevStory.title}</span>
@@ -183,11 +164,7 @@ export default function StoryPage({ params }: Props) {
             {nextStory ? (
               <Link
                 href={`/stories/${slug}/${nextStory.id}`}
-                className={`flex-1 rounded-2xl border px-4 py-3 text-xs tracking-[0.08em] transition text-right ${
-                  theme === "dark"
-                    ? "border-zinc-800 hover:bg-zinc-800/80"
-                    : "border-stone-200 hover:bg-stone-50"
-                }`}
+                className={`flex-1 rounded-2xl border px-4 py-3 text-xs tracking-[0.08em] transition text-right ${t.listUnselected}`}
               >
                 <span className={`block opacity-40 mb-1 ${t.muted}`}>下一篇 →</span>
                 <span className="text-sm">{nextStory.title}</span>

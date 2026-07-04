@@ -113,14 +113,8 @@ describe('validateContent – html', () => {
   });
 
   it('returns warning for unbalanced angle brackets', () => {
-    const result = validateContent('html', '<div>text without closing angle');
-    // The < in <div> and no matching > at the end causes imbalance? No — let's
-    // use a string that is clearly unbalanced in < vs >.
-    // validateContent will be 'warning' if unbalanced < >
-    // Actually, '<div>text without closing angle' has balanced < and > from <div>
-    // Let's use a proper unbalanced case
-    const r2 = validateContent('html', '<unclosed');
-    expect(r2.status).toBe('warning');
+    const result = validateContent('html', '<unclosed');
+    expect(result.status).toBe('warning');
   });
 });
 

@@ -3,11 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
 import type { CharacterRow, StoryRow } from "@/lib/database.types";
-
-// ── Types ──────────────────────────────────────────────────────────
-
-type CharacterWithStories = CharacterRow & { stories?: StoryRow[] };
-
 // ── Auth hook ─────────────────────────────────────────────────────
 
 function useAdminAuth() {

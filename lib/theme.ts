@@ -1,6 +1,7 @@
-// lib/theme.ts
-
-export type ThemeMode = "light" | "dark";
+// lib/theme.ts — 主題轉接層
+// 實際顏色由 theme-core 引擎的 CSS 變數驅動([data-theme] 見 app/theme.css,
+// 自訂主題為 :root 內聯變數)。這裡只提供「語意 → Tailwind token class」的固定對映,
+// 換主題時 class 不變、變數值變,所以只有一套。
 
 export type ThemeClasses = {
   page: string;
@@ -17,36 +18,63 @@ export type ThemeClasses = {
   listUnselected: string;
 };
 
-export function getThemeClasses(theme: ThemeMode): ThemeClasses {
-  if (theme === "dark") {
-    return {
-      page: "bg-zinc-950 text-zinc-100",
-      panel: "border-zinc-800 bg-zinc-900/90",
-      subPanel: "border-zinc-800 bg-zinc-950/80",
-      input: "border-zinc-700 bg-zinc-950 text-zinc-100 placeholder:text-zinc-500",
-      muted: "text-zinc-400",
-      primary: "border-zinc-100 bg-zinc-100 text-zinc-900 hover:bg-white",
-      secondary: "border-zinc-700 bg-zinc-900 text-zinc-100 hover:bg-zinc-800",
-      selected: "border-zinc-100 bg-zinc-100 text-zinc-900",
-      unselected: "border-zinc-700 bg-zinc-900 text-zinc-300",
-      divider: "border-zinc-800",
-      listSelected: "border-zinc-100 bg-zinc-100 text-zinc-900 shadow-sm",
-      listUnselected: "border-zinc-800 bg-zinc-900/70 text-zinc-100 hover:bg-zinc-900",
-    };
-  }
+const TOKEN_CLASSES: ThemeClasses = {
+  page: "bg-(--paper-bg) text-(--ink-primary)",
+  panel: "border-(--border-light) bg-(--paper-bg-2)",
+  subPanel: "border-(--border-light) bg-(--paper-bg)",
+  input:
+    "border-(--border-light) bg-(--paper-bg) text-(--ink-primary) placeholder:text-(--ink-tertiary)",
+  muted: "text-(--ink-secondary)",
+  primary: "border-(--accent) bg-(--accent) text-(--on-accent) hover:opacity-90",
+  secondary:
+    "border-(--border-dark) bg-(--paper-bg-2) text-(--ink-primary) hover:bg-(--paper-bg-3)",
+  selected: "border-(--accent) bg-(--accent) text-(--on-accent)",
+  unselected: "border-(--border-light) bg-(--paper-bg-2) text-(--ink-secondary)",
+  divider: "border-(--border-light)",
+  listSelected: "border-(--accent) bg-(--accent) text-(--on-accent) shadow-sm",
+  listUnselected:
+    "border-(--border-light) bg-(--paper-bg-2) text-(--ink-primary) hover:bg-(--paper-bg-3)",
+};
 
-  return {
-    page: "bg-stone-100 text-stone-900",
-    panel: "border-stone-300 bg-white/90",
-    subPanel: "border-stone-300 bg-stone-50/90",
-    input: "border-stone-300 bg-white text-stone-900 placeholder:text-stone-400",
-    muted: "text-stone-500",
-    primary: "border-stone-900 bg-stone-900 text-white hover:bg-stone-800",
-    secondary: "border-stone-300 bg-white text-stone-900 hover:bg-stone-50",
-    selected: "border-stone-900 bg-stone-900 text-white",
-    unselected: "border-stone-300 bg-white text-stone-700",
-    divider: "border-stone-300",
-    listSelected: "border-stone-900 bg-stone-900 text-white shadow-sm",
-    listUnselected: "border-stone-300 bg-white text-stone-900 hover:bg-stone-50",
-  };
+export function getThemeClasses(): ThemeClasses {
+  return TOKEN_CLASSES;
 }
+
+// 編輯器頁的主題對映(原 app/editor/page.tsx 的 themeMap,收斂成一套 token)
+export type EditorThemeConfig = {
+  pageBg: string;
+  sidebarBg: string;
+  panelBg: string;
+  cardBg: string;
+  border: string;
+  text: string;
+  mutedText: string;
+  subtleText: string;
+  inputBg: string;
+  textareaBg: string;
+  primaryButton: string;
+  primaryButtonText: string;
+  secondaryButton: string;
+  secondaryButtonText: string;
+  activeItem: string;
+  inactiveItem: string;
+};
+
+export const EDITOR_THEME: EditorThemeConfig = {
+  pageBg: "bg-(--paper-bg)",
+  sidebarBg: "bg-(--paper-bg-2)",
+  panelBg: "bg-(--paper-bg-2)",
+  cardBg: "bg-(--paper-bg-2)",
+  border: "border-(--border-light)",
+  text: "text-(--ink-primary)",
+  mutedText: "text-(--ink-secondary)",
+  subtleText: "text-(--ink-tertiary)",
+  inputBg: "bg-(--paper-bg)",
+  textareaBg: "bg-(--paper-bg-2)",
+  primaryButton: "bg-(--accent) hover:opacity-90",
+  primaryButtonText: "text-(--on-accent)",
+  secondaryButton: "border-(--border-dark) hover:bg-(--paper-bg-3)",
+  secondaryButtonText: "text-(--ink-primary)",
+  activeItem: "border-(--accent) bg-(--paper-bg-3)",
+  inactiveItem: "border-(--border-light) bg-(--paper-bg-2) hover:bg-(--paper-bg-3)",
+};

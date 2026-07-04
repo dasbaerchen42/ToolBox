@@ -12,10 +12,9 @@ import ToolHeader from "@/components/editor/ToolHeader";
 import FullwidthToolbar from "./_components/FullwidthToolbar";
 import FullwidthOptionsPanel from "./_components/FullwidthOptionsPanel";
 import FullwidthEditorPanel from "./_components/FullwidthEditorPanel";
-import { getThemeClasses, type ThemeMode } from "@/lib/theme";
+import { getThemeClasses } from "@/lib/theme";
 
 const STORAGE_KEYS = {
-  theme: "fullwidth-theme",
   options: "fullwidth-options",
   customRules: "fullwidth-custom-rules",
 } as const;
@@ -30,7 +29,6 @@ async function writeClipboardText(text: string) {
 }
 
 export default function FullwidthPage() {
-  const [theme, setTheme] = useState<ThemeMode>("light");
   const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
   const [options, setOptions] = useState<FullwidthOptions>(
@@ -42,23 +40,19 @@ export default function FullwidthPage() {
   const [notice, setNotice] = useState("");
 
   const noticeTimerRef = useRef<number | null>(null);
-  const t = getThemeClasses(theme);
+  const t = getThemeClasses();
 
   const inputMeta = useMemo(() => calcTextMeta(input), [input]);
   const outputMeta = useMemo(() => calcTextMeta(output), [output]);
 
   useEffect(() => {
     try {
-      const savedTheme = localStorage.getItem(STORAGE_KEYS.theme);
       const savedOptions = localStorage.getItem(STORAGE_KEYS.options);
       const savedCustomRules = localStorage.getItem(STORAGE_KEYS.customRules);
 
-      if (savedTheme === "light" || savedTheme === "dark") {
-        setTheme(savedTheme);
-      }
-
       if (savedOptions) {
         const parsed = JSON.parse(savedOptions) as Partial<FullwidthOptions>;
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- client-only localStorage 水合
         setOptions({
           ...DEFAULT_FULLWIDTH_OPTIONS,
           ...parsed,
@@ -75,10 +69,6 @@ export default function FullwidthPage() {
       console.error("讀取 fullwidth 設定失敗", error);
     }
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.theme, theme);
-  }, [theme]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.options, JSON.stringify(options));
@@ -174,11 +164,9 @@ export default function FullwidthPage() {
 
       <div className="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-8">
         {/* 這裡換成我們新做的共用標題元件！ */}
-        <ToolHeader 
+        <ToolHeader
           title="標點置換所"
           description="在輸入區貼上原文 / 按下 [貼上到輸入區] → 勾選要轉換的標點符號 → 按下 [執行轉換]"
-          theme={theme}
-          setTheme={setTheme}
           t={t}
         />
 

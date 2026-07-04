@@ -10,19 +10,28 @@ import {
 export function useEditorPreferences() {
   const [preferences, setPreferences] =
     useState<EditorPreferences>(defaultPreferences);
+  // 載入完成前不寫回 localStorage,避免掛載瞬間用預設值蓋掉已存偏好
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem(PREFERENCES_KEY);
-      if (saved) setPreferences(JSON.parse(saved) as EditorPreferences);
+      if (saved) {
+        // 與預設值合併:舊資料缺新欄位(或留有已棄用欄位)都不會壞
+        const parsed = JSON.parse(saved) as Partial<EditorPreferences>;
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- client-only localStorage 水合
+        setPreferences({ ...defaultPreferences, ...parsed });
+      }
     } catch {
       localStorage.removeItem(PREFERENCES_KEY);
     }
+    setLoaded(true);
   }, []);
 
   useEffect(() => {
+    if (!loaded) return;
     localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences));
-  }, [preferences]);
+  }, [preferences, loaded]);
 
   function adjustFontSize(amount: number) {
     setPreferences((prev) => ({

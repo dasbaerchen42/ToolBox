@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import ToolHeader from "@/components/editor/ToolHeader";
-import { getThemeClasses, type ThemeMode } from "@/lib/theme";
+import { getThemeClasses } from "@/lib/theme";
 import { characters as fallbackCharacters } from "@/lib/stories";
 
 type CharacterCard = {
@@ -17,7 +17,6 @@ type CharacterCard = {
 };
 
 export default function StoriesPage() {
-  const [theme, setTheme] = useState<ThemeMode>("light");
   const [characters, setCharacters] = useState<CharacterCard[]>(
     fallbackCharacters.map((c) => ({
       slug: c.slug,
@@ -28,7 +27,7 @@ export default function StoriesPage() {
       comingSoon: c.comingSoon,
     }))
   );
-  const t = getThemeClasses(theme);
+  const t = getThemeClasses();
 
   useEffect(() => {
     fetch("/api/characters")
@@ -49,8 +48,6 @@ export default function StoriesPage() {
         <ToolHeader
           title="故事館"
           description="相遇之前，他們各自走過的路。"
-          theme={theme}
-          setTheme={setTheme}
           t={t}
         />
 
@@ -59,18 +56,10 @@ export default function StoriesPage() {
             <Link
               key={char.slug}
               href={`/stories/${char.slug}`}
-              className={`group rounded-3xl border p-5 transition flex flex-col gap-2 ${
-                theme === "dark"
-                  ? "border-zinc-800 bg-zinc-900 hover:bg-zinc-800/80"
-                  : "border-stone-300 bg-white hover:bg-stone-50"
-              }`}
+              className={`group rounded-3xl border p-5 transition flex flex-col gap-2 ${t.listUnselected}`}
             >
               <div
-                className={`w-full aspect-[3/4] rounded-2xl mb-1 flex items-center justify-center text-xs tracking-widest ${
-                  theme === "dark"
-                    ? "bg-zinc-800 text-zinc-600"
-                    : "bg-stone-100 text-stone-300"
-                }`}
+                className="w-full aspect-[3/4] rounded-2xl mb-1 flex items-center justify-center text-xs tracking-widest bg-(--paper-bg-3) text-(--ink-tertiary)"
               >
                 圖
               </div>

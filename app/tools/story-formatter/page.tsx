@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import ToolHeader from "@/components/editor/ToolHeader";
-import { getThemeClasses, type ThemeMode } from "@/lib/theme";
+import { getThemeClasses } from "@/lib/theme";
 
 const DEFAULT_CHARS = [
   { name: "SSR", slug: "ssr" },
@@ -49,8 +49,7 @@ function extractOrder(id: string): number {
 }
 
 export default function StoryFormatterPage() {
-  const [theme, setTheme] = useState<ThemeMode>("light");
-  const t = getThemeClasses(theme);
+  const t = getThemeClasses();
 
   const [data, setData] = useState<StorageData>({ chars: DEFAULT_CHARS, stories: {} });
   const [selectedSlug, setSelectedSlug] = useState("");
@@ -70,6 +69,7 @@ export default function StoryFormatterPage() {
   const [copied2, setCopied2] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- client-only localStorage 水合
     setData(loadData());
   }, []);
 
@@ -125,31 +125,15 @@ export default function StoryFormatterPage() {
     });
   }
 
-  const inputClass = `w-full rounded-xl border px-3 py-2 text-sm tracking-[0.04em] outline-none transition focus:ring-1 ${
-    theme === "dark"
-      ? "border-zinc-700 bg-zinc-900 text-zinc-100 focus:ring-zinc-500 focus:border-zinc-500"
-      : "border-stone-300 bg-white text-stone-800 focus:ring-stone-400 focus:border-stone-400"
-  }`;
+  const inputClass = `w-full rounded-xl border px-3 py-2 text-sm tracking-[0.04em] outline-none transition focus:ring-1 focus:ring-(--border-dark) focus:border-(--border-dark) ${t.input}`;
 
   const labelClass = `text-xs tracking-[0.1em] mb-1.5 block ${t.muted}`;
 
-  const outputClass = `w-full rounded-xl border p-4 text-xs font-mono leading-relaxed tracking-normal whitespace-pre-wrap break-all min-h-[80px] ${
-    theme === "dark"
-      ? "border-zinc-700 bg-zinc-950 text-zinc-300"
-      : "border-stone-200 bg-stone-50 text-stone-600"
-  }`;
+  const outputClass = `w-full rounded-xl border p-4 text-xs font-mono leading-relaxed tracking-normal whitespace-pre-wrap break-all min-h-[80px] border-(--border-light) bg-(--paper-bg) text-(--ink-secondary)`;
 
-  const btnClass = `rounded-xl border px-4 py-2 text-xs tracking-[0.08em] transition ${
-    theme === "dark"
-      ? "border-zinc-700 hover:bg-zinc-800 text-zinc-300"
-      : "border-stone-300 hover:bg-stone-50 text-stone-600"
-  }`;
+  const btnClass = `rounded-xl border px-4 py-2 text-xs tracking-[0.08em] transition ${t.secondary}`;
 
-  const btnPrimaryClass = `rounded-xl px-4 py-2 text-xs tracking-[0.08em] transition font-medium ${
-    theme === "dark"
-      ? "bg-zinc-100 text-zinc-900 hover:bg-white"
-      : "bg-zinc-900 text-white hover:bg-zinc-700"
-  }`;
+  const btnPrimaryClass = `rounded-xl px-4 py-2 text-xs tracking-[0.08em] transition font-medium bg-(--accent) text-(--on-accent) hover:opacity-90`;
 
   return (
     <main className={`min-h-screen p-6 flex flex-col ${t.page}`}>
@@ -157,17 +141,13 @@ export default function StoryFormatterPage() {
         <ToolHeader
           title="故事格式轉換器"
           description="填入故事資料，產生可直接貼入程式碼的格式。"
-          theme={theme}
-          setTheme={setTheme}
           t={t}
         />
 
         <div className="flex flex-col gap-6">
 
           {/* ── 角色選擇 ── */}
-          <section className={`rounded-2xl border p-5 flex flex-col gap-4 ${
-            theme === "dark" ? "border-zinc-800 bg-zinc-900" : "border-stone-200 bg-white"
-          }`}>
+          <section className={`rounded-2xl border p-5 flex flex-col gap-4 ${t.panel}`}>
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-medium tracking-[0.06em]">角色</h2>
               <button className={btnClass} onClick={() => setShowAddChar(!showAddChar)}>
@@ -176,9 +156,7 @@ export default function StoryFormatterPage() {
             </div>
 
             {showAddChar && (
-              <div className={`rounded-xl border p-4 flex flex-col gap-3 ${
-                theme === "dark" ? "border-zinc-700 bg-zinc-800" : "border-stone-100 bg-stone-50"
-              }`}>
+              <div className={`rounded-xl border p-4 flex flex-col gap-3 ${t.subPanel}`}>
                 <p className={`text-xs tracking-[0.08em] ${t.muted}`}>新角色資料</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -224,9 +202,7 @@ export default function StoryFormatterPage() {
                         return extractOrder(a.id) - extractOrder(b.id);
                       })
                       .map((s) => (
-                        <div key={s.id} className={`flex items-center gap-3 text-xs tracking-[0.04em] px-3 py-1.5 rounded-lg ${
-                          theme === "dark" ? "bg-zinc-800" : "bg-stone-50"
-                        }`}>
+                        <div key={s.id} className={`flex items-center gap-3 text-xs tracking-[0.04em] px-3 py-1.5 rounded-lg bg-(--paper-bg-3)`}>
                           <span className={`opacity-40 font-mono ${t.muted}`}>{s.id}</span>
                           <span className={`opacity-40 text-[10px] tracking-widest ${t.muted}`}>
                             {s.type === "main" ? "主線" : "番外"}
@@ -241,9 +217,7 @@ export default function StoryFormatterPage() {
           </section>
 
           {/* ── 故事資料 ── */}
-          <section className={`rounded-2xl border p-5 flex flex-col gap-4 ${
-            theme === "dark" ? "border-zinc-800 bg-zinc-900" : "border-stone-200 bg-white"
-          }`}>
+          <section className={`rounded-2xl border p-5 flex flex-col gap-4 ${t.panel}`}>
             <h2 className="text-sm font-medium tracking-[0.06em]">故事資料</h2>
 
             <div className="grid grid-cols-2 gap-4">
@@ -296,9 +270,7 @@ export default function StoryFormatterPage() {
           </section>
 
           {/* ── 輸出 ── */}
-          <section className={`rounded-2xl border p-5 flex flex-col gap-5 ${
-            theme === "dark" ? "border-zinc-800 bg-zinc-900" : "border-stone-200 bg-white"
-          }`}>
+          <section className={`rounded-2xl border p-5 flex flex-col gap-5 ${t.panel}`}>
             <h2 className="text-sm font-medium tracking-[0.06em]">輸出</h2>
 
             {/* storyContents.ts */}
