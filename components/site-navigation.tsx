@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import ThemeMenu from "@/components/theme-menu";
 
 const navItems = [
   { href: "/", label: "首頁" },
@@ -39,7 +40,7 @@ export default function SiteNavigation() {
           })}
         </div>
 
-        {/* 右側:專屬小熊記號(Phase 3 會在這裡加 ThemeMenu) */}
+        {/* 右側:專屬小熊記號 + 主題選擇 */}
         <div className="ml-auto flex items-center gap-3">
           <div className="hidden items-center text-[11px] tracking-[0.08em] text-(--ink-tertiary) opacity-50 transition-opacity duration-500 hover:opacity-100 md:flex">
             <a
@@ -50,6 +51,7 @@ export default function SiteNavigation() {
               A tired bear&apos;s project © 小熊寶 Das Baerchen
             </a>
           </div>
+          <ThemeMenu />
         </div>
       </div>
     </nav>

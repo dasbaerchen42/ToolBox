@@ -133,6 +133,8 @@
   - **admin 後台(`app/admin/*`)刻意不動**:內部工具,維持原本寫死的樣式。
   - 驗證:Compiled successfully + TypeScript 通過;ESLint 剩 4 個**既有** `set-state-in-effect` error(fullwidth/story-formatter/useDocuments/useEditorPreferences,Phase 5 處理 hooks 那兩個)。
 
+- **2026-07-04 Phase 3 完成**:新增 `components/theme-menu.tsx` 掛在導覽列右側——七款 preset(emoji+名稱+4 色圓點預覽)、4 色自訂(`<input type="color">`,即時套用含 ensureReadable 對比防呆)、🎲 隨機配色 + 保存(上限 5 組 FIFO)+ 收藏清單(可套用/刪除)。點外面或 Esc 關閉;localStorage 掛載後才讀避免 hydration 不一致。編譯 + 型別 + ESLint(新檔)通過。
+
 ## 中斷接續指引
 
 - 每完成一個 Phase 就 commit + push,commit 訊息前綴 `feat(theme):` / `feat(editor):` / `fix:` 並標 Phase 編號。
