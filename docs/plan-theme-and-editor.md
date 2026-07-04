@@ -142,6 +142,13 @@
   - `editor-textarea.tsx` 改 forwardRef;editor page 接線:Ctrl/Cmd+F 開尋找、Ctrl/Cmd+Z / Ctrl/Cmd+Shift+Z(或 Y)走自建歷史(preventDefault 掉原生 undo 避免兩套打架)、Esc 關閉。
   - 驗證:Compiled + TypeScript + ESLint 乾淨;jest 51 tests 全過。
 
+- **2026-07-04 Phase 5 完成**:雜項修正全數處理。
+  - `useEditorPreferences`:加 `loaded` flag(載入前不寫回,修「掛載瞬間用預設值蓋掉已存偏好」的競態);載入時與預設值合併,舊資料缺欄位/留棄用欄位都不會壞。
+  - `useDocuments.updateActiveDoc`:改為就地更新不搬順序,打字時側欄不再跳動。
+  - ESLint 全綠:4 處既有 `set-state-in-effect`(localStorage 水合模式)加上附理由的 disable 註記;`lib/theme.ts` 移除已無人用的 `ThemeMode` 型別與棄用參數;`validators.test.ts` 未使用變數修正;admin 頁未使用型別別名刪除。
+  - (第 1、2、5、6 項已在 Phase 2 順手完成,見上)
+  - 驗證:tsc、ESLint(0 錯 0 警)、jest 51 tests 全過。
+
 ## 中斷接續指引
 
 - 每完成一個 Phase 就 commit + push,commit 訊息前綴 `feat(theme):` / `feat(editor):` / `fix:` 並標 Phase 編號。

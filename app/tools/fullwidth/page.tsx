@@ -52,6 +52,7 @@ export default function FullwidthPage() {
 
       if (savedOptions) {
         const parsed = JSON.parse(savedOptions) as Partial<FullwidthOptions>;
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- client-only localStorage 水合
         setOptions({
           ...DEFAULT_FULLWIDTH_OPTIONS,
           ...parsed,

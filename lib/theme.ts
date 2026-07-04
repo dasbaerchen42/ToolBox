@@ -3,9 +3,6 @@
 // 自訂主題為 :root 內聯變數)。這裡只提供「語意 → Tailwind token class」的固定對映,
 // 換主題時 class 不變、變數值變,所以只有一套。
 
-/** @deprecated 主題已全站統一,不再分淺/深;保留型別讓舊簽名相容。 */
-export type ThemeMode = "light" | "dark";
-
 export type ThemeClasses = {
   page: string;
   panel: string;
@@ -39,7 +36,7 @@ const TOKEN_CLASSES: ThemeClasses = {
     "border-(--border-light) bg-(--paper-bg-2) text-(--ink-primary) hover:bg-(--paper-bg-3)",
 };
 
-export function getThemeClasses(_theme?: ThemeMode): ThemeClasses {
+export function getThemeClasses(): ThemeClasses {
   return TOKEN_CLASSES;
 }
 

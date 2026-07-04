@@ -69,6 +69,7 @@ export default function StoryFormatterPage() {
   const [copied2, setCopied2] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- client-only localStorage 水合
     setData(loadData());
   }, []);
 

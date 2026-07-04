@@ -19,6 +19,7 @@ export function useDocuments() {
           ...doc,
           mode: doc.mode || "plain",
         }));
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- client-only localStorage 水合
         setDocs(normalizedDocs);
 
         if (
@@ -79,17 +80,15 @@ export function useDocuments() {
     if (activeDocId === docId) setActiveDocId(filtered[0].id);
   }
 
+  // 只就地更新、不搬動順序:打字時側欄清單才不會跳動(新文件仍照建立時間排最前)
   function updateActiveDoc(fields: Partial<WritingDoc>) {
-    setDocs((prev) => {
-      const updated = prev.map((doc) =>
+    setDocs((prev) =>
+      prev.map((doc) =>
         doc.id === activeDocId
           ? { ...doc, ...fields, updatedAt: new Date().toISOString() }
           : doc
-      );
-      const active = updated.find((d) => d.id === activeDocId);
-      const others = updated.filter((d) => d.id !== activeDocId);
-      return active ? [active, ...others] : updated;
-    });
+      )
+    );
   }
 
   function addDoc(doc: WritingDoc) {
