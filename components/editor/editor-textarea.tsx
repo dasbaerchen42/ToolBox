@@ -20,6 +20,8 @@ function getFontFamily(fontFamily: EditorPreferences["fontFamily"]) {
       return '"SFMono-Regular", "Cascadia Mono", "Fira Code", "Consolas", monospace';
     case "cursive":
       return '"Segoe Script", "Brush Script MT", cursive';
+    case "round":
+      return "var(--font-round)";
     case "sans":
     default:
       return '"Noto Sans TC", "Microsoft JhengHei", Arial, sans-serif';

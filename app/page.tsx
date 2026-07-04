@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 import ToolHeader from "@/components/editor/ToolHeader";
-import { getThemeClasses, type ThemeMode } from "@/lib/theme";
+import { getThemeClasses } from "@/lib/theme";
 
 const tools = [
   {
@@ -42,18 +41,15 @@ const games = [
 ];
 
 export default function HomePage() {
-  const [theme, setTheme] = useState<ThemeMode>("light");
-  const t = getThemeClasses(theme);
+  const t = getThemeClasses();
 
   return (
     <main className={`min-h-screen p-6 flex flex-col ${t.page}`}>
       <div className="mx-auto w-full max-w-5xl flex-1">
         
-        <ToolHeader 
+        <ToolHeader
           title="創作區｜工具箱"
           description="圓夢的地方：小工具、小遊戲，以及可能更多的未來。"
-          theme={theme}
-          setTheme={setTheme}
           t={t}
         />
         {/* 工具區 */}
@@ -66,11 +62,7 @@ export default function HomePage() {
                 key={tool.href}
                 href={tool.href}
                 {...(isExternal ? { target: "_blank", rel: "noreferrer" } : {})}
-                className={`rounded-3xl border p-5 transition ${
-                  theme === "dark"
-                    ? "border-zinc-800 bg-zinc-900 hover:bg-zinc-800/80"
-                    : "border-stone-300 bg-white hover:bg-stone-50"
-                }`}
+                className={`rounded-3xl border p-5 transition ${t.listUnselected}`}
               >
                 <h2 className="text-lg font-semibold tracking-[0.06em]">
                   {tool.title}
@@ -95,11 +87,7 @@ export default function HomePage() {
                   key={tool.href}
                   href={tool.href}
                   {...(isExternal ? { target: "_blank", rel: "noreferrer" } : {})}
-                  className={`rounded-3xl border p-5 transition ${
-                    theme === "dark"
-                      ? "border-zinc-800 bg-zinc-900 hover:bg-zinc-800/80"
-                      : "border-stone-300 bg-white hover:bg-stone-50"
-                  }`}
+                  className={`rounded-3xl border p-5 transition ${t.listUnselected}`}
                 >
                   <h2 className="text-lg font-semibold tracking-[0.06em]">
                     {tool.title}

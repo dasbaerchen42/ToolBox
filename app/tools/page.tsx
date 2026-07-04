@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 // 引入我們剛做好的共用標題與主題！
 import ToolHeader from "@/components/editor/ToolHeader";
-import { getThemeClasses, type ThemeMode } from "@/lib/theme";
+import { getThemeClasses } from "@/lib/theme";
 
 async function copyText(text: string) {
   if (!text) return;
@@ -186,32 +186,29 @@ function getFontResults(input: string) {
 }
 
 export default function ToolsPage() {
-  const [theme, setTheme] = useState<ThemeMode>("light");
-  const t = getThemeClasses(theme);
+  const t = getThemeClasses();
 
   return (
     <main className={`min-h-screen ${t.page}`}>
       <div className="mx-auto max-w-7xl px-4 py-6 md:px-6">
         {/* 這裡換成共用標題元件！ */}
-        <ToolHeader 
+        <ToolHeader
           title="Tools"
           description="社群排版與字體轉換工具"
-          theme={theme}
-          setTheme={setTheme}
           t={t}
         />
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <FontTool theme={theme} />
-          <SocialTool theme={theme} />
+          <FontTool />
+          <SocialTool />
         </div>
       </div>
     </main>
   );
 }
 
-function FontTool({ theme }: { theme: ThemeMode }) {
-  const t = getThemeClasses(theme);
+function FontTool() {
+  const t = getThemeClasses();
   const [input, setInput] = useState("");
   const [selectedFont, setSelectedFont] = useState("squared");
 
@@ -290,8 +287,8 @@ function FontTool({ theme }: { theme: ThemeMode }) {
   );
 }
 
-function SocialTool({ theme }: { theme: ThemeMode }) {
-  const t = getThemeClasses(theme);
+function SocialTool() {
+  const t = getThemeClasses();
   const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
 

@@ -1,25 +1,16 @@
 import {
   EditorPreferences,
   FontFamilyName,
-  ThemeName,
 } from "@/lib/preferences";
 import { WritingMode } from "@/lib/storage";
-
-type ThemeConfig = {
-  border: string;
-  panelBg: string;
-  inputBg: string;
-  mutedText: string;
-  secondaryButton: string;
-  secondaryButtonText: string;
-};
+import type { EditorThemeConfig } from "@/lib/theme";
 
 type EditorSettingsPanelProps = {
   preferences: EditorPreferences;
   currentMode: WritingMode;
   onChangeMode: (mode: WritingMode) => void;
   setPreferences: React.Dispatch<React.SetStateAction<EditorPreferences>>;
-  theme: ThemeConfig;
+  theme: EditorThemeConfig;
   adjustFontSize: (amount: number) => void;
   adjustLineHeight: (amount: number) => void;
   adjustLetterSpacing: (amount: number) => void;
@@ -30,14 +21,7 @@ const fontOptions: { key: FontFamilyName; label: string }[] = [
   { key: "serif", label: "襯線" },
   { key: "mono", label: "等寬" },
   { key: "cursive", label: "手寫感" },
-];
-
-const themeOptions: { key: ThemeName; label: string }[] = [
-  { key: "dark", label: "深色" },
-  { key: "light", label: "淺色" },
-  { key: "forest", label: "森林" },
-  { key: "sunny", label: "暖陽" },
-  { key: "paper", label: "紙張" },
+  { key: "round", label: "粉圓" },
 ];
 
 const modeOptions: { value: WritingMode; label: string }[] = [
@@ -63,7 +47,7 @@ export default function EditorSettingsPanel({
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       <div>
-        <label className={`mb-2 block text-sm tracking-[0.06em] tracking-[0.06em] ${theme.mutedText}`}>
+        <label className={`mb-2 block text-sm tracking-[0.06em] ${theme.mutedText}`}>
           寫作模式
         </label>
         <select
@@ -96,28 +80,6 @@ export default function EditorSettingsPanel({
           {fontOptions.map((font) => (
             <option key={font.key} value={font.key}>
               {font.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className={`mb-2 block text-sm tracking-[0.06em] ${theme.mutedText}`}>
-          主題配色
-        </label>
-        <select
-          value={preferences.theme}
-          onChange={(e) =>
-            setPreferences((prev) => ({
-              ...prev,
-              theme: e.target.value as ThemeName,
-            }))
-          }
-          className={`w-full rounded-2xl border px-4 py-3 text-sm font-medium tracking-[0.04em] outline-none ${theme.border} ${theme.inputBg}`}
-        >
-          {themeOptions.map((item) => (
-            <option key={item.key} value={item.key}>
-              {item.label}
             </option>
           ))}
         </select>

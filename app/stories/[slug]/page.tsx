@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { useEffect, useState, use } from "react";
 import ToolHeader from "@/components/editor/ToolHeader";
-import { getThemeClasses, type ThemeMode } from "@/lib/theme";
+import { getThemeClasses } from "@/lib/theme";
 import { getCharacter } from "@/lib/stories";
 
 interface Props {
@@ -35,8 +35,7 @@ type CharacterData = {
 
 export default function CharacterStoriesPage({ params }: Props) {
   const { slug } = use(params);
-  const [theme, setTheme] = useState<ThemeMode>("light");
-  const t = getThemeClasses(theme);
+  const t = getThemeClasses();
 
   const hardcodedChar = getCharacter(slug);
 
@@ -82,7 +81,7 @@ export default function CharacterStoriesPage({ params }: Props) {
 
   if (loading) {
     return (
-      <main className={`min-h-screen p-6 flex items-center justify-center ${getThemeClasses("light").page}`}>
+      <main className={`min-h-screen p-6 flex items-center justify-center ${t.page}`}>
         <p className="text-sm opacity-40">載入中…</p>
       </main>
     );
@@ -101,8 +100,6 @@ export default function CharacterStoriesPage({ params }: Props) {
         <ToolHeader
           title={char.name}
           description={char.tagline || char.job || ""}
-          theme={theme}
-          setTheme={setTheme}
           t={t}
         />
 
@@ -121,11 +118,7 @@ export default function CharacterStoriesPage({ params }: Props) {
               href={chatLink}
               target="_blank"
               rel="noreferrer"
-              className={`rounded-2xl border px-4 py-2 text-sm tracking-[0.08em] transition ${
-                theme === "dark"
-                  ? "border-zinc-700 hover:bg-zinc-800"
-                  : "border-stone-300 hover:bg-stone-50"
-              }`}
+              className={`rounded-2xl border px-4 py-2 text-sm tracking-[0.08em] transition ${t.secondary}`}
             >
               去找他聊聊 →
             </a>
@@ -134,11 +127,7 @@ export default function CharacterStoriesPage({ params }: Props) {
                 href={chatLinkAlt}
                 target="_blank"
                 rel="noreferrer"
-                className={`rounded-2xl border px-4 py-2 text-sm tracking-[0.08em] transition ${
-                  theme === "dark"
-                    ? "border-zinc-700 hover:bg-zinc-800"
-                    : "border-stone-300 hover:bg-stone-50"
-                }`}
+                className={`rounded-2xl border px-4 py-2 text-sm tracking-[0.08em] transition ${t.secondary}`}
               >
                 去找他聊聊（其他平台）→
               </a>
@@ -159,14 +148,14 @@ export default function CharacterStoriesPage({ params }: Props) {
                   {mainStories
                     .sort((a, b) => a.order - b.order)
                     .map((story) => (
-                      <StoryCard key={story.id} slug={slug} story={story} theme={theme} t={t} />
+                      <StoryCard key={story.id} slug={slug} story={story} t={t} />
                     ))}
                 </div>
               </section>
             )}
 
             {mainStories.length > 0 && extraStories.length > 0 && (
-              <div className={`border-t mb-10 ${theme === "dark" ? "border-zinc-800" : "border-stone-200"}`} />
+              <div className={`border-t mb-10 ${t.divider}`} />
             )}
 
             {extraStories.length > 0 && (
@@ -176,7 +165,7 @@ export default function CharacterStoriesPage({ params }: Props) {
                   {extraStories
                     .sort((a, b) => a.order - b.order)
                     .map((story) => (
-                      <StoryCard key={story.id} slug={slug} story={story} theme={theme} t={t} />
+                      <StoryCard key={story.id} slug={slug} story={story} t={t} />
                     ))}
                 </div>
               </section>
@@ -201,22 +190,16 @@ export default function CharacterStoriesPage({ params }: Props) {
 function StoryCard({
   slug,
   story,
-  theme,
   t,
 }: {
   slug: string;
   story: StoryItem;
-  theme: ThemeMode;
   t: ReturnType<typeof getThemeClasses>;
 }) {
   return (
     <Link
       href={`/stories/${slug}/${story.id}`}
-      className={`group rounded-2xl border p-4 transition flex flex-col gap-1 ${
-        theme === "dark"
-          ? "border-zinc-800 bg-zinc-900 hover:bg-zinc-800/80"
-          : "border-stone-300 bg-white hover:bg-stone-50"
-      }`}
+      className={`group rounded-2xl border p-4 transition flex flex-col gap-1 ${t.listUnselected}`}
     >
       <h3 className="text-sm font-medium tracking-[0.06em]">{story.title}</h3>
       {story.excerpt && (

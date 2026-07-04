@@ -123,6 +123,16 @@
 - **2026-07-04 Phase 1 完成**:新增 `lib/theme-core.ts`(引擎,localStorage key 用 `toolbox-theme*`、預設 `huninn`)、`scripts/generate-theme-css.mjs`(產生器)、`app/theme.css`(七款 preset 靜態變數,產生器輸出與交接文件 §8 一致);`app/globals.css` 改為 import theme.css + 品牌 token(`--radius`、`--font-round`)+ body 吃 `--paper-bg/--ink-primary`,移除舊 `--background/--foreground`(已確認無人引用)。
   ⚠️ 環境限制:此 session 無 Supabase 金鑰,`next build` 在 collecting page data 階段必掛(`supabaseUrl is required`,乾淨樹亦同)——**驗證門檻改為「Compiled successfully + TypeScript 通過」**,完整 build 由 Vercel/本機驗。
 
+- **2026-07-04 Phase 2 完成**:全站改吃 CSS 變數 + 粉圓體。
+  - `lib/theme.ts`:`getThemeClasses()` 收斂為單一 token class 組(參數保留但棄用);新增 `EditorThemeConfig` 型別 + `EDITOR_THEME` 常數(原 editor themeMap 五款 130 行刪除)。
+  - `app/layout.tsx`:`next/font/google` 載入 Huninn(`--font-huninn`)、`<html data-theme="huninn">`、body 開頭注入 `BOOTSTRAP_SCRIPT`、移除 `font-mono`。
+  - `components/site-navigation.tsx`:token 化(移除 `dark:` 前綴與 OS 深淺色脫鉤問題)、刪開發註解。
+  - `components/editor/ToolHeader.tsx`:移除淺/深切換按鈕與 theme/setTheme props。
+  - `lib/preferences.ts`:移除 `theme` 欄位與 `ThemeName`;`FontFamilyName` 加 `"round"`(粉圓);editor 設定面板移除主題 select、字體選單加「粉圓」;`editor-textarea` `getFontFamily` 加 round → `var(--font-round)`;順手修了重複 `tracking-[0.06em]`(Phase 5 項目)。
+  - 頁面轉換:首頁、tools、knife、fullwidth(含移除自己的 `fullwidth-theme` localStorage)、story-formatter、stories 列表/角色/閱讀頁(閱讀頁自帶的淺深按鈕移除;loading 寫死 light 的問題一併修掉=Phase 5 第 6 項)、privacy。fullwidth `_lib/types.ts` 重複的 `ThemeMode` 刪除(Phase 5 第 2 項部分完成)。
+  - **admin 後台(`app/admin/*`)刻意不動**:內部工具,維持原本寫死的樣式。
+  - 驗證:Compiled successfully + TypeScript 通過;ESLint 剩 4 個**既有** `set-state-in-effect` error(fullwidth/story-formatter/useDocuments/useEditorPreferences,Phase 5 處理 hooks 那兩個)。
+
 ## 中斷接續指引
 
 - 每完成一個 Phase 就 commit + push,commit 訊息前綴 `feat(theme):` / `feat(editor):` / `fix:` 並標 Phase 編號。
