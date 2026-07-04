@@ -26,7 +26,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-TW" data-theme="huninn" className={huninn.variable}>
+    // bootstrap script 會在 React 水合前改寫 data-theme/inline vars,屬預期差異
+    <html
+      lang="zh-TW"
+      data-theme="huninn"
+      className={huninn.variable}
+      suppressHydrationWarning
+    >
       <body className="tracking-[0.04em] leading-7 antialiased">
         {/* 無閃爍主題 bootstrap:在 body 內容繪製前套用已儲存的主題 */}
         <script dangerouslySetInnerHTML={{ __html: BOOTSTRAP_SCRIPT }} />

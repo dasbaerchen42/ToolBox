@@ -149,6 +149,12 @@
   - (第 1、2、5、6 項已在 Phase 2 順手完成,見上)
   - 驗證:tsc、ESLint(0 錯 0 警)、jest 51 tests 全過。
 
+- **2026-07-04 Phase 6 完成(全部收工)**:
+  - `app/layout.tsx` `<html>` 加 `suppressHydrationWarning`(bootstrap 在水合前改 data-theme/inline vars 屬預期差異,next-themes 同款做法)。
+  - Playwright 全站走查 **19/19 PASS**:預設 huninn、body 粉圓體、切 latte 變數即時生效、重整後主題保留(bootstrap)、隨機→custom→收藏寫入 localStorage、編輯器 Ctrl+Z/Ctrl+Shift+Z 一步一句、Ctrl+F 展開、計數「第 n / 共 m 筆」、全部取代、全部取代一鍵還原、/tools /knife /fullwidth /privacy /stories 全部吃主題變數且無 JS 錯誤。
+  - 最終驗證:Compiled + TypeScript 通過、ESLint 0 錯 0 警、jest 51 tests 全過。build 的 collecting page data 階段仍因無 Supabase 金鑰而停(既有環境限制,Vercel 上有金鑰即正常)。
+  - 已知殘留(非問題):dev 走查時 Vercel Analytics 腳本被本地 proxy 擋(ERR_TUNNEL_CONNECTION_FAILED),僅此環境。
+
 ## 中斷接續指引
 
 - 每完成一個 Phase 就 commit + push,commit 訊息前綴 `feat(theme):` / `feat(editor):` / `fix:` 並標 Phase 編號。
