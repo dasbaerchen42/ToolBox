@@ -118,6 +118,11 @@
 
 ---
 
+## 開發紀錄
+
+- **2026-07-04 Phase 1 完成**:新增 `lib/theme-core.ts`(引擎,localStorage key 用 `toolbox-theme*`、預設 `huninn`)、`scripts/generate-theme-css.mjs`(產生器)、`app/theme.css`(七款 preset 靜態變數,產生器輸出與交接文件 §8 一致);`app/globals.css` 改為 import theme.css + 品牌 token(`--radius`、`--font-round`)+ body 吃 `--paper-bg/--ink-primary`,移除舊 `--background/--foreground`(已確認無人引用)。
+  ⚠️ 環境限制:此 session 無 Supabase 金鑰,`next build` 在 collecting page data 階段必掛(`supabaseUrl is required`,乾淨樹亦同)——**驗證門檻改為「Compiled successfully + TypeScript 通過」**,完整 build 由 Vercel/本機驗。
+
 ## 中斷接續指引
 
 - 每完成一個 Phase 就 commit + push,commit 訊息前綴 `feat(theme):` / `feat(editor):` / `fix:` 並標 Phase 編號。
