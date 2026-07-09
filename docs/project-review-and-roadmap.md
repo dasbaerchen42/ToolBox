@@ -41,7 +41,14 @@ build 階段收集 `/api/characters` 等頁面資料時,env 不存在就拋出 `
 - 新 clone 的環境、未來的 CI、任何沒設 Supabase 的協作者都無法 build。
 - **建議**:改為延遲初始化(getter 函式,呼叫時才 `createClient`),或在缺 env 時回傳明確錯誤而非 build 期崩潰;同時將依賴 Supabase 的 API route 標記為動態(依 `node_modules/next/dist/docs/` 本版指南確認寫法)。
 
-#### P0-2:Admin API 未驗證輸入(mass assignment)
+#### ✅ P0-2:Admin API 未驗證輸入(mass assignment) — 已修 2026-07-09
+
+> 新增 `lib/admin-fields.ts`：`STORY_WRITE_FIELDS` / `CHARACTER_WRITE_FIELDS` 白名單
+> ＋ `pickFields()`。stories 與 characters 的 POST/PUT（共 4 個 route）改為只取
+> 白名單欄位再進 insert/update，擋掉 id/created_at/updated_at/未知欄位。
+> tsc / eslint / 51 tests / build（18 頁）全通過。以下保留原描述。
+
+#### P0-2(原):Admin API 未驗證輸入(mass assignment)
 `app/api/admin/stories/route.ts` 等 POST/PUT 直接把 `request.json()` 的原始 body 丟進 Supabase:
 
 ```ts

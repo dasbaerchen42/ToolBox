@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { verifyAdmin } from "@/lib/admin-auth";
-import type { Database } from "@/lib/database.types";
-
-type StoryUpdate = Database["public"]["Tables"]["stories"]["Update"];
+import { pickFields, STORY_WRITE_FIELDS } from "@/lib/admin-fields";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -30,7 +28,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
 
   const { id } = await params;
   const supabase = createAdminClient();
-  const body = await request.json() as StoryUpdate;
+  const body = pickFields(await request.json(), STORY_WRITE_FIELDS);
 
   const { data, error } = await supabase
     .from("stories")

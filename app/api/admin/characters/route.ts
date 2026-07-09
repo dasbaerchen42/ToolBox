@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { verifyAdmin } from "@/lib/admin-auth";
+import { pickFields, CHARACTER_WRITE_FIELDS } from "@/lib/admin-fields";
 
 export async function GET(request: NextRequest) {
   const isAdmin = await verifyAdmin(request);
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
   if (!isAdmin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const supabase = createAdminClient();
-  const body = await request.json();
+  const body = pickFields(await request.json(), CHARACTER_WRITE_FIELDS);
 
   const { data, error } = await supabase
     .from("characters")
