@@ -60,7 +60,11 @@ const { data, error } = await supabase.from("stories").insert(body)...
 
 - **建議**:引入 zod(或手寫 picker)為每個 admin route 定義允許欄位白名單,只挑白名單欄位進 insert/update。
 
-#### P0-3:建立 CI(GitHub Actions)
+#### ✅ P0-3:建立 CI(GitHub Actions) — 已完成 2026-07-09
+
+> 新增 `.github/workflows/ci.yml`：push / PR 到 main 時跑 `npm ci → lint → test → build`
+> （build 已不需 env）。以下保留原描述。
+
 目前 lint / test / build 完全靠人工記得跑。P0-1 這種「build 早就壞了」的問題就是沒 CI 才會潛伏。
 
 - **建議**:加 `.github/workflows/ci.yml`,PR 與 main push 時跑 `npm ci && npm run lint && npm test && npm run build`(build 需先解 P0-1,或在 CI 提供 dummy env)。
@@ -72,7 +76,13 @@ const { data, error } = await supabase.from("stories").insert(body)...
 
 - **建議**:verify route 改呼叫 `verifyAdmin()`;順帶把 tokeninfo 端點從已過時的 `oauth2/v1` 換成 `oauth2/v3`,並考慮短期(如 60 秒)記憶體快取,避免後台每個請求都打一次 Google。
 
-#### P1-2:API 錯誤訊息直接外洩
+#### ✅ P1-2:API 錯誤訊息直接外洩 — 已修 2026-07-09
+
+> 新增 `lib/api-error.ts` 的 `serverError(context, error)`：完整錯誤 `console.error`
+> 留伺服器、前端只收固定訊息。stories/characters（admin + 公開）共 9 處 500 回傳改用它，
+> 一處 404 也改為不外洩訊息。以下保留原描述。
+
+#### P1-2(原):API 錯誤訊息直接外洩
 所有 route 都 `NextResponse.json({ error: error.message }, { status: 500 })`,把 Supabase/PostgreSQL 原始錯誤(含資料表結構線索)回給前端。
 
 - **建議**:500 回固定訊息,詳細錯誤只 `console.error` 留在伺服器 log。

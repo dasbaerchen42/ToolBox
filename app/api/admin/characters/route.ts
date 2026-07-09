@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { verifyAdmin } from "@/lib/admin-auth";
 import { pickFields, CHARACTER_WRITE_FIELDS } from "@/lib/admin-fields";
+import { serverError } from "@/lib/api-error";
 
 export async function GET(request: NextRequest) {
   const isAdmin = await verifyAdmin(request);
@@ -13,7 +14,7 @@ export async function GET(request: NextRequest) {
     .select("*")
     .order("display_order");
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError("admin.characters", error);
   return NextResponse.json(data);
 }
 
@@ -30,6 +31,6 @@ export async function POST(request: NextRequest) {
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError("admin.characters", error);
   return NextResponse.json(data, { status: 201 });
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { serverError } from "@/lib/api-error";
 
 type Params = { params: Promise<{ slug: string }> };
 
@@ -22,7 +23,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
     .order("order_index");
 
   if (storiesError) {
-    return NextResponse.json({ error: storiesError.message }, { status: 500 });
+    return serverError("stories.bySlug", storiesError);
   }
 
   return NextResponse.json(Object.assign({}, character, { stories: stories ?? [] }));
