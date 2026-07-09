@@ -23,7 +23,12 @@
 
 ### P0 — 建議優先處理
 
-#### P0-1:沒有環境變數時 `npm run build` 直接失敗
+#### ✅ P0-1:沒有環境變數時 `npm run build` 直接失敗 — 已修 2026-07-09
+
+> `lib/supabase.ts` 改為延遲初始化:module 載入不建 client,以 Proxy 轉發存取,
+> 第一次實際使用才 `createClient`;缺 env 時於使用當下丟明確錯誤,不再 build 期崩潰。
+> 已實測「未設 Supabase env 的 `next build`」通過(18 頁全生成)。以下保留原描述。
+
 `lib/supabase.ts` 在 module 頂層用 non-null 斷言建立 client:
 
 ```ts
