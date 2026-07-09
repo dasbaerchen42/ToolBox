@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { verifyAdmin } from "@/lib/admin-auth";
 import { pickFields, CHARACTER_WRITE_FIELDS } from "@/lib/admin-fields";
+import { serverError } from "@/lib/api-error";
 
 type Params = { params: Promise<{ slug: string }> };
 
@@ -20,7 +21,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError("admin.characters.slug", error);
   return NextResponse.json(data);
 }
 
@@ -36,6 +37,6 @@ export async function DELETE(request: NextRequest, { params }: Params) {
     .delete()
     .eq("slug", slug);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError("admin.characters.slug", error);
   return new NextResponse(null, { status: 204 });
 }

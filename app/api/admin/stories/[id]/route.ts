@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { verifyAdmin } from "@/lib/admin-auth";
 import { pickFields, STORY_WRITE_FIELDS } from "@/lib/admin-fields";
+import { serverError } from "@/lib/api-error";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     .eq("id", id)
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 404 });
+  if (error) return NextResponse.json({ error: "找不到" }, { status: 404 });
   return NextResponse.json(data);
 }
 
@@ -37,7 +38,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError("admin.stories.id", error);
   return NextResponse.json(data);
 }
 
@@ -53,6 +54,6 @@ export async function DELETE(request: NextRequest, { params }: Params) {
     .delete()
     .eq("id", id);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return serverError("admin.stories.id", error);
   return new NextResponse(null, { status: 204 });
 }
