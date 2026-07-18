@@ -145,6 +145,14 @@ export default function FullwidthOptionsPanel({
             }
           />
 
+          <OptionRow
+            label="保留段落內的外文標點"
+            checked={options.protectLatinClauses}
+            onChange={(checked) =>
+              updateOption("protectLatinClauses", checked)
+            }
+          />
+
           <div className="flex items-center gap-3">
             <span className={`text-sm tracking-[0.04em] ${t.muted}`}>
               門檻比例
