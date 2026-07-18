@@ -18,8 +18,6 @@ export type FullwidthOptions = {
 
   enableCustomReplace: boolean;
 
-  skipNonCjkParagraphs: boolean;
-  cjkThreshold: number;
   protectLatinClauses: boolean;
 
   fixMiswrappedDialogueItalics: boolean;
@@ -48,8 +46,6 @@ export const DEFAULT_FULLWIDTH_OPTIONS: FullwidthOptions = {
 
   enableCustomReplace: false,
 
-  skipNonCjkParagraphs: false,
-  cjkThreshold: 0.35,
   protectLatinClauses: true,
 
   fixMiswrappedDialogueItalics: false,

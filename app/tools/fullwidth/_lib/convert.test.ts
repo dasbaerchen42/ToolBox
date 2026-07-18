@@ -84,14 +84,10 @@ describe("既有的數字防護", () => {
   });
 });
 
-describe("skipNonCjkParagraphs（整段跳過）", () => {
-  it("純英文段落整段跳過", () => {
+describe("純外文段落", () => {
+  it("純英文段落經子句保護後整段維持原樣", () => {
     const input = "Hello, world! How are you?\n\n你好,世界!";
-    const output = convert(input, {
-      skipNonCjkParagraphs: true,
-      protectLatinClauses: false,
-    });
-    expect(output).toBe("Hello, world! How are you?\n\n你好，世界！");
+    expect(convert(input)).toBe("Hello, world! How are you?\n\n你好，世界！");
   });
 });
 

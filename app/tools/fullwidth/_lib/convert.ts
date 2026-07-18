@@ -167,21 +167,6 @@ function convertQuotes(text: string) {
   return output;
 }
 
-function cjkRatioOf(text: string) {
-  const cjk =
-    text.match(
-      /[\u4E00-\u9FFF\u3400-\u4DBF\u3040-\u30FF\uAC00-\uD7AF]/g
-    )?.length ?? 0;
-
-  const letters =
-    text.match(/[A-Za-z\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF]/g)?.length ?? 0;
-
-  const digits = text.match(/[0-9]/g)?.length ?? 0;
-
-  const denominator = Math.max(1, cjk + letters + digits);
-  return cjk / denominator;
-}
-
 function fixDialogueOnlyItalic(text: string) {
   return text.replace(/\*「([^」]+)」\*/g, "「$1」");
 }
@@ -303,13 +288,6 @@ export function convertAll(
 
     if (/^\n\s*\n+$/.test(part)) {
       continue;
-    }
-
-    if (options.skipNonCjkParagraphs) {
-      const ratio = cjkRatioOf(part);
-      if (ratio < options.cjkThreshold) {
-        continue;
-      }
     }
 
     parts[i] = convertSegment(part, options, customRules);
