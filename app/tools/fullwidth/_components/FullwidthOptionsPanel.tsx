@@ -48,14 +48,6 @@ export default function FullwidthOptionsPanel({
     setCustomRules((prev) => [...prev, createEmptyCustomRule()]);
   }
 
-  function adjustThreshold(delta: number) {
-    const next = Math.min(
-      1,
-      Math.max(0, Number((options.cjkThreshold + delta).toFixed(2)))
-    );
-    updateOption("cjkThreshold", next);
-  }
-
   return (
     <section className="space-y-5">
       <div className="flex items-center justify-between gap-3">
@@ -138,50 +130,12 @@ export default function FullwidthOptionsPanel({
           />
 
           <OptionRow
-            label="略過非中文段落"
-            checked={options.skipNonCjkParagraphs}
+            label="保留段落內的外文標點"
+            checked={options.protectLatinClauses}
             onChange={(checked) =>
-              updateOption("skipNonCjkParagraphs", checked)
+              updateOption("protectLatinClauses", checked)
             }
           />
-
-          <div className="flex items-center gap-3">
-            <span className={`text-sm tracking-[0.04em] ${t.muted}`}>
-              門檻比例
-            </span>
-
-            <button
-              type="button"
-              onClick={() => adjustThreshold(-0.05)}
-              className={`rounded-xl border px-3 py-1 text-sm transition ${t.secondary}`}
-            >
-              －
-            </button>
-
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={options.cjkThreshold}
-              onChange={(e) =>
-                updateOption("cjkThreshold", Number(e.target.value))
-              }
-              className="w-32"
-            />
-
-            <button
-              type="button"
-              onClick={() => adjustThreshold(0.05)}
-              className={`rounded-xl border px-3 py-1 text-sm transition ${t.secondary}`}
-            >
-              ＋
-            </button>
-
-            <span className={`min-w-[3rem] text-sm tracking-[0.04em] ${t.muted}`}>
-              {options.cjkThreshold.toFixed(2)}
-            </span>
-          </div>
         </div>
 
         <div className={`border-t pt-5 ${t.divider}`}>
