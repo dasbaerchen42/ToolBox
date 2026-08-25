@@ -9,6 +9,16 @@ export const EXPORT_IMAGE_SCALE = 2;
 const DEVICE_MAX_SIDE = 8192;
 const DEVICE_MAX_AREA = 16_000_000;
 
+export type PaginateMode = "auto" | "none";
+
+/** 內容超過單張 canvas 上限時丟這個,UI 才知道要提示改用自動分頁 */
+export class ExportTooLongError extends Error {
+  constructor(readonly contentHeight: number, readonly maxHeight: number) {
+    super("內容太長,超過瀏覽器單張圖片的上限");
+    this.name = "ExportTooLongError";
+  }
+}
+
 export type ExportImageOptions = {
   /** 已經 sanitize 過的 HTML;純文字模式請先自行轉義 */
   html: string;
@@ -18,6 +28,8 @@ export type ExportImageOptions = {
   fileTitle: string;
   /** 輸出寬度(CSS px) */
   width: number;
+  /** auto: 太長就自動分頁;none: 一律單張,太長就丟 ExportTooLongError */
+  paginate: PaginateMode;
   preferences: EditorPreferences;
 };
 
@@ -100,6 +112,7 @@ export async function exportContentToImages({
   title,
   fileTitle,
   width,
+  paginate,
   preferences,
 }: ExportImageOptions): Promise<ExportedImage[]> {
   const background = readThemeColor("--paper-bg", "#ffffff");
@@ -162,7 +175,15 @@ export async function exportContentToImages({
 
     const totalHeight = content.getBoundingClientRect().height;
     const pageHeight = maxContentHeight(width, padding);
-    const ranges = computePageRanges(content, totalHeight, pageHeight);
+
+    if (paginate === "none" && totalHeight > pageHeight) {
+      throw new ExportTooLongError(Math.round(totalHeight), pageHeight);
+    }
+
+    const ranges =
+      paginate === "none"
+        ? ([[0, totalHeight]] as Array<[number, number]>)
+        : computePageRanges(content, totalHeight, pageHeight);
 
     const { default: html2canvas } = await import("html2canvas-pro");
     const images: ExportedImage[] = [];

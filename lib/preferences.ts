@@ -11,6 +11,9 @@ export type EditorViewMode = "edit" | "preview" | "split";
 /** 文轉圖的輸出寬度(CSS px,實際像素還會再乘上 EXPORT_IMAGE_SCALE) */
 export type ExportImageWidth = 600 | 800 | 1080;
 
+/** 匯出圖片的分頁方式 */
+export type ExportPaginate = "auto" | "none";
+
 export type EditorPreferences = {
   fontSize: number;
   lineHeight: number;
@@ -20,6 +23,7 @@ export type EditorPreferences = {
   viewMode: EditorViewMode;
   exportImageWidth: ExportImageWidth;
   exportImageTitle: boolean;
+  exportPaginate: ExportPaginate;
 };
 
 export const PREFERENCES_KEY = "orange-writing-preferences";
@@ -33,5 +37,6 @@ export const defaultPreferences: EditorPreferences = {
   fontFamily: "mono",
   viewMode: "edit",
   exportImageWidth: 1080,
-  exportImageTitle: true,
+  exportImageTitle: false,
+  exportPaginate: "auto",
 };

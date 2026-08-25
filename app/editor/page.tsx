@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   GoogleOAuthProvider,
   useGoogleLogin,
@@ -14,7 +14,7 @@ import EditorSettingsPanel from "@/components/editor/editor-settings-panel";
 import EditorTextarea from "@/components/editor/editor-textarea";
 import EditorPreview from "@/components/editor/editor-preview";
 import EditorViewToggle from "@/components/editor/editor-view-toggle";
-import EditorExportImage from "@/components/editor/editor-export-image";
+import EditorExportModal from "@/components/editor/editor-export-modal";
 import EditorFindReplace from "@/components/editor/editor-find-replace";
 import EditorStatusPanel from "@/components/editor/editor-status-panel";
 import { validateContent } from "@/lib/validators";
@@ -24,6 +24,13 @@ import CollapsibleSection from "@/components/editor/collapsible-section";
 import { formatDateTime24h } from "@/lib/datetime";
 import { exportDoc, importDoc, extractDocId } from "@/lib/google-docs";
 import { isRenderableMode } from "@/lib/markdown";
+import {
+  hasRichFormatting,
+  readClipboard,
+  titleFromContent,
+  type PastePayload,
+} from "@/lib/clipboard";
+import { usePagePaste } from "@/hooks/usePagePaste";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useEditorPreferences } from "@/hooks/useEditorPreferences";
 import { useEditorHistory } from "@/hooks/useEditorHistory";
@@ -50,6 +57,12 @@ function EditorPageContent() {
   } = useEditorPreferences();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [pasteHint, setPasteHint] = useState<string | null>(null);
+  // 剪貼簿裡有格式時先問要不要保留,問完才真的貼
+  const [pendingPaste, setPendingPaste] = useState<
+    { payload: PastePayload; thenExport: boolean } | null
+  >(null);
   const [findOpen, setFindOpen] = useState(false);
   const history = useEditorHistory(activeDocId);
 
@@ -97,6 +110,55 @@ function EditorPageContent() {
       setFindOpen(false);
       textareaRef.current?.focus();
     }
+  }
+
+  // 貼上一律開新文件:不會覆蓋掉正在寫的東西,所以純文字可以完全免確認
+  const applyPaste = useCallback(
+    (payload: PastePayload, keepFormat: boolean, thenExport: boolean) => {
+      const keep = keepFormat && !!payload.html;
+      const content = keep ? payload.html! : payload.text;
+      if (!content.trim()) return;
+
+      addDoc({
+        ...createNewDoc(),
+        title: titleFromContent(payload.text || content),
+        content,
+        // 純文字也給 markdown:段落、清單這些直接就能渲染
+        mode: keep ? "html" : "markdown",
+      });
+
+      setPendingPaste(null);
+      setPasteHint(null);
+      if (thenExport) setExportOpen(true);
+    },
+    [addDoc]
+  );
+
+  const handlePaste = useCallback(
+    (payload: PastePayload, thenExport = false) => {
+      if (hasRichFormatting(payload.html)) {
+        setPendingPaste({ payload, thenExport });
+        return;
+      }
+      applyPaste(payload, false, thenExport);
+    },
+    [applyPaste]
+  );
+
+  // 游標不在輸入框裡時按 ⌘V / Ctrl+V 就直接貼進來
+  const onPagePaste = useCallback(
+    (payload: PastePayload) => handlePaste(payload),
+    [handlePaste]
+  );
+  usePagePaste(onPagePaste);
+
+  async function pasteFromClipboard(thenExport: boolean) {
+    const payload = await readClipboard();
+    if (!payload) {
+      setPasteHint("讀不到剪貼簿（瀏覽器可能擋住了），直接按 ⌘V / Ctrl+V 貼上就好。");
+      return;
+    }
+    handlePaste(payload, thenExport);
   }
 
   const exportToGoogleDocs = useGoogleLogin({
@@ -305,14 +367,30 @@ function EditorPageContent() {
                     </span>
                   )}
 
-                  <EditorExportImage
-                    title={activeDoc.title}
-                    content={activeDoc.content}
-                    mode={activeDoc.mode}
-                    preferences={preferences}
-                    setPreferences={setPreferences}
-                    theme={theme}
-                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => pasteFromClipboard(false)}
+                      className={`rounded-2xl border px-3 py-1.5 text-sm tracking-[0.04em] transition ${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}
+                      title="也可以直接按 ⌘V / Ctrl+V"
+                    >
+                      貼上
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => pasteFromClipboard(true)}
+                      className={`rounded-2xl border px-3 py-1.5 text-sm tracking-[0.04em] transition ${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}
+                    >
+                      貼上並轉圖
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExportOpen(true)}
+                      className={`rounded-2xl border px-4 py-1.5 text-sm tracking-[0.04em] transition ${theme.border} ${theme.primaryButton} ${theme.primaryButtonText}`}
+                    >
+                      轉圖
+                    </button>
+                  </div>
                 </div>
 
                 <div
@@ -341,6 +419,12 @@ function EditorPageContent() {
                 </div>
               </div>
 
+              {pasteHint && (
+                <p className={`mx-auto mt-2 text-xs ${areaWidthClass} ${theme.subtleText}`}>
+                  {pasteHint}
+                </p>
+              )}
+
               <CollapsibleSection title="Hint" defaultOpen={true} theme={theme}>
                 <EditorStatusPanel result={validationResult} theme={theme} />
               </CollapsibleSection>
@@ -348,6 +432,65 @@ function EditorPageContent() {
           ) : (
             <div className={`flex h-full items-center justify-center ${theme.mutedText}`}>
               尚未選擇文件
+            </div>
+          )}
+
+          {activeDoc && (
+            <EditorExportModal
+              open={exportOpen}
+              onClose={() => setExportOpen(false)}
+              title={activeDoc.title}
+              content={activeDoc.content}
+              mode={activeDoc.mode}
+              preferences={preferences}
+              setPreferences={setPreferences}
+              theme={theme}
+            />
+          )}
+
+          {pendingPaste && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-label="貼上格式"
+            >
+              <div
+                className={`w-full max-w-sm rounded-3xl border p-5 shadow-lg ${theme.border} ${theme.panelBg} ${theme.text}`}
+              >
+                <b className="tracking-[0.06em]">要保留原本的格式嗎？</b>
+                <p className={`mt-2 text-sm ${theme.mutedText}`}>
+                  剪貼簿裡有帶排版的版本（粗體、清單、標題那些）。保留格式會用 HTML
+                  模式貼進來，純文字則只留下文字。
+                </p>
+                <div className="mt-4 flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPendingPaste(null)}
+                    className={`rounded-2xl border px-4 py-2 text-sm ${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      applyPaste(pendingPaste.payload, false, pendingPaste.thenExport)
+                    }
+                    className={`rounded-2xl border px-4 py-2 text-sm ${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}
+                  >
+                    純文字
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      applyPaste(pendingPaste.payload, true, pendingPaste.thenExport)
+                    }
+                    className={`rounded-2xl border px-4 py-2 text-sm ${theme.border} ${theme.primaryButton} ${theme.primaryButtonText}`}
+                  >
+                    保留格式
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </section>
