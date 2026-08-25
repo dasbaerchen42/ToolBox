@@ -1,5 +1,6 @@
 import { forwardRef } from "react";
 import { EditorPreferences } from "@/lib/preferences";
+import { getFontFamily } from "@/lib/editor-font";
 
 type EditorTextareaProps = {
   content: string;
@@ -10,29 +11,13 @@ type EditorTextareaProps = {
     textareaBg: string;
     text: string;
   };
-  widthClass: string;
+  className?: string;
 };
 
-function getFontFamily(fontFamily: EditorPreferences["fontFamily"]) {
-  switch (fontFamily) {
-    case "serif":
-      return 'Georgia, "Times New Roman", serif';
-    case "mono":
-      return '"SFMono-Regular", "Cascadia Mono", "Fira Code", "Consolas", monospace';
-    case "cursive":
-      return '"Segoe Script", "Brush Script MT", cursive';
-    case "round":
-      return "var(--font-round)";
-    case "sans":
-    default:
-      return '"Noto Sans TC", "Microsoft JhengHei", Arial, sans-serif';
-  }
-}
-
 const EditorTextarea = forwardRef<HTMLTextAreaElement, EditorTextareaProps>(
-  function EditorTextarea({ content, onChange, preferences, theme, widthClass }, ref) {
+  function EditorTextarea({ content, onChange, preferences, theme, className = "" }, ref) {
     return (
-      <div className={`mx-auto w-full flex-1 ${widthClass}`}>
+      <div className={`w-full ${className}`}>
         <div
           className={`rounded-3xl border p-4 shadow-sm ${theme.border} ${theme.textareaBg}`}
         >
