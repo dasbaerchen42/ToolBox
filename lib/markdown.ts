@@ -50,3 +50,25 @@ export function toPlainHtml(content: string): string {
     .replace(/>/g, "&gt;");
   return `<pre class="md-preview-plain">${escaped}</pre>`;
 }
+
+/**
+ * 把渲染後的 HTML 拆成一個個頂層區塊(段落、清單、表格……),
+ * 讓使用者可以只挑其中幾段轉圖。裸露的文字節點會被包成 <p>。
+ */
+export function splitBlocks(html: string): string[] {
+  if (typeof window === "undefined") return html ? [html] : [];
+
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const blocks: string[] = [];
+
+  for (const node of Array.from(doc.body.childNodes)) {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      blocks.push((node as Element).outerHTML);
+      continue;
+    }
+    const text = node.textContent ?? "";
+    if (text.trim()) blocks.push(`<p>${text}</p>`);
+  }
+
+  return blocks;
+}
