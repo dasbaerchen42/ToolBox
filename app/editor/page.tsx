@@ -12,6 +12,9 @@ import EditorSidebar from "@/components/editor/editor-sidebar";
 import EditorToolbar from "@/components/editor/editor-toolbar";
 import EditorSettingsPanel from "@/components/editor/editor-settings-panel";
 import EditorTextarea from "@/components/editor/editor-textarea";
+import EditorPreview from "@/components/editor/editor-preview";
+import EditorViewToggle from "@/components/editor/editor-view-toggle";
+import EditorExportImage from "@/components/editor/editor-export-image";
 import EditorFindReplace from "@/components/editor/editor-find-replace";
 import EditorStatusPanel from "@/components/editor/editor-status-panel";
 import { validateContent } from "@/lib/validators";
@@ -20,6 +23,7 @@ import { getEditorStats } from "@/lib/editor-stats";
 import CollapsibleSection from "@/components/editor/collapsible-section";
 import { formatDateTime24h } from "@/lib/datetime";
 import { exportDoc, importDoc, extractDocId } from "@/lib/google-docs";
+import { isRenderableMode } from "@/lib/markdown";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useEditorPreferences } from "@/hooks/useEditorPreferences";
 import { useEditorHistory } from "@/hooks/useEditorHistory";
@@ -181,6 +185,16 @@ function EditorPageContent() {
     [activeDoc]
   );
 
+  // 只有 Markdown / HTML 有東西可以渲染,其他模式一律停在純文字
+  const previewMode =
+    activeDoc && isRenderableMode(activeDoc.mode) ? activeDoc.mode : null;
+  const renderable = previewMode !== null;
+  const viewMode = renderable ? preferences.viewMode : "edit";
+  const showEditor = viewMode !== "preview";
+  const showPreview = viewMode !== "edit";
+  const areaWidthClass =
+    viewMode === "split" ? "max-w-6xl" : getEditorWidthClass();
+
   const editorStats = useMemo(
     () => getEditorStats(activeDoc?.content ?? ""),
     [activeDoc?.content]
@@ -260,7 +274,7 @@ function EditorPageContent() {
                 onKeyDown={handleEditorKeyDown}
                 className="flex min-h-0 flex-1 flex-col"
               >
-                <div className={`mx-auto w-full ${getEditorWidthClass()}`}>
+                <div className={`mx-auto w-full ${areaWidthClass}`}>
                   <EditorFindReplace
                     content={activeDoc.content}
                     textareaRef={textareaRef}
@@ -274,14 +288,57 @@ function EditorPageContent() {
                     theme={theme}
                   />
                 </div>
-                <EditorTextarea
-                  ref={textareaRef}
-                  content={activeDoc.content}
-                  onChange={handleContentChange}
-                  preferences={preferences}
-                  theme={theme}
-                  widthClass={getEditorWidthClass()}
-                />
+                <div
+                  className={`mx-auto mb-3 flex w-full flex-wrap items-center justify-between gap-3 ${areaWidthClass}`}
+                >
+                  {renderable ? (
+                    <EditorViewToggle
+                      viewMode={viewMode}
+                      onChange={(next) =>
+                        setPreferences((prev) => ({ ...prev, viewMode: next }))
+                      }
+                      theme={theme}
+                    />
+                  ) : (
+                    <span className={`text-xs ${theme.subtleText}`}>
+                      切到 Markdown 或 HTML 模式就能看渲染結果
+                    </span>
+                  )}
+
+                  <EditorExportImage
+                    title={activeDoc.title}
+                    content={activeDoc.content}
+                    mode={activeDoc.mode}
+                    preferences={preferences}
+                    setPreferences={setPreferences}
+                    theme={theme}
+                  />
+                </div>
+
+                <div
+                  className={`mx-auto flex w-full flex-1 flex-col gap-4 md:flex-row ${areaWidthClass}`}
+                >
+                  {showEditor && (
+                    <EditorTextarea
+                      ref={textareaRef}
+                      content={activeDoc.content}
+                      onChange={handleContentChange}
+                      preferences={preferences}
+                      theme={theme}
+                      className="flex-1"
+                    />
+                  )}
+
+                  {showPreview && previewMode && (
+                    <EditorPreview
+                      content={activeDoc.content}
+                      mode={previewMode}
+                      preferences={preferences}
+                      theme={theme}
+                      className="flex-1"
+                    />
+                  )}
+                </div>
               </div>
 
               <CollapsibleSection title="Hint" defaultOpen={true} theme={theme}>

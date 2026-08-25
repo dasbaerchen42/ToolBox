@@ -5,12 +5,21 @@ export type FontFamilyName =
   | "cursive"
   | "round";
 
+/** 編輯區的呈現方式：純文字、渲染結果、左右並排 */
+export type EditorViewMode = "edit" | "preview" | "split";
+
+/** 文轉圖的輸出寬度(CSS px,實際像素還會再乘上 EXPORT_IMAGE_SCALE) */
+export type ExportImageWidth = 600 | 800 | 1080;
+
 export type EditorPreferences = {
   fontSize: number;
   lineHeight: number;
   letterSpacing: number;
   editorWidth: "narrow" | "medium" | "wide";
   fontFamily: FontFamilyName;
+  viewMode: EditorViewMode;
+  exportImageWidth: ExportImageWidth;
+  exportImageTitle: boolean;
 };
 
 export const PREFERENCES_KEY = "orange-writing-preferences";
@@ -22,4 +31,7 @@ export const defaultPreferences: EditorPreferences = {
   letterSpacing: 0,
   editorWidth: "medium",
   fontFamily: "mono",
+  viewMode: "edit",
+  exportImageWidth: 1080,
+  exportImageTitle: true,
 };
