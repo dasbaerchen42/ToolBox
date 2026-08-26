@@ -5,17 +5,29 @@ import { type EditorPreferences } from "@/lib/preferences";
 export const EXPORT_IMAGE_SCALE = 2;
 
 // 瀏覽器對單張 canvas 有上限,iOS Safari 最嚴(總面積約 16.7M 裝置像素),
-// 超過會直接吐出空白圖。抓保守一點,超過就自動分頁成多張。
+// 超過會直接吐出空白圖。抓保守一點,超過就分頁。
 const DEVICE_MAX_SIDE = 8192;
 const DEVICE_MAX_AREA = 16_000_000;
 
-export type PaginateMode = "auto" | "none";
+export type PaginateMode = "auto" | "manual" | "none";
 
-/** 內容超過單張 canvas 上限時丟這個,UI 才知道要提示改用自動分頁 */
+/** 「一律單張」但內容放不下時丟這個,UI 才知道要提示改用分頁 */
 export class ExportTooLongError extends Error {
   constructor(readonly contentHeight: number, readonly maxHeight: number) {
     super("內容太長,超過瀏覽器單張圖片的上限");
     this.name = "ExportTooLongError";
+  }
+}
+
+/** 手動分頁時某一張自己就超過上限,要使用者再切一刀 */
+export class ExportPageTooLongError extends Error {
+  constructor(
+    readonly pageIndex: number,
+    readonly pageHeight: number,
+    readonly maxHeight: number
+  ) {
+    super("某一張太長");
+    this.name = "ExportPageTooLongError";
   }
 }
 
@@ -28,8 +40,10 @@ export type ExportImageOptions = {
   fileTitle: string;
   /** 輸出寬度(CSS px) */
   width: number;
-  /** auto: 太長就自動分頁;none: 一律單張,太長就丟 ExportTooLongError */
+  /** auto: 太長就自動分頁;manual: 只在 cuts 指定的地方切;none: 一律單張 */
   paginate: PaginateMode;
+  /** 手動分頁時,要在第幾個區塊之後切開(含標題時標題算第 0 個) */
+  cuts?: Set<number>;
   preferences: EditorPreferences;
 };
 
@@ -64,40 +78,61 @@ function maxContentHeight(width: number, padding: number): number {
 }
 
 /**
- * 盡量在區塊元素之間換頁,避免把一行字從中間切開。
- * 單一元素本身就超過一頁時只能硬切。
+ * 分頁的最小單位就是一個頂層區塊(段落、清單、表格……),
+ * 所以換頁點永遠落在區塊之間,不會從一行字中間切開。
  */
-function computePageRanges(
-  content: HTMLElement,
-  totalHeight: number,
-  pageHeight: number
-): Array<[number, number]> {
-  if (totalHeight <= pageHeight) return [[0, totalHeight]];
+type Unit = { el: HTMLElement; index: number; height: number };
 
-  const contentTop = content.getBoundingClientRect().top;
-  const ranges: Array<[number, number]> = [];
-  let start = 0;
+function collectUnits(content: HTMLElement): Unit[] {
+  const els = Array.from(content.children) as HTMLElement[];
+  if (els.length === 0) return [];
 
-  for (const child of Array.from(content.children)) {
-    const rect = child.getBoundingClientRect();
-    const top = rect.top - contentTop;
-    const bottom = rect.bottom - contentTop;
+  const contentRect = content.getBoundingClientRect();
+  const tops = els.map((el) => el.getBoundingClientRect().top - contentRect.top);
 
-    if (bottom - start <= pageHeight) continue;
+  return els.map((el, i) => ({
+    el,
+    index: i,
+    // 用下一個單元的起點當這個單元的終點,中間的間距才不會被算丟
+    height: (i + 1 < tops.length ? tops[i + 1] : contentRect.height) - tops[i],
+  }));
+}
 
-    if (top > start) {
-      ranges.push([start, top]);
-      start = top;
+/** 自動分頁:照順序塞,塞不下就換一張 */
+function packUnits(units: Unit[], pageHeight: number): Unit[][] {
+  const pages: Unit[][] = [];
+  let current: Unit[] = [];
+  let used = 0;
+
+  for (const unit of units) {
+    if (current.length > 0 && used + unit.height > pageHeight) {
+      pages.push(current);
+      current = [];
+      used = 0;
     }
+    current.push(unit);
+    used += unit.height;
+  }
 
-    while (bottom - start > pageHeight) {
-      ranges.push([start, start + pageHeight]);
-      start += pageHeight;
+  if (current.length > 0) pages.push(current);
+  return pages;
+}
+
+/** 手動分頁:在使用者點過的區塊之後切開 */
+function splitUnitsAt(units: Unit[], cuts: Set<number>): Unit[][] {
+  const pages: Unit[][] = [];
+  let current: Unit[] = [];
+
+  for (const unit of units) {
+    current.push(unit);
+    if (cuts.has(unit.index)) {
+      pages.push(current);
+      current = [];
     }
   }
 
-  if (start < totalHeight) ranges.push([start, totalHeight]);
-  return ranges;
+  if (current.length > 0) pages.push(current);
+  return pages;
 }
 
 /**
@@ -106,6 +141,9 @@ function computePageRanges(
  * 刻意不截畫面上那塊預覽區:預覽會跟著視窗寬度變,手機永遠截不出 1080 寬的圖。
  * 這裡另外在畫面外組一個固定寬度的節點來截,輸出結果跟裝置無關。
  * 顏色一律讀當下主題的 CSS 變數,所以深色主題匯出就是深底淺字。
+ *
+ * 每一張是把不屬於這張的區塊 display:none 之後整塊截圖,而不是把長圖裁開,
+ * 所以邊界永遠是完整的區塊。
  */
 export async function exportContentToImages({
   html,
@@ -113,6 +151,7 @@ export async function exportContentToImages({
   fileTitle,
   width,
   paginate,
+  cuts,
   preferences,
 }: ExportImageOptions): Promise<ExportedImage[]> {
   const background = readThemeColor("--paper-bg", "#ffffff");
@@ -142,7 +181,7 @@ export async function exportContentToImages({
     `letter-spacing: ${preferences.letterSpacing}px`,
   ].join("; ");
 
-  // 裁切視窗:每頁把內容往上位移,只露出這一頁的範圍
+  // 裁切視窗:單一區塊本身就超過一頁時,只能在它內部硬切
   const viewport = document.createElement("div");
   viewport.style.cssText = "overflow: hidden; position: relative";
 
@@ -152,8 +191,8 @@ export async function exportContentToImages({
   content.className = "md-preview";
   content.style.position = "relative";
 
-  // 標題與內文都直接放在 content 底下:分頁是照 content 的直接子元素找換頁點,
-  // 中間多包一層 div 的話就只剩下一個巨大的子元素可以切,會從行中間切斷。
+  // 標題與內文都直接放在 content 底下:分頁是照 content 的直接子元素切,
+  // 中間多包一層 div 的話就只剩下一個巨大的子元素可以切。
   if (title) {
     const heading = document.createElement("div");
     heading.className = "md-preview-title";
@@ -169,46 +208,82 @@ export async function exportContentToImages({
   stage.appendChild(page);
   document.body.appendChild(stage);
 
+  const capture = async (start: number, height: number) => {
+    viewport.style.height = `${height}px`;
+    shift.style.transform = `translateY(${-start}px)`;
+    const { default: html2canvas } = await import("html2canvas-pro");
+    return html2canvas(page, {
+      scale: EXPORT_IMAGE_SCALE,
+      backgroundColor: background,
+      useCORS: true,
+      logging: false,
+      width,
+      height: height + padding * 2,
+    });
+  };
+
   try {
     // 不等字型載完就截圖,粉圓體會掉回系統字
     if (document.fonts?.ready) await document.fonts.ready;
 
+    const maxHeight = maxContentHeight(width, padding);
+    const units = collectUnits(content);
     const totalHeight = content.getBoundingClientRect().height;
-    const pageHeight = maxContentHeight(width, padding);
 
-    if (paginate === "none" && totalHeight > pageHeight) {
-      throw new ExportTooLongError(Math.round(totalHeight), pageHeight);
+    if (paginate === "none" && totalHeight > maxHeight) {
+      throw new ExportTooLongError(Math.round(totalHeight), maxHeight);
     }
 
-    const ranges =
-      paginate === "none"
-        ? ([[0, totalHeight]] as Array<[number, number]>)
-        : computePageRanges(content, totalHeight, pageHeight);
+    let pages: Unit[][];
+    if (paginate === "none" || units.length === 0) {
+      pages = units.length > 0 ? [units] : [];
+    } else if (paginate === "manual") {
+      pages = splitUnitsAt(units, cuts ?? new Set<number>());
+    } else {
+      pages = packUnits(units, maxHeight);
+    }
 
-    const { default: html2canvas } = await import("html2canvas-pro");
+    if (pages.length === 0) {
+      const canvas = await capture(0, totalHeight);
+      return [{ name: `${sanitizeFileName(fileTitle)}.png`, blob: await toBlob(canvas) }];
+    }
+
     const images: ExportedImage[] = [];
+    const allUnits = units.map((unit) => unit.el);
 
-    for (const [index, [start, end]] of ranges.entries()) {
-      viewport.style.height = `${end - start}px`;
-      shift.style.transform = `translateY(${-start}px)`;
+    for (const [index, pageUnits] of pages.entries()) {
+      // 只留這一頁的區塊,其餘 display:none。被藏起來的完全不佔空間,
+      // 所以每一張的高度就是它自己內容的高度。
+      const keep = new Set(pageUnits.map((unit) => unit.el));
+      for (const el of allUnits) el.style.display = keep.has(el) ? "" : "none";
 
-      const canvas = await html2canvas(page, {
-        scale: EXPORT_IMAGE_SCALE,
-        backgroundColor: background,
-        useCORS: true,
-        logging: false,
-        width,
-        height: end - start + padding * 2,
-      });
+      const height = content.getBoundingClientRect().height;
 
-      const suffix = ranges.length > 1 ? `-${String(index + 1).padStart(2, "0")}` : "";
-      images.push({
-        name: `${sanitizeFileName(fileTitle)}${suffix}.png`,
-        blob: await toBlob(canvas),
-      });
+      if (height > maxHeight) {
+        // 手動分頁時使用者切得不夠細,直接說是第幾張太長
+        if (paginate === "manual") {
+          throw new ExportPageTooLongError(index + 1, Math.round(height), maxHeight);
+        }
+        // 自動分頁遇到「單一區塊自己就超過一頁」,只能在區塊內硬切
+        for (let offset = 0; offset < height; offset += maxHeight) {
+          const slice = Math.min(maxHeight, height - offset);
+          const canvas = await capture(offset, slice);
+          images.push({ name: "", blob: await toBlob(canvas) });
+        }
+        continue;
+      }
+
+      const canvas = await capture(0, height);
+      images.push({ name: "", blob: await toBlob(canvas) });
     }
 
-    return images;
+    // 檔名等全部產生完才編號,中途硬切多出來的張數才數得對
+    return images.map((image, index) => ({
+      ...image,
+      name: `${sanitizeFileName(fileTitle)}${
+        images.length > 1 ? `-${String(index + 1).padStart(2, "0")}` : ""
+      }.png`,
+    }));
   } finally {
     stage.remove();
   }

@@ -21,6 +21,7 @@ import {
 import {
   downloadBlob,
   exportContentToImages,
+  ExportPageTooLongError,
   ExportTooLongError,
   zipImages,
   type ExportedImage,
@@ -45,6 +46,7 @@ const WIDTH_OPTIONS: { value: ExportImageWidth; label: string }[] = [
 
 const PAGINATE_OPTIONS: { value: ExportPaginate; label: string }[] = [
   { value: "auto", label: "太長自動分頁" },
+  { value: "manual", label: "手動分頁" },
   { value: "none", label: "一律單張" },
 ];
 
@@ -60,6 +62,7 @@ export default function EditorExportModal({
 }: EditorExportModalProps) {
   const [blocks, setBlocks] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [cuts, setCuts] = useState<Set<number>>(new Set());
   const [images, setImages] = useState<ExportedImage[] | null>(null);
   const [pickedPages, setPickedPages] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -91,6 +94,7 @@ export default function EditorExportModal({
       const next = splitBlocks(html);
       setBlocks(next);
       setSelected(new Set(next.map((_, i) => i)));
+      setCuts(new Set());
       anchorRef.current = null;
     })().catch((error: unknown) => {
       console.error("渲染失敗：", error);
@@ -113,13 +117,31 @@ export default function EditorExportModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  const selectedHtml = useMemo(
-    () =>
-      blocks
-        .map((block, index) => (selected.has(index) ? block : ""))
-        .join(""),
+  const selectedIndexes = useMemo(
+    () => blocks.map((_, index) => index).filter((index) => selected.has(index)),
     [blocks, selected]
   );
+
+  const selectedHtml = useMemo(
+    () => selectedIndexes.map((index) => blocks[index]).join(""),
+    [blocks, selectedIndexes]
+  );
+
+  // 畫面上的分頁點是「第幾個區塊」,匯出時的內容只有選取的區塊(而且含標題時
+  // 標題會排在最前面),所以要換算成匯出內容裡的位置。最後一段之後切沒有意義。
+  const exportCuts = useMemo(() => {
+    const offset = preferences.exportImageTitle && title ? 1 : 0;
+    const mapped = new Set<number>();
+    selectedIndexes.forEach((blockIndex, position) => {
+      if (cuts.has(blockIndex) && position < selectedIndexes.length - 1) {
+        mapped.add(position + offset);
+      }
+    });
+    return mapped;
+  }, [cuts, selectedIndexes, preferences.exportImageTitle, title]);
+
+  const pageCount = exportCuts.size + 1;
+  const isManual = preferences.exportPaginate === "manual";
 
   function toggleBlock(index: number, shiftKey: boolean) {
     dropImages();
@@ -141,11 +163,31 @@ export default function EditorExportModal({
       anchorRef.current = index;
       return next;
     });
+    setCuts((prev) => {
+      if (!prev.has(index)) return prev;
+      const next = new Set(prev);
+      next.delete(index);
+      return next;
+    });
+  }
+
+  // 手動分頁:點區塊本身 = 在它後面切一刀(勾選框仍然是選取/不選取)
+  function toggleCut(index: number) {
+    if (preferences.exportPaginate !== "manual") return;
+    if (!selected.has(index)) return;
+    dropImages();
+    setCuts((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
   }
 
   function setAll(on: boolean) {
     dropImages();
     setSelected(on ? new Set(blocks.map((_, i) => i)) : new Set());
+    if (!on) setCuts(new Set());
   }
 
   function updatePreference(patch: Partial<EditorPreferences>) {
@@ -170,6 +212,7 @@ export default function EditorExportModal({
         fileTitle: title,
         width: preferences.exportImageWidth,
         paginate: preferences.exportPaginate,
+        cuts: exportCuts,
         preferences,
       });
 
@@ -181,9 +224,11 @@ export default function EditorExportModal({
       console.error("轉圖失敗：", error);
       setImages(null);
       setStatus(
-        error instanceof ExportTooLongError
-          ? `內容約 ${error.contentHeight} px，超過單張上限 ${error.maxHeight} px。改用「太長自動分頁」，或少選幾段。`
-          : "轉圖失敗，請按 F12 查看 Console 錯誤。"
+        error instanceof ExportPageTooLongError
+          ? `第 ${error.pageIndex} 張約 ${error.pageHeight} px，超過單張上限 ${error.maxHeight} px，請在那一張中間再切一刀。`
+          : error instanceof ExportTooLongError
+            ? `內容約 ${error.contentHeight} px，超過單張上限 ${error.maxHeight} px。改用分頁，或少選幾段。`
+            : "轉圖失敗，請按 F12 查看 Console 錯誤。"
       );
     } finally {
       setBusy(false);
@@ -302,30 +347,71 @@ export default function EditorExportModal({
           </button>
         </div>
 
+        {isManual && (
+          <div className={`mb-2 flex flex-wrap items-center gap-2 text-xs ${theme.mutedText}`}>
+            <span>
+              點一下段落 = 在它後面切一刀（再點一次取消）。目前切成{" "}
+              <b className={theme.text}>{pageCount}</b> 張。
+            </span>
+            {cuts.size > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  dropImages();
+                  setCuts(new Set());
+                }}
+                className={`rounded-2xl border px-3 py-1 ${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}
+              >
+                清除分頁點
+              </button>
+            )}
+          </div>
+        )}
+
         <div className={`min-h-0 flex-1 overflow-auto rounded-2xl border p-3 ${theme.border} ${theme.cardBg}`}>
           {blocks.length === 0 ? (
             <p className={`text-sm ${theme.mutedText}`}>沒有內容可以轉圖。</p>
           ) : (
             <div className="md-preview">
               {blocks.map((block, index) => (
-                <div
-                  key={index}
-                  className={`flex gap-2 rounded-2xl px-2 py-1 transition ${
-                    selected.has(index) ? "" : "opacity-35"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    className="mt-2 shrink-0 self-start"
-                    checked={selected.has(index)}
-                    onChange={() => undefined}
-                    onClick={(e) => toggleBlock(index, e.shiftKey)}
-                    aria-label={`第 ${index + 1} 段`}
-                  />
+                <div key={index}>
                   <div
-                    className="min-w-0 flex-1"
-                    dangerouslySetInnerHTML={{ __html: block }}
-                  />
+                    className={`flex gap-2 rounded-2xl px-2 py-1 transition ${
+                      selected.has(index) ? "" : "opacity-35"
+                    } ${isManual && selected.has(index) ? "cursor-pointer hover:bg-black/10" : ""}`}
+                    onClick={() => toggleCut(index)}
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-2 shrink-0 self-start"
+                      checked={selected.has(index)}
+                      onChange={() => undefined}
+                      onClick={(e) => {
+                        e.stopPropagation(); // 勾選框只管選不選,不要順便切一刀
+                        toggleBlock(index, e.shiftKey);
+                      }}
+                      aria-label={`第 ${index + 1} 段`}
+                    />
+                    <div
+                      className="min-w-0 flex-1"
+                      dangerouslySetInnerHTML={{ __html: block }}
+                    />
+                  </div>
+
+                  {isManual && cuts.has(index) && selected.has(index) && (
+                    <div className="my-1 flex items-center gap-2 px-2">
+                      <span
+                        className="h-0 flex-1 border-t-2 border-dashed"
+                        style={{ borderColor: "var(--accent)" }}
+                      />
+                      <span
+                        className="rounded-xl px-2 py-0.5 text-[10px] leading-none"
+                        style={{ background: "var(--accent)", color: "var(--on-accent)" }}
+                      >
+                        ✂ 這裡分頁
+                      </span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
