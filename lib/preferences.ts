@@ -12,7 +12,7 @@ export type EditorViewMode = "edit" | "preview" | "split";
 export type ExportImageWidth = 600 | 800 | 1080;
 
 /** 匯出圖片的分頁方式 */
-export type ExportPaginate = "auto" | "none";
+export type ExportPaginate = "auto" | "manual" | "none";
 
 export type EditorPreferences = {
   fontSize: number;
