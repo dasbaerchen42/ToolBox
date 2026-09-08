@@ -5,7 +5,6 @@ import { notFound } from "next/navigation";
 import { useEffect, useState, use } from "react";
 import ToolHeader from "@/components/editor/ToolHeader";
 import { getThemeClasses } from "@/lib/theme";
-import { getCharacter } from "@/lib/stories";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -37,29 +36,8 @@ export default function CharacterStoriesPage({ params }: Props) {
   const { slug } = use(params);
   const t = getThemeClasses();
 
-  const hardcodedChar = getCharacter(slug);
-
-  const [char, setChar] = useState<CharacterData | null>(
-    hardcodedChar
-      ? {
-          slug: hardcodedChar.slug,
-          name: hardcodedChar.name,
-          job: hardcodedChar.job,
-          age: hardcodedChar.age,
-          tagline: hardcodedChar.tagline,
-          chatLink: hardcodedChar.chatLink,
-          chatLinkAlt: hardcodedChar.chatLinkAlt,
-          stories: hardcodedChar.stories.map((s) => ({
-            id: s.id,
-            title: s.title,
-            type: s.type,
-            order: s.order,
-            excerpt: s.excerpt,
-          })),
-        }
-      : null
-  );
-  const [loading, setLoading] = useState(!hardcodedChar);
+  const [char, setChar] = useState<CharacterData | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch(`/api/stories/${slug}`)

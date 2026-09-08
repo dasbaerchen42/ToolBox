@@ -3,8 +3,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getThemeClasses } from "@/lib/theme";
-import { getCharacter } from "@/lib/stories";
-import { storyContents } from "@/lib/storyContents";
 import { useState, use, useEffect } from "react";
 
 interface Props {
@@ -23,19 +21,13 @@ export default function StoryPage({ params }: Props) {
   const { slug, storyId } = use(params);
   const t = getThemeClasses();
 
-  const hardcodedChar = getCharacter(slug);
-  const hardcodedStory = hardcodedChar?.stories.find((s) => s.id === storyId);
-  const hardcodedContent = storyContents[`${slug}/${storyId}`] ?? null;
-
-  const [storyTitle, setStoryTitle] = useState(hardcodedStory?.title ?? "");
-  const [storyType, setStoryType] = useState<"main" | "extra">(hardcodedStory?.type ?? "main");
-  const [content, setContent] = useState<string | null>(hardcodedContent);
-  const [charName, setCharName] = useState(hardcodedChar?.name ?? "");
-  const [chatLink, setChatLink] = useState<string | null>(hardcodedChar?.chatLink ?? null);
-  const [allStories, setAllStories] = useState<StoryItem[]>(
-    hardcodedChar?.stories.map((s) => ({ id: s.id, title: s.title, type: s.type, order: s.order })) ?? []
-  );
-  const [loading, setLoading] = useState(!hardcodedStory);
+  const [storyTitle, setStoryTitle] = useState("");
+  const [storyType, setStoryType] = useState<"main" | "extra">("main");
+  const [content, setContent] = useState<string | null>(null);
+  const [charName, setCharName] = useState("");
+  const [chatLink, setChatLink] = useState<string | null>(null);
+  const [allStories, setAllStories] = useState<StoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [notFoundState, setNotFoundState] = useState(false);
 
   useEffect(() => {
@@ -53,13 +45,11 @@ export default function StoryPage({ params }: Props) {
           setStoryTitle(data.title);
           setStoryType(data.type);
           setContent(data.content || null);
-        } else if (!hardcodedStory) {
+        } else {
           setNotFoundState(true);
         }
       })
-      .catch(() => {
-        if (!hardcodedStory) setNotFoundState(true);
-      })
+      .catch(() => setNotFoundState(true))
       .finally(tryDone);
 
     // 取角色資料（含故事列表）
@@ -80,7 +70,7 @@ export default function StoryPage({ params }: Props) {
       })
       .catch(() => {})
       .finally(tryDone);
-  }, [slug, storyId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [slug, storyId]);
 
   if (loading) {
     return (
