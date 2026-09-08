@@ -44,7 +44,7 @@ export default function SiteNavigation() {
         <div className="ml-auto flex items-center gap-3">
           <div className="hidden items-center text-[11px] tracking-[0.08em] text-(--ink-tertiary) opacity-50 transition-opacity duration-500 hover:opacity-100 md:flex">
             <a
-              href="https://dasbaerchen.vercel.app"
+              href="https://elsewhere.zeabur.app/"
               target="_blank"
               rel="noopener noreferrer"
             >
