@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import ToolHeader from "@/components/editor/ToolHeader";
 import { getThemeClasses } from "@/lib/theme";
-import { characters as fallbackCharacters } from "@/lib/stories";
 
 type CharacterCard = {
   slug: string;
@@ -17,29 +16,20 @@ type CharacterCard = {
 };
 
 export default function StoriesPage() {
-  const [characters, setCharacters] = useState<CharacterCard[]>(
-    fallbackCharacters.map((c) => ({
-      slug: c.slug,
-      name: c.name,
-      job: c.job,
-      age: c.age,
-      tagline: c.tagline,
-      comingSoon: c.comingSoon,
-    }))
-  );
+  const [characters, setCharacters] = useState<CharacterCard[]>([]);
+  const [loading, setLoading] = useState(true);
   const t = getThemeClasses();
 
   useEffect(() => {
     fetch("/api/characters")
-      .then((res) => res.ok ? res.json() : null)
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setCharacters(data);
-        }
+        if (Array.isArray(data)) setCharacters(data);
       })
       .catch(() => {
-        // Supabase 未設定時靜默 fallback 到硬編碼資料
-      });
+        // Supabase 未設定時顯示空狀態，不再退回硬編碼資料
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -51,6 +41,13 @@ export default function StoriesPage() {
           t={t}
         />
 
+        {loading ? (
+          <p className={`text-sm opacity-40 ${t.muted}`}>載入中…</p>
+        ) : characters.length === 0 ? (
+          <p className={`text-sm opacity-40 ${t.muted}`}>
+            尚未設定角色資料。
+          </p>
+        ) : (
         <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
           {characters.map((char) => (
             <Link
@@ -95,6 +92,7 @@ export default function StoriesPage() {
             </Link>
           ))}
         </div>
+        )}
       </div>
 
       <footer className="mt-20 pb-8 text-center px-4">

@@ -11,7 +11,7 @@
 | 面向 | 狀態 |
 |---|---|
 | 框架 | Next.js 16.2.1(App Router + Turbopack)、React 19、TypeScript、Tailwind v4 |
-| 功能 | 寫作編輯器、全形轉換、切刀、社群排版、故事站(Supabase)、後台管理、抽籤 |
+| 功能 | 寫作編輯器、全形轉換、切刀、社群排版、故事站(Supabase)、後台管理 |
 | 主題系統 | 已完成全站 CSS 變數主題引擎(theme-core + 七款 preset + 自訂/隨機) |
 | 測試 | Jest,僅 2 個測試檔(`lib/tools/knife.test.ts`、`lib/validators.test.ts`),51 tests |
 | CI | **無**(沒有 `.github/workflows`) |
@@ -104,12 +104,12 @@ const { data, error } = await supabase.from("stories").insert(body)...
 
 | 項目 | 說明 |
 |---|---|
-| P2-1 `public/gacha.html` | 705 行獨立 HTML 用 iframe 嵌入,自帶一套寫死的樣式,不吃全站主題。建議改寫成 React page(`app/gacha`),樣式接 token。 |
+| ~~P2-1 `public/gacha.html`~~ | **已於開源整理時移除**(2026-09-08),日後若要重啟改放獨立專案。|
 | P2-2 README 過期 | 未提及 Supabase 環境變數(`.env.example` 已有 4 個)、故事站與後台功能、測試指令;Markdown code fence 從「2. Install dependencies」起格式破損,後半段全被吃進程式碼區塊。 |
 | P2-3 `app/my-writing-app.code-workspace` | 編輯器工作區檔誤放在 `app/` 內,應移出 repo 或加入 `.gitignore`。 |
 | P2-4 package 名稱 | `package.json` name 為 `my-writing-app`,與 repo 名 ToolBox 不一致,建議統一。 |
 | P2-5 Huninn 字體 build 警告 | `Failed to find font override values for font 'Huninn'`,無 fallback font metrics,會有些微 CLS。可改 `next/font/local` 自架或接受現狀並註記。 |
-| P2-6 `next.config.ts` 空白 | 可考慮補安全 headers(CSP、X-Frame-Options 等,注意 gacha iframe 需同源允許)。 |
+| P2-6 `next.config.ts` 空白 | 可考慮補安全 headers(CSP、X-Frame-Options 等)。 |
 
 ---
 
@@ -122,7 +122,6 @@ const { data, error } = await supabase.from("stories").insert(body)...
 
 ### 中期
 4. **編輯器文件雲端同步**:目前文件只存 localStorage(`orange-writing-documents`),清瀏覽器資料即遺失。可用既有 Supabase 加上 Supabase Auth(Google 登入已有)+ RLS,做多裝置同步與版本備份;匯出 zip 的 jszip 已在依賴中,可先做「一鍵全量匯出備份」作為過渡。
-5. **gacha 改寫入主站**(P2-1),統一主題與字體。
 6. **後台體驗**:admin stories 頁 455 行單檔,可拆元件;列表加上拖曳排序(已有 `order_index`)。
 
 ### 長期

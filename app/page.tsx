@@ -29,11 +29,6 @@ const tools = [
 
 const games = [
   {
-    title: "兒童節角色抽籤",
-    desc: "抽一張卡，讓他們說一句給你的話",
-    href: "/gacha",
-  },
-  {
     title: "發條驛站 · 恩佐的輓歌",
     desc: "關於時間、溫度與廢土的文字生存 Roguelike 小遊戲",
     href: "https://the-clockwork-station.vercel.app/",
