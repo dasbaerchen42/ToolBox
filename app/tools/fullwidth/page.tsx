@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ClipboardEvent } from "react";
+import {
+  hasItalicMarkup,
+  htmlToItalicText,
+  readClipboard,
+} from "@/lib/clipboard";
 import { calcTextMeta, convertAll } from "./_lib/convert";
 import {
   DEFAULT_CUSTOM_RULES,
@@ -23,6 +29,19 @@ function normalizeLineBreaks(text: string) {
   return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 }
 
+/**
+ * 剪貼簿裡同時有純文字與 HTML 時優先看 HTML:
+ * 從已經排版好的頁面複製時,斜體是真的樣式,純文字版裡一個星號都沒有。
+ * 不先接回來的話,「修正變成斜體的對話」永遠沒東西可修。
+ */
+function textFromClipboard(payload: { text: string; html: string | null }) {
+  if (hasItalicMarkup(payload.html)) {
+    const restored = htmlToItalicText(payload.html as string);
+    if (restored) return { text: restored, restoredItalics: true };
+  }
+  return { text: payload.text, restoredItalics: false };
+}
+
 async function writeClipboardText(text: string) {
   if (!text) return;
   await navigator.clipboard.writeText(text);
@@ -40,6 +59,7 @@ export default function FullwidthPage() {
   const [notice, setNotice] = useState("");
 
   const noticeTimerRef = useRef<number | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const t = getThemeClasses();
 
   const inputMeta = useMemo(() => calcTextMeta(input), [input]);
@@ -122,15 +142,45 @@ export default function FullwidthPage() {
     showNotice("已複製輸出內容。");
   }
 
+  /**
+   * 主動讀剪貼簿在 Firefox 與部分 Safari 上會被擋(以前是直接跳 alert 了事)。
+   * 現在讀不到就把游標送進輸入區,請使用者用鍵盤貼上——那條路走 paste 事件,
+   * 不需要任何權限,而且同樣會還原斜體。
+   */
   async function handlePasteToInput() {
-    try {
-      const text = await navigator.clipboard.readText();
-      setInput(normalizeLineBreaks(text));
-      showNotice("已貼上到輸入區。");
-    } catch (error) {
-      console.error(error);
-      alert("無法讀取剪貼簿，請確認瀏覽器權限。");
+    const payload = await readClipboard();
+
+    if (!payload) {
+      inputRef.current?.focus();
+      showNotice("瀏覽器不讓網頁直接讀剪貼簿。游標已經移到輸入區，請按 Ctrl / ⌘ + V。");
+      return;
     }
+
+    const { text, restoredItalics } = textFromClipboard(payload);
+    setInput(normalizeLineBreaks(text));
+    showNotice(
+      restoredItalics ? "已貼上，並把斜體還原成 *…*。" : "已貼上到輸入區。"
+    );
+  }
+
+  /** 直接在輸入區按 Ctrl/⌘+V:同樣把斜體接回來 */
+  function handleInputPaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const html = event.clipboardData.getData("text/html");
+    if (!hasItalicMarkup(html)) return;
+
+    const restored = htmlToItalicText(html);
+    if (!restored) return;
+
+    event.preventDefault();
+
+    // 取代目前選取的範圍,而不是整個蓋掉——游標在中間貼上時才不會吃掉原稿
+    const target = event.currentTarget;
+    const start = target.selectionStart ?? input.length;
+    const end = target.selectionEnd ?? start;
+    const next = input.slice(0, start) + restored + input.slice(end);
+
+    setInput(normalizeLineBreaks(next));
+    showNotice("已貼上，並把斜體還原成 *…*。");
   }
 
   function handleUseOutputAsInput() {
@@ -196,6 +246,8 @@ export default function FullwidthPage() {
         <FullwidthEditorPanel
           input={input}
           setInput={(value) => setInput(normalizeLineBreaks(value))}
+          inputRef={inputRef}
+          onInputPaste={handleInputPaste}
           output={output}
           inputMeta={inputMeta}
           outputMeta={outputMeta}

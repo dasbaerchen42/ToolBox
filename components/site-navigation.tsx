@@ -10,6 +10,7 @@ const navItems = [
   { href: "/tools", label: "社群轉換區" },
   { href: "/tools/knife", label: "文字切割刀" },
   { href: "/tools/fullwidth", label: "標點置換所" },
+  { href: "/tools/image", label: "影像工作檯" },
 ];
 
 export default function SiteNavigation() {

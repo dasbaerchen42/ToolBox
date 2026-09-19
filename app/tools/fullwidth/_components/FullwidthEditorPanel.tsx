@@ -1,8 +1,11 @@
+import type { ClipboardEvent, Ref } from "react";
 import type { TextMeta } from "../_lib/types";
 
 type Props = {
   input: string;
   setInput: (value: string) => void;
+  inputRef?: Ref<HTMLTextAreaElement>;
+  onInputPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
   output: string;
   inputMeta: TextMeta;
   outputMeta: TextMeta;
@@ -17,6 +20,8 @@ type Props = {
 export default function FullwidthEditorPanel({
   input,
   setInput,
+  inputRef,
+  onInputPaste,
   output,
   inputMeta,
   outputMeta,
@@ -42,8 +47,10 @@ export default function FullwidthEditorPanel({
           </div>
 
           <textarea
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onPaste={onInputPaste}
             placeholder="把原始內容貼在這裡……"
             className={`mt-4 h-[640px] w-full rounded-[24px] border p-4 text-sm leading-8 tracking-[0.04em] outline-none ${t.input}`}
           />
