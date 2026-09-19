@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { getFontResults } from "../_lib/fancy-fonts";
 import { gapsFor, hasNonAscii } from "../_lib/font-notes";
+import { hasStyledText } from "../_lib/font-restore";
 import type { ThemeClasses } from "@/lib/theme";
 
 type Props = {
@@ -10,6 +11,7 @@ type Props = {
   sample: string;
   scope: "selection" | "all";
   onApply: (styleKey: string) => void;
+  onRestore: () => void;
   t: ThemeClasses;
 };
 
@@ -23,12 +25,13 @@ const PREVIEW_LIMIT = 12;
  * 因為有七八種樣式沒有數字對映(哥德字、手寫字、斜體……),
  * 中文也一律維持原樣,不先看到的話按下去才發現只轉了一半。
  */
-export default function FontPalette({ sample, scope, onApply, t }: Props) {
+export default function FontPalette({ sample, scope, onApply, onRestore, t }: Props) {
   const preview = (sample || FALLBACK).slice(0, PREVIEW_LIMIT);
   const results = useMemo(() => getFontResults(preview), [preview]);
 
   const hasDigits = /[0-9]/.test(preview);
   const nonAscii = hasNonAscii(sample);
+  const styled = hasStyledText(sample);
 
   return (
     <div className="space-y-3">
@@ -37,6 +40,19 @@ export default function FontPalette({ sample, scope, onApply, t }: Props) {
           ? "會套用在你選取的那一段。"
           : "沒有選取任何文字，會套用在整篇。先圈起來再按，就只會換那一段。"}
       </p>
+
+      <p className={`text-[11px] leading-5 ${t.muted}`}>
+        連續點不同樣式會從原文重算，不用先復原。
+      </p>
+
+      <button
+        type="button"
+        onClick={onRestore}
+        disabled={!styled}
+        className={`w-full rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40 ${t.secondary}`}
+      >
+        還原成一般文字
+      </button>
 
       <div className="max-h-[52vh] space-y-1.5 overflow-y-auto pr-1">
         {results.map((item) => {

@@ -7,6 +7,7 @@ import {
   DIVIDER_MIN,
   DIVIDER_UNITS,
 } from "../_lib/dividers";
+import type { ReactNode } from "react";
 import type { ThemeClasses } from "@/lib/theme";
 import type { PickMode } from "./palette-parts";
 import Segmented from "@/components/segmented";
@@ -15,11 +16,12 @@ type Props = {
   mode: PickMode;
   onMode: (mode: PickMode) => void;
   onPick: (value: string) => void;
+  custom: ReactNode;
   t: ThemeClasses;
 };
 
 /** 分隔線做成產生器:想要的長度取決於貼文寬度,不是我們能先決定的 */
-export default function DividerPalette({ mode, onMode, onPick, t }: Props) {
+export default function DividerPalette({ mode, onMode, onPick, custom, t }: Props) {
   const [unitKey, setUnitKey] = useState(DIVIDER_UNITS[0].key);
   const [length, setLength] = useState(20);
 
@@ -41,6 +43,8 @@ export default function DividerPalette({ mode, onMode, onPick, t }: Props) {
           ]}
         />
       </div>
+
+      {custom}
 
       <div>
         <p className={`mb-1.5 text-[11px] tracking-[0.12em] ${t.muted}`}>樣式</p>

@@ -18,9 +18,13 @@ export default function SiteNavigation() {
 
   return (
     <nav className="border-b border-(--border-light) bg-(--surface) backdrop-blur">
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-2 px-4 py-3">
-        {/* 左側:導覽列按鈕區塊 */}
-        <div className="flex flex-wrap gap-2">
+      <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-3">
+        {/*
+          左側:導覽列按鈕區塊。
+          窄畫面改成單行橫向捲動而不是換行——六個項目換行會變成三列,
+          在手機上每一頁都先吃掉快五分之一個螢幕。
+        */}
+        <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto md:flex-wrap md:overflow-x-visible">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
 
@@ -28,7 +32,7 @@ export default function SiteNavigation() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`rounded-xl border px-3 py-2 text-sm tracking-[0.04em] transition ${
+                className={`shrink-0 rounded-xl border px-3 py-2 text-sm tracking-[0.04em] transition ${
                   isActive
                     ? "border-(--accent) bg-(--accent) text-(--on-accent)"
                     : "border-(--border-light) text-(--ink-secondary) hover:bg-(--paper-bg-3)"
@@ -41,7 +45,7 @@ export default function SiteNavigation() {
         </div>
 
         {/* 右側:專屬小熊記號 + 主題選擇 */}
-        <div className="ml-auto flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
           <div className="hidden items-center text-[11px] tracking-[0.08em] text-(--ink-tertiary) opacity-50 transition-opacity duration-500 hover:opacity-100 md:flex">
             <a
               href="https://elsewhere.zeabur.app/"

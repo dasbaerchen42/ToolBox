@@ -11,6 +11,16 @@ import { filterSymbols, SYMBOL_GROUPS } from "./symbols";
 import { filterKaomoji, KAOMOJI_GROUPS } from "./kaomoji";
 import { describeGaps, gapsFor } from "./font-notes";
 import { matchesKeyword } from "./search";
+import { getFontResults } from "./fancy-fonts";
+import { hasStyledText, toPlainText } from "./font-restore";
+import {
+  addCustom,
+  emptySets,
+  mergeSets,
+  parseImport,
+  removeCustom,
+  serialize,
+} from "./custom-items";
 
 describe("social-marks:看穿隱形字元", () => {
   const sample = "第一行\n\n    縮排四格\n最後一行";
@@ -18,7 +28,7 @@ describe("social-marks:看穿隱形字元", () => {
   it("逐行判斷出空行與縮排", () => {
     expect(analyzeSocial(sample)).toEqual([
       { kind: "plain", text: "第一行" },
-      { kind: "blank" },
+      { kind: "blank", length: 0 },
       { kind: "indent", spaces: 4, text: "縮排四格" },
       { kind: "plain", text: "最後一行" },
     ]);
@@ -26,9 +36,10 @@ describe("social-marks:看穿隱形字元", () => {
 
   it("算出來的字元數等於實際轉換後多出來的長度", () => {
     const count = countSocial(analyzeSocial(sample));
-    expect(count).toEqual({ blankLines: 1, indentSpaces: 4, chars: 5 });
+    expect(count).toEqual({ blankLines: 1, indentSpaces: 4, chars: 5, trimmed: 0 });
     // 這條是關鍵:計數若跟真正的轉換對不上,介面上的數字就是在騙人
     expect(convertSocialText(sample).length - sample.length).toBe(count.chars);
+    expect(count.trimmed).toBe(0);
   });
 
   it("已經轉換過的文字不會被重複計算（轉換本身是冪等的）", () => {
@@ -37,18 +48,41 @@ describe("social-marks:看穿隱形字元", () => {
     expect(countSocial(analyzeSocial(once)).chars).toBe(0);
   });
 
-  it("只有空白的行算空行", () => {
-    expect(analyzeSocial("   ")).toEqual([{ kind: "blank" }]);
+  it("空字串什麼都不算——轉換本身也是什麼都不插", () => {
+    expect(analyzeSocial("")).toEqual([]);
+    expect(countSocial(analyzeSocial("")).chars).toBe(0);
+    expect(convertSocialText("")).toBe("");
+  });
+
+  it.each([
+    ["", "空字串"],
+    ["一行", "單行"],
+    ["\n", "只有換行"],
+    ["  ", "只有空白"],
+    ["a\n\n\nb", "連續空行"],
+    ["  縮排\n\n    更深", "縮排加空行"],
+    ["已經轉過的\n⠀\n結果", "已轉換過"],
+  ])("計數與實際轉換永遠對得上（%s）", (input) => {
+    // 插入的隱形字元減掉空行被吃掉的空白,剛好等於長度差。
+    // 這條是整個計數的守門員:哪天轉換改了而計數沒跟上,這裡會先叫。
+    const count = countSocial(analyzeSocial(input));
+    expect(convertSocialText(input).length - input.length).toBe(
+      count.chars - count.trimmed
+    );
+  });
+
+  it("只有空白的行算空行，而且記下原本佔了幾個字元", () => {
+    expect(analyzeSocial("   ")).toEqual([{ kind: "blank", length: 3 }]);
   });
 
   it("沒東西可插時說清楚", () => {
-    expect(describeSocial({ blankLines: 0, indentSpaces: 0, chars: 0 })).toBe(
+    expect(describeSocial({ blankLines: 0, indentSpaces: 0, chars: 0, trimmed: 0 })).toBe(
       "沒有需要保護的空行或縮排"
     );
   });
 
   it("有東西時把種類拆開講", () => {
-    expect(describeSocial({ blankLines: 1, indentSpaces: 4, chars: 5 })).toBe(
+    expect(describeSocial({ blankLines: 1, indentSpaces: 4, chars: 5, trimmed: 0 })).toBe(
       "複製時會插入 5 個隱形字元（1 個空行、4 格縮排）"
     );
   });
@@ -215,5 +249,118 @@ describe("matchesKeyword:雙向包含", () => {
 
   it("不相干的查詢不會命中", () => {
     expect(matchesKeyword("心 heart 空心 愛", "箭頭")).toBe(false);
+  });
+});
+
+describe("font-restore:還原成一般文字", () => {
+  const styled = (input: string, key: string) =>
+    getFontResults(input).find((item) => item.key === key)!.value;
+
+  it("套過字體的文字再套別種樣式是完全沒反應的——這就是要還原的理由", () => {
+    const fraktur = styled("fancy", "fraktur");
+    expect(styled(fraktur, "circled")).toBe(fraktur);
+  });
+
+  it("字元對映類的樣式都還原得回來", () => {
+    for (const key of [
+      "fraktur", "script", "doubleStruck", "circled", "squared",
+      "monospace", "italic", "boldItalic", "sansBold", "smallCaps",
+    ]) {
+      expect(toPlainText(styled("fancy", key))).toBe("fancy");
+    }
+  });
+
+  it("有數字對映的樣式連數字一起還原", () => {
+    expect(toPlainText(styled("abc2026", "doubleStruck"))).toBe("abc2026");
+    expect(toPlainText(styled("abc2026", "circled"))).toBe("abc2026");
+  });
+
+  it("疊附加符號的樣式用剝除的方式還原", () => {
+    for (const key of ["strike", "slashStrike", "sparkle", "doubleUnderline", "decorated"]) {
+      expect(toPlainText(styled("fancy", key))).toBe("fancy");
+    }
+  });
+
+  it("中文與標點不會被動到", () => {
+    expect(toPlainText("小熊寶：「你好」～")).toBe("小熊寶：「你好」～");
+  });
+
+  it("混排時只還原花式字元", () => {
+    const mixed = `小熊 ${styled("bear", "fraktur")} 2026`;
+    expect(toPlainText(mixed)).toBe("小熊 bear 2026");
+  });
+
+  it("一般文字丟進去原樣出來", () => {
+    expect(toPlainText("plain text 123")).toBe("plain text 123");
+  });
+
+  it("認得出有沒有東西可以還原", () => {
+    expect(hasStyledText("plain text")).toBe(false);
+    expect(hasStyledText(styled("fancy", "fraktur"))).toBe(true);
+    expect(hasStyledText(styled("fancy", "strike"))).toBe(true);
+  });
+});
+
+describe("custom-items:自訂項目", () => {
+  it("新增的排最前面，重複的往前移", () => {
+    expect(addCustom(["b"], "a")).toEqual(["a", "b"]);
+    expect(addCustom(["a", "b"], "b")).toEqual(["b", "a"]);
+  });
+
+  it("只有空白的不收", () => {
+    expect(addCustom(["a"], "   ")).toEqual(["a"]);
+  });
+
+  it("移除", () => {
+    expect(removeCustom(["a", "b"], "a")).toEqual(["b"]);
+  });
+
+  it("匯入完整備份物件", () => {
+    const raw = JSON.stringify({ symbol: ["✦"], kaomoji: ["(^^)"], divider: ["───"] });
+    expect(parseImport(raw, "symbol")).toEqual({
+      symbol: ["✦"],
+      kaomoji: ["(^^)"],
+      divider: ["───"],
+    });
+  });
+
+  it("匯入單一類別的陣列，進呼叫端指定的那一類", () => {
+    expect(parseImport('["✦","❀"]', "divider")).toEqual({ divider: ["✦", "❀"] });
+  });
+
+  it("匯入純文字，一行一個", () => {
+    expect(parseImport("✦\n❀\n\n  ◈  ", "symbol")).toEqual({
+      symbol: ["✦", "❀", "◈"],
+    });
+  });
+
+  it("備份裡不認得的欄位直接忽略", () => {
+    expect(parseImport('{"symbol":["✦"],"什麼鬼":["x"]}', "symbol")).toEqual({
+      symbol: ["✦"],
+    });
+  });
+
+  it("壞掉的 JSON 退回純文字而不是整個失敗", () => {
+    expect(parseImport("{ 壞掉的", "symbol")).toEqual({ symbol: ["{ 壞掉的"] });
+  });
+
+  it("空字串就是什麼都沒有", () => {
+    expect(parseImport("   ", "symbol")).toEqual({});
+  });
+
+  it("匯入是合併，不會把使用者原本加的東西清掉", () => {
+    const current = { ...emptySets(), symbol: ["舊的"] };
+    const merged = mergeSets(current, { symbol: ["新的"] });
+    expect(merged.symbol).toEqual(["新的", "舊的"]);
+  });
+
+  it("合併時去重", () => {
+    const current = { ...emptySets(), symbol: ["✦"] };
+    expect(mergeSets(current, { symbol: ["✦"] }).symbol).toEqual(["✦"]);
+  });
+
+  it("匯出再匯入回得來", () => {
+    const sets = { symbol: ["✦"], kaomoji: ["(^^)"], divider: ["───"] };
+    expect(mergeSets(emptySets(), parseImport(serialize(sets), "symbol"))).toEqual(sets);
   });
 });

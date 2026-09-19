@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { SymbolGroup } from "../_lib/symbols";
+import type { ReactNode } from "react";
 import type { ThemeClasses } from "@/lib/theme";
 import {
   PaletteFrame,
@@ -16,10 +17,11 @@ type Props = {
   onMode: (mode: PickMode) => void;
   recent: string[];
   onPick: (value: string) => void;
+  custom: ReactNode;
   t: ThemeClasses;
 };
 
-export default function SymbolPalette({ mode, onMode, recent, onPick, t }: Props) {
+export default function SymbolPalette({ mode, onMode, recent, onPick, custom, t }: Props) {
   const [groups, setGroups] = useState<SymbolGroup[] | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<
@@ -55,6 +57,7 @@ export default function SymbolPalette({ mode, onMode, recent, onPick, t }: Props
       recent={recent}
       onPick={onPick}
       placeholder="搜尋符號（愛心、arrow、箭頭……）"
+      custom={custom}
       t={t}
     >
       {shown.length === 0 ? (

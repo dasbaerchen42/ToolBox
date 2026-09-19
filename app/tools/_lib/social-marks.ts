@@ -5,7 +5,8 @@
 // 輸出結果跟原文長得一模一樣,所以要另外把位置標示出來才有得檢查。
 
 export type MarkedLine =
-  | { kind: "blank" }
+  /** length 是原本那行的長度:只有空白的行會被整行換成一個字元,所以會少掉這些 */
+  | { kind: "blank"; length: number }
   /** 行首有空白,每一格都會被墊上零寬空格 */
   | { kind: "indent"; spaces: number; text: string }
   | { kind: "plain"; text: string };
@@ -13,8 +14,10 @@ export type MarkedLine =
 export type SocialCount = {
   blankLines: number;
   indentSpaces: number;
-  /** 轉換後會多出來的字元數 */
+  /** 會被插入的隱形字元數(這是要給使用者看的數字) */
   chars: number;
+  /** 空行原本的空白會被整行取代掉,這是被吃掉的字元數 */
+  trimmed: number;
 };
 
 /**
@@ -24,8 +27,12 @@ export type SocialCount = {
  * 「⠀」trim 後不是空字串、行首的零寬空格也不符合 /^ +/。
  */
 export function analyzeSocial(text: string): MarkedLine[] {
+  // convertSocialText 對空字串是直接提前返回、什麼都不插,
+  // 這裡要跟著一樣,否則空白文件會回報「會插入 1 個空行」
+  if (!text) return [];
+
   return text.split("\n").map((line): MarkedLine => {
-    if (line.trim() === "") return { kind: "blank" };
+    if (line.trim() === "") return { kind: "blank", length: line.length };
 
     const leading = line.match(/^ +/);
     if (leading) {
@@ -44,13 +51,17 @@ export function analyzeSocial(text: string): MarkedLine[] {
 export function countSocial(lines: MarkedLine[]): SocialCount {
   let blankLines = 0;
   let indentSpaces = 0;
+  let trimmed = 0;
 
   for (const line of lines) {
-    if (line.kind === "blank") blankLines += 1;
+    if (line.kind === "blank") {
+      blankLines += 1;
+      trimmed += line.length;
+    }
     if (line.kind === "indent") indentSpaces += line.spaces;
   }
 
-  return { blankLines, indentSpaces, chars: blankLines + indentSpaces };
+  return { blankLines, indentSpaces, chars: blankLines + indentSpaces, trimmed };
 }
 
 /** 給人看的一句話;沒東西可插就說沒有 */

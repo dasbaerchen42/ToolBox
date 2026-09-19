@@ -15,6 +15,8 @@ type FrameProps = {
   recent: string[];
   onPick: (value: string) => void;
   children: ReactNode;
+  /** 自訂項目區,放在搜尋與清單之間 */
+  custom?: ReactNode;
   placeholder: string;
   t: ThemeClasses;
 };
@@ -34,6 +36,7 @@ export function PaletteFrame({
   recent,
   onPick,
   children,
+  custom,
   placeholder,
   t,
 }: FrameProps) {
@@ -61,6 +64,8 @@ export function PaletteFrame({
           ]}
         />
       </div>
+
+      {custom}
 
       {recent.length > 0 && (
         <div>

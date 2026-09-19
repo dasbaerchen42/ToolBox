@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { KaomojiGroup } from "../_lib/kaomoji";
+import type { ReactNode } from "react";
 import type { ThemeClasses } from "@/lib/theme";
 import {
   PaletteFrame,
@@ -16,10 +17,11 @@ type Props = {
   onMode: (mode: PickMode) => void;
   recent: string[];
   onPick: (value: string) => void;
+  custom: ReactNode;
   t: ThemeClasses;
 };
 
-export default function KaomojiPalette({ mode, onMode, recent, onPick, t }: Props) {
+export default function KaomojiPalette({ mode, onMode, recent, onPick, custom, t }: Props) {
   const [groups, setGroups] = useState<KaomojiGroup[] | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<
@@ -54,6 +56,7 @@ export default function KaomojiPalette({ mode, onMode, recent, onPick, t }: Prop
       recent={recent}
       onPick={onPick}
       placeholder="搜尋顏文字（開心、掀桌、shy……）"
+      custom={custom}
       t={t}
     >
       {shown.length === 0 ? (

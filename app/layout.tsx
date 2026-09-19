@@ -33,7 +33,12 @@ export default function RootLayout({
       className={huninn.variable}
       suppressHydrationWarning
     >
-      <body className="tracking-[0.04em] leading-7 antialiased">
+      {/*
+        導覽列與 main 疊在同一欄裡:main 用 flex-1 吃掉剩下的高度。
+        以前 main 各自寫 min-h-screen,導覽列的高度就變成多出來的,
+        結果是每一頁即使內容不滿也一定要捲一個導覽列的距離。
+      */}
+      <body className="flex min-h-dvh flex-col tracking-[0.04em] leading-7 antialiased">
         {/* 無閃爍主題 bootstrap:在 body 內容繪製前套用已儲存的主題 */}
         <script dangerouslySetInnerHTML={{ __html: BOOTSTRAP_SCRIPT }} />
         <SiteNavigation />

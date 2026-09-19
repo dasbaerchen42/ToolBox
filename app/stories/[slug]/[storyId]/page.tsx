@@ -74,7 +74,7 @@ export default function StoryPage({ params }: Props) {
 
   if (loading) {
     return (
-      <main className={`min-h-screen flex items-center justify-center ${t.page}`}>
+      <main className={`flex-1 flex items-center justify-center ${t.page}`}>
         <p className="text-sm opacity-40">載入中…</p>
       </main>
     );
@@ -91,7 +91,7 @@ export default function StoryPage({ params }: Props) {
   const nextStory = currentIndex < sorted.length - 1 ? sorted[currentIndex + 1] : null;
 
   return (
-    <main className={`min-h-screen flex flex-col ${t.page}`}>
+    <main className={`flex-1 flex flex-col ${t.page}`}>
       <nav
         className="sticky top-0 z-10 border-b border-(--border-light) bg-(--surface) px-6 py-3 flex items-center justify-between text-xs tracking-[0.1em] backdrop-blur"
       >

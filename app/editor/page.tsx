@@ -263,8 +263,8 @@ function EditorPageContent() {
   );
 
   return (
-    <main className={`min-h-screen ${theme.pageBg} ${theme.text}`}>
-      <div className="mx-auto grid min-h-screen max-w-7xl grid-cols-1 md:grid-cols-[280px_1fr]">
+    <main className={`flex flex-1 flex-col ${theme.pageBg} ${theme.text}`}>
+      <div className="mx-auto grid w-full flex-1 max-w-7xl grid-cols-1 md:grid-cols-[280px_1fr]">
         <EditorSidebar
           docs={docs}
           activeDocId={activeDocId}

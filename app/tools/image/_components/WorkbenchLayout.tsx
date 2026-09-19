@@ -28,7 +28,7 @@ export function WorkbenchShell({
         );
         if (files.length > 0) onDropFiles(files);
       }}
-      className="mx-auto grid min-h-screen w-full max-w-[1600px] grid-cols-1 md:grid-cols-[280px_1fr]"
+      className="mx-auto grid w-full flex-1 max-w-[1600px] grid-cols-1 md:grid-cols-[280px_1fr]"
     >
       {sidebar}
       <section className="min-w-0 p-4 md:p-6">{children}</section>

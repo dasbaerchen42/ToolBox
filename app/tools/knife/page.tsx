@@ -231,7 +231,7 @@ export default function KnifePage() {
   }
 
   return (
-    <main className={`min-h-screen ${t.page}`}>
+    <main className={`flex-1 ${t.page}`}>
       {notice && (
         <div className="pointer-events-none fixed right-4 top-4 z-50">
           <div

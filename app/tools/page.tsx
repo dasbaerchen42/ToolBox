@@ -9,17 +9,33 @@ import { getFontResults } from "./_lib/fancy-fonts";
 import { convertSocialText } from "./_lib/social";
 import { analyzeSocial, countSocial, describeSocial } from "./_lib/social-marks";
 import {
-  applyToSelection,
   insertAt,
+  replaceRange,
   selectionScope,
+  targetRange,
   type EditResult,
 } from "./_lib/text-edit";
+import { toPlainText } from "./_lib/font-restore";
 import { addToRecent, loadRecent, saveRecent } from "./_lib/recent";
+import {
+  addCustom,
+  emptySets,
+  loadCustom,
+  mergeSets,
+  parseImport,
+  removeCustom,
+  saveCustom,
+  serialize,
+  type CustomKind,
+  type CustomSets,
+} from "./_lib/custom-items";
+import { downloadBlob } from "@/lib/download";
 import MarkedView from "./_components/MarkedView";
 import FontPalette from "./_components/FontPalette";
 import SymbolPalette from "./_components/SymbolPalette";
 import KaomojiPalette from "./_components/KaomojiPalette";
 import DividerPalette from "./_components/DividerPalette";
+import CustomSection from "./_components/CustomSection";
 import type { PickMode } from "./_components/palette-parts";
 
 /** useEditorHistory 是以文件 id 分堆的,這裡只有一份內容 */
@@ -52,9 +68,18 @@ export default function SocialToolsPage() {
   const [pickMode, setPickMode] = useState<PickMode>("insert");
   const [recentSymbols, setRecentSymbols] = useState<string[]>([]);
   const [recentKaomoji, setRecentKaomoji] = useState<string[]>([]);
+  const [custom, setCustom] = useState<CustomSets>(emptySets);
   const [notice, setNotice] = useState("");
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  /**
+   * 上一次套用字體的範圍與它的原文。
+   *
+   * 套過樣式的文字已經不是 ASCII,再套第二種樣式會完全沒有反應,
+   * 所以只要作用範圍沒變,就從原文重算而不是從畫面上的結果重算——
+   * 這樣連續點不同樣式才會直接換過去,不必先復原一次。
+   */
+  const lastFont = useRef<{ start: number; end: number; source: string } | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const history = useEditorHistory(DOC_ID);
 
@@ -75,6 +100,7 @@ export default function SocialToolsPage() {
 
     setRecentSymbols(loadRecent(STORAGE.symbols));
     setRecentKaomoji(loadRecent(STORAGE.kaomoji));
+    setCustom(loadCustom());
   }, []);
 
   useEffect(() => {
@@ -143,6 +169,8 @@ export default function SocialToolsPage() {
   function handleChange(value: string) {
     setText(value);
     history.record(DOC_ID, value);
+    // 自己打過字之後,先前記住的原文就對不上了
+    lastFont.current = null;
   }
 
   function handleUndo() {
@@ -155,16 +183,44 @@ export default function SocialToolsPage() {
     if (next !== null) setText(next);
   }
 
-  function applyFont(styleKey: string) {
+  /** 字體與還原共用同一條路:取出作用範圍的原文 → 轉換 → 換回去 */
+  function transformTarget(transform: (input: string) => string) {
     const { start, end } = currentRange();
-    const result = applyToSelection(text, start, end, (input) => {
-      const found = getFontResults(input).find((item) => item.key === styleKey);
-      return found?.value ?? input;
-    });
+    const range = targetRange(text, start, end);
+    const previous = lastFont.current;
+
+    const sameTarget =
+      previous && previous.start === range.start && previous.end === range.end;
+
+    const source = sameTarget
+      ? previous.source
+      : text.slice(range.start, range.end);
+
+    const result = replaceRange(text, range.start, range.end, transform(source));
+
+    lastFont.current = {
+      start: result.selectionStart,
+      end: result.selectionEnd,
+      source,
+    };
+
     applyEdit(result);
   }
 
-  async function pick(value: string, kind: "symbol" | "kaomoji" | "divider") {
+  function applyFont(styleKey: string) {
+    transformTarget((input) => {
+      const found = getFontResults(input).find((item) => item.key === styleKey);
+      return found?.value ?? input;
+    });
+  }
+
+  function restoreFont() {
+    transformTarget(toPlainText);
+    // 已經是一般文字了,下一次套樣式要從這個結果開始算
+    lastFont.current = null;
+  }
+
+  async function pick(value: string, kind: CustomKind) {
     if (kind === "symbol") {
       const next = addToRecent(recentSymbols, value);
       setRecentSymbols(next);
@@ -199,6 +255,54 @@ export default function SocialToolsPage() {
     localStorage.setItem(STORAGE.view, next);
   }
 
+  function updateCustom(next: CustomSets) {
+    setCustom(next);
+    saveCustom(next);
+  }
+
+  function addCustomItem(kind: CustomKind, value: string) {
+    updateCustom({ ...custom, [kind]: addCustom(custom[kind], value) });
+    showNotice("已加入自訂清單。");
+  }
+
+  function removeCustomItem(kind: CustomKind, value: string) {
+    updateCustom({ ...custom, [kind]: removeCustom(custom[kind], value) });
+  }
+
+  function importCustom(kind: CustomKind, raw: string) {
+    const incoming = parseImport(raw, kind);
+    const merged = mergeSets(custom, incoming);
+    const added =
+      merged.symbol.length + merged.kaomoji.length + merged.divider.length -
+      (custom.symbol.length + custom.kaomoji.length + custom.divider.length);
+
+    updateCustom(merged);
+    showNotice(added > 0 ? `匯入了 ${added} 個新項目。` : "沒有新的項目可以加入。");
+  }
+
+  function exportCustom() {
+    downloadBlob({
+      name: "社群轉換區-自訂項目.json",
+      blob: new Blob([serialize(custom)], { type: "application/json" }),
+    });
+    showNotice("已匯出備份檔。");
+  }
+
+  function customSection(kind: CustomKind) {
+    return (
+      <CustomSection
+        kind={kind}
+        items={custom[kind]}
+        onPick={(value) => void pick(value, kind)}
+        onAdd={(value) => addCustomItem(kind, value)}
+        onRemove={(value) => removeCustomItem(kind, value)}
+        onImport={(raw) => importCustom(kind, raw)}
+        onExport={exportCustom}
+        t={t}
+      />
+    );
+  }
+
   function changePickMode(next: PickMode) {
     setPickMode(next);
     localStorage.setItem(STORAGE.pick, next);
@@ -215,7 +319,7 @@ export default function SocialToolsPage() {
   const showMarked = view !== "plain";
 
   return (
-    <main className={`min-h-screen ${t.page}`}>
+    <main className={`flex-1 ${t.page}`}>
       <div className="mx-auto max-w-7xl px-4 py-6 md:px-6">
         <ToolHeader
           title="社群轉換區"
@@ -282,7 +386,7 @@ export default function SocialToolsPage() {
                       });
                     }}
                     placeholder="在這裡寫貼文……圈起一段文字再到右邊選字體，就只會換那一段。"
-                    className={`h-[26rem] w-full rounded-[24px] border p-4 text-sm leading-8 tracking-[0.04em] outline-none ${t.input}`}
+                    className={`h-[clamp(14rem,46vh,28rem)] w-full rounded-[24px] border p-4 text-sm leading-8 tracking-[0.04em] outline-none ${t.input}`}
                   />
                 </div>
               )}
@@ -294,7 +398,7 @@ export default function SocialToolsPage() {
                       標記查看（唯讀）
                     </p>
                   )}
-                  <div className="h-[26rem]">
+                  <div className="h-[clamp(14rem,46vh,28rem)]">
                     <MarkedView text={text} t={t} />
                   </div>
                 </div>
@@ -357,7 +461,13 @@ export default function SocialToolsPage() {
             </div>
 
             {palette === "font" && (
-              <FontPalette sample={sample} scope={scope} onApply={applyFont} t={t} />
+              <FontPalette
+                sample={sample}
+                scope={scope}
+                onApply={applyFont}
+                onRestore={restoreFont}
+                t={t}
+              />
             )}
 
             {palette === "symbol" && (
@@ -366,6 +476,7 @@ export default function SocialToolsPage() {
                 onMode={changePickMode}
                 recent={recentSymbols}
                 onPick={(value) => void pick(value, "symbol")}
+                custom={customSection("symbol")}
                 t={t}
               />
             )}
@@ -375,6 +486,7 @@ export default function SocialToolsPage() {
                 mode={pickMode}
                 onMode={changePickMode}
                 onPick={(value) => void pick(value, "divider")}
+                custom={customSection("divider")}
                 t={t}
               />
             )}
@@ -385,6 +497,7 @@ export default function SocialToolsPage() {
                 onMode={changePickMode}
                 recent={recentKaomoji}
                 onPick={(value) => void pick(value, "kaomoji")}
+                custom={customSection("kaomoji")}
                 t={t}
               />
             )}

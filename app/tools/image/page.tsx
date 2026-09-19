@@ -395,7 +395,7 @@ export default function ImageWorkbenchPage() {
   );
 
   return (
-    <main className={`min-h-screen ${t.page}`}>
+    <main className={`flex flex-1 flex-col ${t.page}`}>
       <WorkbenchShell
         onDropFiles={(files) => void addFiles(files)}
         sidebar={

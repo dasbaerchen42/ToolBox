@@ -23,6 +23,16 @@ export const DIVIDER_UNITS: DividerUnit[] = [
   { key: "diamond", label: "菱", unit: "◈", spaced: true },
   { key: "wave", label: "波浪", unit: "～" },
   { key: "tilde", label: "連續波", unit: "〜" },
+  { key: "heart", label: "心", unit: "♡", spaced: true },
+  { key: "leaf", label: "葉", unit: "❧", spaced: true },
+  { key: "snow", label: "雪", unit: "❄", spaced: true },
+  { key: "note", label: "音符", unit: "♪", spaced: true },
+  { key: "circle", label: "圓點", unit: "●", spaced: true },
+  { key: "smallCircle", label: "小圓", unit: "○", spaced: true },
+  { key: "diamondLine", label: "菱鏈", unit: "◆◇" },
+  { key: "arrowLine", label: "箭頭", unit: "➤", spaced: true },
+  { key: "boxTop", label: "上框線", unit: "▔" },
+  { key: "boxBottom", label: "下框線", unit: "▁" },
 ];
 
 export const DIVIDER_MIN = 1;
