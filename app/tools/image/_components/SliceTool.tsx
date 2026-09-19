@@ -13,6 +13,7 @@ import type { Axis, Rect, WorkImage } from "@/lib/tools/image/types";
 import type { ThemeClasses } from "@/lib/theme";
 import ImageStage, { percent } from "./ImageStage";
 import { useDragRect } from "./useDragRect";
+import { ToolPane } from "./WorkbenchLayout";
 import { ActionButton, Field, NumberField, Segmented, StationHint } from "./controls";
 
 type Mode = "equal" | "free" | "crop";
@@ -32,7 +33,7 @@ type Props = {
  * 等分是算出來的切點、自由是點出來的切點、裁切是留一個框,
  * 所以底下只有一套資料結構要維護。
  */
-export default function SlicePanel({ image, busy, t, onSlice, onCrop }: Props) {
+export default function SliceTool({ image, busy, t, onSlice, onCrop }: Props) {
   const [mode, setMode] = useState<Mode>("equal");
   const [axis, setAxis] = useState<Axis>("y");
   const [parts, setParts] = useState(2);
@@ -60,8 +61,7 @@ export default function SlicePanel({ image, busy, t, onSlice, onCrop }: Props) {
     },
     onTap: (point) => {
       if (mode !== "free") return;
-      const position = Math.round(axis === "y" ? point.y : point.x);
-      setFreeCuts((prev) => [...prev, position]);
+      setFreeCuts((prev) => [...prev, Math.round(axis === "y" ? point.y : point.x)]);
     },
   });
 
@@ -69,14 +69,8 @@ export default function SlicePanel({ image, busy, t, onSlice, onCrop }: Props) {
   const canCrop = !!crop && isUsableRect(crop);
 
   return (
-    <div className="space-y-4">
-      <StationHint t={t}>
-        {mode === "equal" && "填份數，刀會自己排好；除不盡時餘數分給前面幾段，不會留下一條一像素的尾巴。"}
-        {mode === "free" && "在圖上點一下就下一刀，點幾刀就切幾段。"}
-        {mode === "crop" && "拖一個框，套用之後只留下框裡面那塊。"}
-      </StationHint>
-
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_260px]">
+    <ToolPane
+      workspace={
         <ImageStage
           image={image}
           ref={ref}
@@ -126,8 +120,16 @@ export default function SlicePanel({ image, busy, t, onSlice, onCrop }: Props) {
             />
           )}
         </ImageStage>
+      }
+      controls={
+        <>
+          <StationHint t={t}>
+            {mode === "equal" &&
+              "填份數，刀會自己排好；除不盡時餘數分給前面幾段，不會留下一條一像素的尾巴。"}
+            {mode === "free" && "在圖上點一下就下一刀，點幾刀就切幾段。"}
+            {mode === "crop" && "拖一個框，套用之後只留下框裡面那塊。"}
+          </StationHint>
 
-        <div className="space-y-4">
           <Field label="模式" t={t}>
             <Segmented
               value={mode}
@@ -248,8 +250,8 @@ export default function SlicePanel({ image, busy, t, onSlice, onCrop }: Props) {
               切成 {spans.length} 段
             </ActionButton>
           )}
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 }

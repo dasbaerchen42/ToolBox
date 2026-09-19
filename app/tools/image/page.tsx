@@ -1,8 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import ToolHeader from "@/components/editor/ToolHeader";
-import ToolCollapsible from "@/components/ToolCollapsible";
 import { getThemeClasses } from "@/lib/theme";
 import { readClipboardImages, readPasteImages } from "@/lib/clipboard";
 import { downloadBlob, zipImages, type ExportedImage } from "@/lib/download";
@@ -33,13 +31,14 @@ import type {
   WorkImage,
 } from "@/lib/tools/image/types";
 
-import ImageTray from "./_components/ImageTray";
-import MaskPanel from "./_components/MaskPanel";
-import SlicePanel from "./_components/SlicePanel";
-import MergePanel from "./_components/MergePanel";
-import FramePanel, { type FrameSettings } from "./_components/FramePanel";
-import OutputPanel from "./_components/OutputPanel";
+import Sidebar, { TOOLS, type ToolKey } from "./_components/Sidebar";
+import { WorkbenchShell, ToolPane, EmptyWorkspace } from "./_components/WorkbenchLayout";
 import { StationHint } from "./_components/controls";
+import MaskTool from "./_components/MaskTool";
+import SliceTool from "./_components/SliceTool";
+import MergeTool from "./_components/MergeTool";
+import FrameTool, { type FrameSettings } from "./_components/FrameTool";
+import OutputTool from "./_components/OutputTool";
 
 /** 復原只留這麼多步:每一步都抓著一整組 blob,再多就開始吃記憶體 */
 const HISTORY_LIMIT = 20;
@@ -49,6 +48,7 @@ type Notice = { kind: "info" | "error"; text: string } | null;
 export default function ImageWorkbenchPage() {
   const t = getThemeClasses();
 
+  const [tool, setTool] = useState<ToolKey>("mask");
   const [images, setImages] = useState<WorkImage[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [history, setHistory] = useState<WorkImage[][]>([]);
@@ -58,14 +58,6 @@ export default function ImageWorkbenchPage() {
     format: "png",
     quality: 0.85,
     flattenColor: "#ffffff",
-  });
-
-  const [openSection, setOpenSection] = useState({
-    mask: true,
-    slice: false,
-    merge: false,
-    frame: false,
-    output: true,
   });
 
   // 每張圖都掛著一個 objectURL,離開頁面前要全部還回去
@@ -387,167 +379,120 @@ export default function ImageWorkbenchPage() {
       await addFiles(files);
     });
 
-  const toggleSection = (key: keyof typeof openSection) =>
-    setOpenSection((prev) => ({ ...prev, [key]: !prev[key] }));
+  const current = TOOLS.find((item) => item.key === tool) ?? TOOLS[0];
 
-  const needOne = (
-    <StationHint t={t}>先在上面的清單選一張圖。選多張時以第一張（標 1 的那張）為準。</StationHint>
+  const needImage = (
+    <ToolPane
+      workspace={
+        <EmptyWorkspace t={t}>
+          先在左邊的清單選一張圖。
+          <br />
+          選多張時以第一張（標 1 的那張）為準。
+        </EmptyWorkspace>
+      }
+      controls={<StationHint t={t}>選好圖之後，這裡會出現這個工具的參數。</StationHint>}
+    />
   );
 
   return (
     <main className={`min-h-screen ${t.page}`}>
-      <div className="mx-auto max-w-7xl px-4 py-6 md:px-6">
-        <ToolHeader
-          title="影像工作檯"
-          description="貼上圖片、塗遮罩、切割、拼接、加框。全部在你的瀏覽器裡完成，圖片不會離開這台電腦。"
-          t={t}
-        />
+      <WorkbenchShell
+        onDropFiles={(files) => void addFiles(files)}
+        sidebar={
+          <Sidebar
+            tool={tool}
+            onSelectTool={setTool}
+            images={images}
+            selectedIds={selectedIds}
+            busy={busy}
+            canUndo={history.length > 0}
+            t={t}
+            onAddFiles={(files) => void addFiles(files)}
+            onReadClipboard={() => void handleReadClipboard()}
+            onToggle={toggleSelect}
+            onRemove={removeImage}
+            onUndo={undo}
+            onClearAll={clearAll}
+          />
+        }
+      >
+        <header className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <div>
+            <h1 className="text-xl font-semibold tracking-[0.08em]">{current.label}</h1>
+            <p className={`mt-0.5 text-xs tracking-[0.04em] ${t.muted}`}>
+              {current.hint}・全部在你的瀏覽器裡完成，圖片不會離開這台電腦
+            </p>
+          </div>
 
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={undo}
-            disabled={history.length === 0 || busy}
-            className={`rounded-xl border px-3 py-2 text-sm transition disabled:opacity-40 ${t.secondary}`}
+          <p
+            aria-live="polite"
+            className={`text-xs leading-6 tracking-[0.04em] ${
+              notice?.kind === "error" ? "" : t.muted
+            }`}
           >
-            復原一步{history.length > 0 ? `（${history.length}）` : ""}
-          </button>
-          <button
-            type="button"
-            onClick={clearAll}
-            disabled={images.length === 0 || busy}
-            className={`rounded-xl border px-3 py-2 text-sm transition disabled:opacity-40 ${t.secondary}`}
-          >
-            清空工作檯
-          </button>
+            {busy ? "處理中……" : (notice?.text ?? "")}
+          </p>
+        </header>
 
-          {busy && <span className={`text-xs ${t.muted}`}>處理中……</span>}
-
-          {notice && (
-            <span
-              className={`text-xs leading-6 tracking-[0.04em] ${
-                notice.kind === "error" ? "text-(--ink-primary)" : t.muted
-              }`}
-            >
-              {notice.text}
-            </span>
-          )}
-        </div>
-
-        <ImageTray
-          images={images}
-          selectedIds={selectedIds}
-          busy={busy}
-          t={t}
-          onAddFiles={(files) => void addFiles(files)}
-          onReadClipboard={() => void handleReadClipboard()}
-          onToggle={toggleSelect}
-          onRemove={removeImage}
-        />
-
-        <div className="mt-4 space-y-4">
-          <section className={`rounded-3xl border p-4 md:p-5 ${t.panel}`}>
-            <ToolCollapsible
-              title="遮罩塗佈區"
-              description="拖一個框蓋掉不想露出來的東西"
-              isOpen={openSection.mask}
-              onToggle={() => toggleSection("mask")}
+        {tool === "mask" &&
+          (active ? (
+            <MaskTool
+              key={active.id}
+              image={active}
+              busy={busy}
               t={t}
-            >
-              {active ? (
-                <MaskPanel
-                  key={active.id}
-                  image={active}
-                  busy={busy}
-                  t={t}
-                  onApply={(masks) => void handleMask(masks)}
-                  onPickColor={(point: Point) => pickColorAt(active, point)}
-                />
-              ) : (
-                needOne
-              )}
-            </ToolCollapsible>
-          </section>
+              onApply={(masks) => void handleMask(masks)}
+              onPickColor={(point: Point) => pickColorAt(active, point)}
+            />
+          ) : (
+            needImage
+          ))}
 
-          <section className={`rounded-3xl border p-4 md:p-5 ${t.panel}`}>
-            <ToolCollapsible
-              title="影像切割刀"
-              description="等分切、自由下刀、框選裁切"
-              isOpen={openSection.slice}
-              onToggle={() => toggleSection("slice")}
+        {tool === "slice" &&
+          (active ? (
+            <SliceTool
+              key={active.id}
+              image={active}
+              busy={busy}
               t={t}
-            >
-              {active ? (
-                <SlicePanel
-                  key={active.id}
-                  image={active}
-                  busy={busy}
-                  t={t}
-                  onSlice={(spans, axis) => void handleSlice(spans, axis)}
-                  onCrop={(rect) => void handleCrop(rect)}
-                />
-              ) : (
-                needOne
-              )}
-            </ToolCollapsible>
-          </section>
+              onSlice={(spans, axis) => void handleSlice(spans, axis)}
+              onCrop={(rect) => void handleCrop(rect)}
+            />
+          ) : (
+            needImage
+          ))}
 
-          <section className={`rounded-3xl border p-4 md:p-5 ${t.panel}`}>
-            <ToolCollapsible
-              title="圖片拼接台"
-              description="照選取順序接成一張長圖或寬圖"
-              isOpen={openSection.merge}
-              onToggle={() => toggleSection("merge")}
-              t={t}
-            >
-              <MergePanel
-                images={selected}
-                busy={busy}
-                t={t}
-                onMove={moveInSelection}
-                onMerge={(options, background) => void handleMerge(options, background)}
-              />
-            </ToolCollapsible>
-          </section>
+        {tool === "merge" && (
+          <MergeTool
+            images={selected}
+            busy={busy}
+            t={t}
+            onMove={moveInSelection}
+            onMerge={(options, background) => void handleMerge(options, background)}
+          />
+        )}
 
-          <section className={`rounded-3xl border p-4 md:p-5 ${t.panel}`}>
-            <ToolCollapsible
-              title="邊框比例區"
-              description="描邊，或往外補背景湊成指定長寬比"
-              isOpen={openSection.frame}
-              onToggle={() => toggleSection("frame")}
-              t={t}
-            >
-              <FramePanel
-                images={selected}
-                busy={busy}
-                t={t}
-                onApply={(settings) => void handleFrame(settings)}
-              />
-            </ToolCollapsible>
-          </section>
+        {tool === "frame" && (
+          <FrameTool
+            images={selected}
+            busy={busy}
+            t={t}
+            onApply={(settings) => void handleFrame(settings)}
+          />
+        )}
 
-          <section className={`rounded-3xl border p-4 md:p-5 ${t.panel}`}>
-            <ToolCollapsible
-              title="輸出下載區"
-              description="格式、品質，然後帶走"
-              isOpen={openSection.output}
-              onToggle={() => toggleSection("output")}
-              t={t}
-            >
-              <OutputPanel
-                images={images}
-                selected={selected}
-                output={output}
-                busy={busy}
-                t={t}
-                onChange={setOutput}
-                onDownload={(targets) => void handleDownload(targets)}
-              />
-            </ToolCollapsible>
-          </section>
-        </div>
-      </div>
+        {tool === "output" && (
+          <OutputTool
+            images={images}
+            selected={selected}
+            output={output}
+            busy={busy}
+            t={t}
+            onChange={setOutput}
+            onDownload={(targets) => void handleDownload(targets)}
+          />
+        )}
+      </WorkbenchShell>
     </main>
   );
 }

@@ -7,6 +7,7 @@ import type { MaskRect, Point, WorkImage } from "@/lib/tools/image/types";
 import type { ThemeClasses } from "@/lib/theme";
 import ImageStage, { percent, pointFromEvent } from "./ImageStage";
 import { useDragRect } from "./useDragRect";
+import { ToolPane } from "./WorkbenchLayout";
 import { ActionButton, ColorField, Field, Segmented, StationHint } from "./controls";
 
 type Mode = "draw" | "pick";
@@ -33,7 +34,7 @@ function createId(): string {
  * 按下「套用」才把色塊真的畫進像素裡——輸出檔裡原本的內容是真的不見了,
  * 不是蓋一層可以被撕掉的東西。
  */
-export default function MaskPanel({ image, busy, t, onApply, onPickColor }: Props) {
+export default function MaskTool({ image, busy, t, onApply, onPickColor }: Props) {
   const [masks, setMasks] = useState<MaskRect[]>([]);
   const [mode, setMode] = useState<Mode>("draw");
   const [color, setColor] = useState("#1f1f1f");
@@ -108,13 +109,8 @@ export default function MaskPanel({ image, busy, t, onApply, onPickColor }: Prop
   };
 
   return (
-    <div className="space-y-4">
-      <StationHint t={t}>
-        在圖上拖一個框就是一塊遮罩，拖框裡面可以搬動它。按「套用」之前原圖都沒被改動；
-        套用之後色塊是真的畫進像素裡的，蓋掉的內容不會留在檔案裡。
-      </StationHint>
-
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_260px]">
+    <ToolPane
+      workspace={
         <ImageStage
           image={image}
           ref={ref}
@@ -137,8 +133,7 @@ export default function MaskPanel({ image, busy, t, onApply, onPickColor }: Prop
                 background: mask.color,
                 touchAction: "none",
                 cursor: mode === "pick" ? "crosshair" : "move",
-                outline:
-                  mask.id === activeId ? "2px dashed var(--accent)" : "none",
+                outline: mask.id === activeId ? "2px dashed var(--accent)" : "none",
                 outlineOffset: "1px",
               }}
             />
@@ -159,8 +154,14 @@ export default function MaskPanel({ image, busy, t, onApply, onPickColor }: Prop
             />
           )}
         </ImageStage>
+      }
+      controls={
+        <>
+          <StationHint t={t}>
+            在圖上拖一個框就是一塊遮罩，拖框裡面可以搬動它。按「套用」之前原圖都沒被改動；
+            套用之後色塊是真的畫進像素裡的，蓋掉的內容不會留在檔案裡。
+          </StationHint>
 
-        <div className="space-y-4">
           <Field label="操作" t={t}>
             <Segmented
               value={mode}
@@ -183,8 +184,7 @@ export default function MaskPanel({ image, busy, t, onApply, onPickColor }: Prop
 
           <div className={`rounded-xl border p-3 text-xs ${t.subPanel}`}>
             <p className="mb-2 tracking-[0.04em]">
-              目前 {masks.length} 塊遮罩
-              {activeId ? "（已選取 1 塊）" : ""}
+              目前 {masks.length} 塊遮罩{activeId ? "（已選取 1 塊）" : ""}
             </p>
             <div className="flex flex-wrap gap-2">
               <ActionButton
@@ -216,8 +216,8 @@ export default function MaskPanel({ image, busy, t, onApply, onPickColor }: Prop
           >
             套用遮罩
           </ActionButton>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 }
