@@ -1,13 +1,20 @@
 import { getFontFamily } from "@/lib/editor-font";
 import { type EditorPreferences } from "@/lib/preferences";
+import { DEVICE_MAX_AREA, DEVICE_MAX_SIDE } from "@/lib/canvas-limits";
+import {
+  downloadBlob,
+  sanitizeFileName,
+  zipImages,
+  type ExportedImage,
+} from "@/lib/download";
+
+// 這三個原本住在這裡,影像工作檯也要用,搬去 lib/download 後從這裡轉出,
+// 既有的匯入路徑就不用動。
+export { downloadBlob, sanitizeFileName, zipImages };
+export type { ExportedImage };
 
 /** 輸出時的像素密度:1080 CSS px 會變成 2160 px 的圖 */
 export const EXPORT_IMAGE_SCALE = 2;
-
-// 瀏覽器對單張 canvas 有上限,iOS Safari 最嚴(總面積約 16.7M 裝置像素),
-// 超過會直接吐出空白圖。抓保守一點,超過就分頁。
-const DEVICE_MAX_SIDE = 8192;
-const DEVICE_MAX_AREA = 16_000_000;
 
 export type PaginateMode = "auto" | "manual" | "none";
 
@@ -45,11 +52,6 @@ export type ExportImageOptions = {
   /** 手動分頁時,要在第幾個區塊之後切開(含標題時標題算第 0 個) */
   cuts?: Set<number>;
   preferences: EditorPreferences;
-};
-
-export type ExportedImage = {
-  name: string;
-  blob: Blob;
 };
 
 function readThemeColor(name: string, fallback: string): string {
@@ -287,37 +289,4 @@ export async function exportContentToImages({
   } finally {
     stage.remove();
   }
-}
-
-export function sanitizeFileName(title: string): string {
-  const base = title.trim() || "未命名文件";
-  return base.replace(/[\\/:*?"<>|]/g, "_").slice(0, 60);
-}
-
-/** 多張圖用既有的 jszip 打包,免得一次噴出十個下載 */
-export async function zipImages(
-  images: ExportedImage[],
-  fileTitle: string
-): Promise<ExportedImage> {
-  const { default: JSZip } = await import("jszip");
-  const zip = new JSZip();
-
-  for (const image of images) zip.file(image.name, image.blob);
-
-  return {
-    name: `${sanitizeFileName(fileTitle)}.zip`,
-    blob: await zip.generateAsync({ type: "blob" }),
-  };
-}
-
-export function downloadBlob({ name, blob }: ExportedImage): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  // 立刻 revoke 有機會讓瀏覽器來不及讀到檔名,延後釋放
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }

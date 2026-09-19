@@ -78,3 +78,58 @@ export function titleFromContent(content: string): string {
       .slice(0, 20) || "未命名文件"
   );
 }
+
+const IMAGE_MIME = /^image\//;
+
+/**
+ * 從 paste 事件取圖片(不需要任何權限)。
+ *
+ * 有些瀏覽器只填 clipboardData.items、有些只填 files,兩邊都撈才不會漏。
+ * 同一張圖可能兩邊都有,所以用檔名 + 大小去重。
+ */
+export function readPasteImages(event: ClipboardEvent): File[] {
+  const data = event.clipboardData;
+  if (!data) return [];
+
+  const found: File[] = [];
+  const seen = new Set<string>();
+
+  const push = (file: File | null) => {
+    if (!file || !IMAGE_MIME.test(file.type)) return;
+    const key = `${file.name}:${file.size}:${file.type}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    found.push(file);
+  };
+
+  for (const item of Array.from(data.items ?? [])) {
+    if (item.kind === "file") push(item.getAsFile());
+  }
+  for (const file of Array.from(data.files ?? [])) push(file);
+
+  return found;
+}
+
+/** 主動讀剪貼簿裡的圖(手機沒有 Ctrl+V 時用);沒權限或沒圖就回空陣列 */
+export async function readClipboardImages(): Promise<File[]> {
+  const clipboard = navigator.clipboard;
+  if (!clipboard?.read) return [];
+
+  try {
+    const found: File[] = [];
+
+    for (const item of await clipboard.read()) {
+      const type = item.types.find((value) => IMAGE_MIME.test(value));
+      if (!type) continue;
+
+      const blob = await item.getType(type);
+      const extension = type.split("/")[1] ?? "png";
+      found.push(new File([blob], `剪貼簿圖片.${extension}`, { type }));
+    }
+
+    return found;
+  } catch {
+    // 不支援 read() 或使用者拒絕:由呼叫端提示改用鍵盤貼上
+    return [];
+  }
+}
