@@ -118,3 +118,94 @@ describe("整合測試：RP 混排文本", () => {
     );
   });
 });
+
+// ─── 修正變成斜體的對話 ────────────────────────────────────────────────────
+
+describe("fixMiswrappedDialogueItalics", () => {
+  // 只驗斜體規則，別讓標點轉換混進預期值
+  function italic(text: string) {
+    return convert(text, {
+      fixMiswrappedDialogueItalics: true,
+      convertColon: false,
+      convertComma: false,
+      convertQuestion: false,
+      convertExclamation: false,
+      convertPeriod: false,
+      convertSemicolon: false,
+      convertParentheses: false,
+      convertBraces: false,
+      convertQuotes: false,
+      protectLatinClauses: false,
+    });
+  }
+
+  it("形狀 A：整句被包起來 → 斜體只留在旁白上", () => {
+    expect(italic("*「對話對話對話」旁白旁白旁白：「對話對話」*")).toBe(
+      "「對話對話對話」*旁白旁白旁白：*「對話對話」"
+    );
+  });
+
+  it("形狀 B：每段對話各自被包 → 斜體搬到中間的旁白，不是全部清掉", () => {
+    // 這是回報的災情：原本兩條 regex 會把兩組 *「」* 各自拆掉，連旁白的斜體一起沒了
+    expect(italic("*「對話對話對話」*旁白旁白旁白：*「對話對話」*")).toBe(
+      "「對話對話對話」*旁白旁白旁白：*「對話對話」"
+    );
+  });
+
+  it("三段以上的對話也算數（舊規則只認剛好兩段）", () => {
+    expect(italic("*「一」旁白「二」旁白「三」*")).toBe(
+      "「一」*旁白*「二」*旁白*「三」"
+    );
+  });
+
+  it("旁白在最前面（舊規則完全不處理）", () => {
+    expect(italic("*旁白旁白「對話」*")).toBe("*旁白旁白*「對話」");
+  });
+
+  it("旁白在最後面", () => {
+    expect(italic("*「對話」旁白旁白*")).toBe("「對話」*旁白旁白*");
+  });
+
+  it("整句都是對話：拿掉斜體，沒有旁白可以接手", () => {
+    expect(italic("*「對話對話」*")).toBe("「對話對話」");
+  });
+
+  it("『』也算對話", () => {
+    expect(italic("*『對話』旁白『對話』*")).toBe("『對話』*旁白*『對話』");
+  });
+
+  it("本來就對的不要動它", () => {
+    const right = "「對話對話對話」*旁白旁白旁白：*「對話對話」";
+    expect(italic(right)).toBe(right);
+  });
+
+  it("純旁白的斜體整段保留", () => {
+    expect(italic("*他放下平板，身體往後靠進沙發墊裡。*")).toBe(
+      "*他放下平板，身體往後靠進沙發墊裡。*"
+    );
+  });
+
+  it("貼上時星號就掉了的話，這裡救不回來——不會無中生有", () => {
+    const noAsterisk = "「對話對話對話」旁白旁白旁白：「對話對話」";
+    expect(italic(noAsterisk)).toBe(noAsterisk);
+  });
+
+  it("不碰粗體", () => {
+    expect(italic("**重點**「對話」")).toBe("**重點**「對話」");
+  });
+
+  it("落單的星號原樣留著，不硬配對", () => {
+    expect(italic("三點五*四「對話」")).toBe("三點五*四「對話」");
+  });
+
+  it("多行各自處理，不會跨行配對", () => {
+    expect(italic("*「一」旁白「二」*\n*「三」旁白「四」*")).toBe(
+      "「一」*旁白*「二」\n「三」*旁白*「四」"
+    );
+  });
+
+  it("沒勾選就完全不動", () => {
+    const input = "*「對話」*旁白*「對話」*";
+    expect(convert(input, { fixMiswrappedDialogueItalics: false })).toBe(input);
+  });
+});
