@@ -7,7 +7,7 @@ import { downloadBlob, zipImages, type ExportedImage } from "@/lib/download";
 import { CanvasTooLargeError } from "@/lib/canvas-limits";
 import { borderLayout, ratioLayout } from "@/lib/tools/image/frame";
 import { buildFileName } from "@/lib/tools/image/format";
-import { layoutMerge, type MergeOptions } from "@/lib/tools/image/merge";
+import type { MergeLayout } from "@/lib/tools/image/merge";
 import type { Span } from "@/lib/tools/image/slice";
 import {
   applyFrame,
@@ -278,11 +278,12 @@ export default function ImageWorkbenchPage() {
       return `裁成 ${rect.width} × ${rect.height}。`;
     });
 
-  const handleMerge = (options: MergeOptions, background: string | null) =>
+  // 版面由工具算好直接傳過來:兩種排列方式的算法不同,
+  // 在這裡再算一次就等於維護兩份同樣的分支,遲早會跟預覽對不上
+  const handleMerge = (layout: MergeLayout, background: string | null) =>
     run(async () => {
       if (selected.length < 2) return;
 
-      const layout = layoutMerge(selected, options);
       const merged = await mergeImages(
         selected,
         layout,
@@ -292,8 +293,10 @@ export default function ImageWorkbenchPage() {
       );
 
       track([merged]);
-      commit([...images, merged], [merged.id]);
-      return `接成 ${layout.canvas.width} × ${layout.canvas.height}，原本那幾張留著。`;
+      // 刻意不把選取換到結果上:換過去的話面板會立刻收成「需要兩張以上」,
+      // 想調個欄數再排一次就得把原圖重選一遍。結果已經在左邊清單裡了。
+      commit([...images, merged]);
+      return `接成 ${layout.canvas.width} × ${layout.canvas.height}，已加到左邊清單；原本那幾張還選著，可以直接改參數再排一次。`;
     });
 
   const handleFrame = (settings: FrameSettings) =>
@@ -468,7 +471,7 @@ export default function ImageWorkbenchPage() {
             busy={busy}
             t={t}
             onMove={moveInSelection}
-            onMerge={(options, background) => void handleMerge(options, background)}
+            onMerge={(layout, background) => void handleMerge(layout, background)}
           />
         )}
 

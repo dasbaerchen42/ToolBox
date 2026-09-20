@@ -14,7 +14,7 @@ import {
   normalizeCuts,
   spanToRect,
 } from "./slice";
-import { layoutMerge } from "./merge";
+import { coverRect, layoutGrid, layoutMerge, suggestCellWidth } from "./merge";
 import { borderLayout, ratioLayout } from "./frame";
 import { baseNameOf, buildFileName, supportsAlpha, supportsQuality } from "./format";
 
@@ -303,5 +303,111 @@ describe("canvas 上限", () => {
   it("邊長都沒爆但總面積爆了也要擋", () => {
     const result = checkCanvasSize(8000, 8000);
     expect(result).toMatchObject({ ok: false, reason: "area" });
+  });
+});
+
+describe("merge:棋盤拼貼", () => {
+  const square = { w: 1, h: 1 };
+  const base = {
+    columns: 3,
+    cellWidth: 100,
+    ratio: square,
+    fit: "cover" as const,
+    gap: 0,
+    lastRow: "start" as const,
+  };
+  const nine = Array.from({ length: 9 }, () => ({ width: 200, height: 200 }));
+
+  it("九宮格:三欄三列，格子等大", () => {
+    const layout = layoutGrid(nine, base);
+    expect(layout.canvas).toEqual({ width: 300, height: 300 });
+    expect(layout.placements).toHaveLength(9);
+    expect(layout.placements.every((p) => p.width === 100 && p.height === 100)).toBe(true);
+  });
+
+  it("照列優先排,左上到右下", () => {
+    const layout = layoutGrid(nine, base);
+    expect(layout.placements[0]).toMatchObject({ x: 0, y: 0 });
+    expect(layout.placements[2]).toMatchObject({ x: 200, y: 0 });
+    expect(layout.placements[3]).toMatchObject({ x: 0, y: 100 });
+    expect(layout.placements[8]).toMatchObject({ x: 200, y: 200 });
+  });
+
+  it("間距算進畫布,但不會多出邊緣那一圈", () => {
+    const layout = layoutGrid(nine, { ...base, gap: 10 });
+    expect(layout.canvas).toEqual({ width: 320, height: 320 });
+    expect(layout.placements[8]).toMatchObject({ x: 220, y: 220 });
+  });
+
+  it("張數不滿時最後一列可以置中", () => {
+    const seven = nine.slice(0, 7);
+    const start = layoutGrid(seven, base);
+    const center = layoutGrid(seven, { ...base, lastRow: "center" });
+
+    // 7 張 3 欄 → 最後一列只有 1 張,置中要往右推一格
+    expect(start.placements[6].x).toBe(0);
+    expect(center.placements[6].x).toBe(100);
+    // 前面幾列不受影響
+    expect(center.placements[0].x).toBe(0);
+  });
+
+  it("非正方形的格子照比例算高度", () => {
+    const layout = layoutGrid(nine.slice(0, 3), {
+      ...base,
+      columns: 3,
+      ratio: { w: 4, h: 5 },
+    });
+    expect(layout.canvas).toEqual({ width: 300, height: 125 });
+  });
+
+  it("裁切填滿:目的地是整個格子,另外帶要裁的來源", () => {
+    // 寬圖放進正方形格子 → 左右各裁掉一些,高度整個保留
+    const layout = layoutGrid([{ width: 400, height: 100 }], { ...base, columns: 1 });
+    const place = layout.placements[0];
+
+    expect(place).toMatchObject({ x: 0, y: 0, width: 100, height: 100 });
+    expect(place.source).toEqual({ x: 150, y: 0, width: 100, height: 100 });
+  });
+
+  it("完整留白:圖縮到放得進去並置中,沒有來源裁切", () => {
+    const layout = layoutGrid([{ width: 400, height: 100 }], {
+      ...base,
+      columns: 1,
+      fit: "contain",
+    });
+    const place = layout.placements[0];
+
+    // 400×100 縮到寬 100 → 100×25,垂直置中落在 y=38
+    expect(place).toMatchObject({ width: 100, height: 25 });
+    expect(place.y).toBe(38);
+    expect(place.source).toBeUndefined();
+  });
+
+  it("裁切填滿永不拉變形:來源的長寬比等於格子的長寬比", () => {
+    for (const size of [
+      { width: 400, height: 100 },
+      { width: 100, height: 400 },
+      { width: 333, height: 777 },
+    ]) {
+      const source = coverRect(size, { width: 100, height: 100 });
+      expect(source.width).toBe(source.height);
+      // 而且不會裁到圖片以外
+      expect(source.x + source.width).toBeLessThanOrEqual(size.width);
+      expect(source.y + source.height).toBeLessThanOrEqual(size.height);
+    }
+  });
+
+  it("格子比原圖大時整張都用上,不是裁一小塊", () => {
+    const source = coverRect({ width: 50, height: 50 }, { width: 500, height: 500 });
+    expect(source).toEqual({ x: 0, y: 0, width: 50, height: 50 });
+  });
+
+  it("沒有圖就沒有畫布", () => {
+    expect(layoutGrid([], base)).toEqual({ canvas: { width: 0, height: 0 }, placements: [] });
+  });
+
+  it("預設格子寬度取最大那張,避免把圖放大到糊掉", () => {
+    expect(suggestCellWidth([{ width: 300, height: 1 }, { width: 900, height: 1 }])).toBe(900);
+    expect(suggestCellWidth([])).toBe(1000);
   });
 });
