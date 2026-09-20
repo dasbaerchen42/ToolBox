@@ -59,7 +59,7 @@ export default function CharacterStoriesPage({ params }: Props) {
 
   if (loading) {
     return (
-      <main className={`min-h-screen p-6 flex items-center justify-center ${t.page}`}>
+      <main className={`flex-1 p-6 flex items-center justify-center ${t.page}`}>
         <p className="text-sm opacity-40">載入中…</p>
       </main>
     );
@@ -73,7 +73,7 @@ export default function CharacterStoriesPage({ params }: Props) {
   const chatLinkAlt = char.chatLinkAlt ?? char.chat_link_alt;
 
   return (
-    <main className={`min-h-screen p-6 flex flex-col ${t.page}`}>
+    <main className={`flex-1 p-6 flex flex-col ${t.page}`}>
       <div className="mx-auto w-full max-w-3xl flex-1">
         <ToolHeader
           title={char.name}

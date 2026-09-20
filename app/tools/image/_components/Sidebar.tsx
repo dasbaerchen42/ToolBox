@@ -56,7 +56,7 @@ export default function Sidebar({
 
   return (
     <aside
-      className={`border-b p-4 md:border-b-0 md:border-r ${t.divider} bg-(--paper-bg-2) md:h-screen md:sticky md:top-0 md:overflow-y-auto`}
+      className={`border-b p-4 md:border-b-0 md:border-r ${t.divider} bg-(--paper-bg-2) md:sticky md:top-0 md:max-h-dvh md:overflow-y-auto`}
     >
       <p className="mb-4 hidden text-sm font-semibold tracking-[0.12em] md:block">
         影像工作檯

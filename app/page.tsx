@@ -39,7 +39,7 @@ export default function HomePage() {
   const t = getThemeClasses();
 
   return (
-    <main className={`min-h-screen p-6 flex flex-col ${t.page}`}>
+    <main className={`flex-1 p-6 flex flex-col ${t.page}`}>
       <div className="mx-auto w-full max-w-5xl flex-1">
         
         <ToolHeader

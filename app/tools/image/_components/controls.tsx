@@ -2,6 +2,10 @@
 
 import type { ReactNode } from "react";
 import type { ThemeClasses } from "@/lib/theme";
+import Segmented from "@/components/segmented";
+
+// Segmented 已經提到 components/ 給社群轉換區共用,這裡轉出去讓既有的匯入不用改
+export { Segmented };
 
 export function Field({
   label,
@@ -21,36 +25,6 @@ export function Field({
       <span className="text-xs tracking-[0.08em]">{label}</span>
       {children}
       {hint && <span className={`text-[11px] leading-5 ${t.muted}`}>{hint}</span>}
-    </div>
-  );
-}
-
-/** 一排互斥的小按鈕,取代 select——選項少的時候一眼看得完 */
-export function Segmented<T extends string>({
-  value,
-  options,
-  onChange,
-  t,
-}: {
-  value: T;
-  options: { value: T; label: string }[];
-  onChange: (value: T) => void;
-  t: ThemeClasses;
-}) {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          onClick={() => onChange(option.value)}
-          className={`rounded-xl border px-3 py-1.5 text-xs tracking-[0.04em] transition ${
-            value === option.value ? t.selected : t.unselected
-          }`}
-        >
-          {option.label}
-        </button>
-      ))}
     </div>
   );
 }

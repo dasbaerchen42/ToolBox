@@ -260,7 +260,7 @@ function AdminStoriesContent() {
   // ── Login screen ──────────────────────────────────────────────
   if (!isAdmin) {
     return (
-      <main className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center">
+      <main className="flex-1 bg-zinc-950 text-zinc-100 flex items-center justify-center">
         <div className="text-center space-y-6">
           <h1 className="text-xl font-semibold tracking-[0.1em]">故事後台</h1>
           <p className="text-sm text-zinc-500 tracking-widest">Das Baerchen</p>
@@ -278,7 +278,7 @@ function AdminStoriesContent() {
 
   // ── Admin UI ──────────────────────────────────────────────────
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-100">
+    <main className="flex-1 bg-zinc-950 text-zinc-100">
       <div className="grid h-screen grid-cols-[220px_240px_1fr]">
 
         {/* 角色列表 */}

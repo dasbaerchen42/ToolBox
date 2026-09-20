@@ -52,7 +52,7 @@ export default function FullwidthEditorPanel({
             onChange={(e) => setInput(e.target.value)}
             onPaste={onInputPaste}
             placeholder="把原始內容貼在這裡……"
-            className={`mt-4 h-[640px] w-full rounded-[24px] border p-4 text-sm leading-8 tracking-[0.04em] outline-none ${t.input}`}
+            className={`mt-4 h-[clamp(16rem,52vh,40rem)] w-full rounded-[24px] border p-4 text-sm leading-8 tracking-[0.04em] outline-none ${t.input}`}
           />
         </div>
 
@@ -74,7 +74,7 @@ export default function FullwidthEditorPanel({
             value={output}
             readOnly
             placeholder="執行轉換後，結果會顯示在這裡……"
-            className={`mt-4 h-[640px] w-full rounded-[24px] border p-4 text-sm leading-8 tracking-[0.04em] outline-none ${t.input}`}
+            className={`mt-4 h-[clamp(16rem,52vh,40rem)] w-full rounded-[24px] border p-4 text-sm leading-8 tracking-[0.04em] outline-none ${t.input}`}
           />
         </div>
       </div>
