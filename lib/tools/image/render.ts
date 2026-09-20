@@ -252,6 +252,24 @@ export async function mergeImages(
         layout.placements.forEach((place, index) => {
           const bitmap = bitmaps[index];
           if (!bitmap) return;
+
+          // 棋盤的「裁切填滿」會帶 source:從原圖裁一塊填滿整個格子,
+          // 不這樣做的話照片會被拉成格子的長寬比
+          if (place.source) {
+            ctx.drawImage(
+              bitmap,
+              place.source.x,
+              place.source.y,
+              place.source.width,
+              place.source.height,
+              place.x,
+              place.y,
+              place.width,
+              place.height
+            );
+            return;
+          }
+
           ctx.drawImage(bitmap, place.x, place.y, place.width, place.height);
         });
       },

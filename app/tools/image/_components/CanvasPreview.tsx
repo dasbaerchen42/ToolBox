@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import type { Rect, Size, WorkImage } from "@/lib/tools/image/types";
+import type { Placement as MergePlacement } from "@/lib/tools/image/merge";
 import type { ThemeClasses } from "@/lib/theme";
 import { percent } from "./ImageStage";
 import { backgroundStyle } from "./checkerboard";
@@ -9,7 +10,7 @@ import { backgroundStyle } from "./checkerboard";
 /** 預覽最高就這麼高,不然拼一張 400×8000 的長圖會把整個版面撐爆 */
 const MAX_HEIGHT = 460;
 
-export type Placement = { image: WorkImage; rect: Rect };
+export type Placement = { image: WorkImage; rect: MergePlacement };
 
 type Props = {
   canvas: Size;
@@ -69,6 +70,9 @@ export default function CanvasPreview({
                 top: percent(rect.y, canvas.height),
                 width: percent(rect.width, canvas.width),
                 height: percent(rect.height, canvas.height),
+                // 帶 source 表示這格要裁切填滿。CSS 的 cover 跟 coverRect
+                // 是同一個算法(等比蓋住、從中間取),所以預覽跟輸出會一致。
+                objectFit: rect.source ? "cover" : undefined,
               }}
             />
           ))}
