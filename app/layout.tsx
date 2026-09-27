@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Huninn } from "next/font/google";
 import "./globals.css";
 import SiteNavigation from "@/components/site-navigation";
-import { Analytics } from "@vercel/analytics/react";
 import { BOOTSTRAP_SCRIPT } from "@/lib/theme-core";
 
 const huninn = Huninn({
@@ -43,7 +42,6 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: BOOTSTRAP_SCRIPT }} />
         <SiteNavigation />
         {children}
-        <Analytics />
       </body>
     </html>
   );

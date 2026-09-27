@@ -54,7 +54,7 @@ export default function HomePage() {
             工具箱
           </h1>
           <p className={`mt-3 text-sm tracking-[0.08em] ${t.muted}`}>
-            圓夢的地方：小工具，以及可能更多的未來。
+            寫長篇時卡住的地方，一個個做成了工具。你剛好也需要，就拿去用。
           </p>
         </header>
 

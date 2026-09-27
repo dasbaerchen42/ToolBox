@@ -2,9 +2,9 @@
 
 一套給中文寫作者用的網頁工具箱，用 Next.js App Router + TypeScript 寫成。
 
-起因是自己在寫長篇時反覆碰到的那些瑣事：貼到社群平台前要把半形標點換成全形、
-一篇兩萬字要按平台字數上限切成好幾段、Google Docs 和瀏覽器之間來回搬稿子。
-與其每次手動處理，不如把它們做成工具。
+起因是自己在寫長篇時反覆卡住的那些地方：貼到社群平台前要把半形標點換成全形、
+一篇兩萬字要按平台字數上限切成好幾段、要把長截圖切開或把某幾段遮掉再發出去。
+與其每次手動處理，不如一個個做成工具。
 
 ## 功能
 
@@ -23,10 +23,11 @@
 Next.js 16（App Router）、React 19、TypeScript、Tailwind CSS v4、
 Google OAuth 2.0、Jest。
 
-所有工具都在瀏覽器裡完成，沒有伺服器端的資料儲存，也沒有任何 API route。
+所有工具都在瀏覽器裡完成：沒有 API route、沒有資料庫、沒有伺服器端取資料。
+因此整站以 `output: "export"` 匯出成純靜態檔案（見下方「部署」）。
 
 編輯器與各工具的核心邏輯都抽在 `lib/` 與 `app/tools/*/_lib/` 底下，
-與 React 元件分離，方便單獨測試——目前 4 個測試檔、121 個測試。
+與 React 元件分離，方便單獨測試——目前 7 個測試檔、263 個測試。
 
 ## 開始開發
 
@@ -53,8 +54,31 @@ npm install
 npm run dev     # 開發伺服器 http://localhost:3000
 npm run lint    # ESLint
 npm test        # Jest
-npm run build   # 正式建置
+npm run build   # 建置並匯出靜態檔案到 out/
 ```
+
+## 部署
+
+`next.config.ts` 設了 `output: "export"`，`npm run build` 會把整站輸出到 `out/`，
+丟給任何靜態主機（Cloudflare Pages、GitHub Pages、Netlify……）都能跑，
+不需要 Node runtime 也不需要任何 adapter。
+
+同時設了 `trailingSlash: true`，匯出的是 `editor/index.html` 而不是 `editor.html`。
+少了這行，不會自動補 `.html` 的靜態主機會對每個子頁面回 404。
+
+Cloudflare Pages 的設定：
+
+| 欄位 | 值 |
+|---|---|
+| Build command | `npm run build` |
+| Build output directory | `out` |
+| 環境變數 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID`（選用，見下） |
+
+`NEXT_PUBLIC_*` 是**建置時**烤進 bundle 的，不是執行時讀的——要在主機的建置環境
+設好，不是部署完再補。沒設的話編輯器照常開，只有 Google Docs 匯入匯出會停用。
+
+換網域之後記得到 Google Cloud Console 把新網域加進 OAuth 用戶端的
+Authorized JavaScript origins，否則編輯器的 Google 登入會被擋。
 
 ## 安全性
 

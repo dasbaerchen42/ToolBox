@@ -35,7 +35,7 @@ import { useDocuments } from "@/hooks/useDocuments";
 import { useEditorPreferences } from "@/hooks/useEditorPreferences";
 import { useEditorHistory } from "@/hooks/useEditorHistory";
 
-function EditorPageContent() {
+function EditorPageContent({ googleEnabled }: { googleEnabled: boolean }) {
   const {
     docs,
     activeDoc,
@@ -299,6 +299,7 @@ function EditorPageContent() {
                     <EditorToolbar
                       onImport={importFromGoogleDocs}
                       onExport={exportToGoogleDocs}
+                      googleEnabled={googleEnabled}
                       theme={theme}
                     />
                   </div>
@@ -502,17 +503,17 @@ function EditorPageContent() {
 export default function EditorPage() {
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
-  if (!clientId) {
-    return (
-      <main style={{ padding: 24 }}>
-        <h1>CLIENT ID MISSING</h1>
-      </main>
-    );
-  }
+  /*
+    沒設 client id 時只停用 Google Docs 匯入匯出,編輯器本身照常開——
+    以前是整頁擋掉只顯示一行 CLIENT ID MISSING,跟 README 講的不一樣,
+    而且 NEXT_PUBLIC_* 是 build 時烤進去的,換主機忘了設就會整個編輯器不見。
 
+    provider 不能條件套用:useGoogleLogin 是 hook,拿掉上層 provider 會直接丟錯。
+    所以 provider 一定在,只是按鈕藏起來,登入流程永遠不會被觸發。
+  */
   return (
-    <GoogleOAuthProvider clientId={clientId}>
-      <EditorPageContent />
+    <GoogleOAuthProvider clientId={clientId ?? ""}>
+      <EditorPageContent googleEnabled={!!clientId} />
     </GoogleOAuthProvider>
   );
 }
