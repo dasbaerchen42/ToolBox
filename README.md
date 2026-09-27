@@ -15,15 +15,15 @@
 | 文字切割刀 | `/tools/knife` | 依字數上限切段，逐段預覽與命名，適合貼上有長度限制的平台 |
 | 影像工作檯 | `/tools/image` | 貼上／拖放圖片，塗遮罩、切割（等分／自由下刀／框選裁切）、拼接（單向接圖或棋盤拼貼）、描邊與補長寬比，全程在瀏覽器內完成不上傳 |
 | 社群轉換區 | `/tools` | 一個編輯區，字體（Unicode 變體，作用在選取範圍）、特殊符號、分隔線、顏文字直接作用在上面；社群排版（保護空行與縮排的隱形字元）在複製時才套用，可切換「標記查看」看它插在哪 |
-| 故事排版器 | `/tools/story-formatter` | 把 Google Docs 貼過來的原稿整理成故事館的資料格式 |
-| 故事館 | `/stories` | 由 Supabase 供應的作品閱覽頁，含後台管理（`/admin`） |
 
 全站有七款可切換主題與一組自訂／隨機配色引擎，配色會經過對比度檢查再套用。
 
 ## 技術
 
 Next.js 16（App Router）、React 19、TypeScript、Tailwind CSS v4、
-Supabase（Postgres + Row Level Security）、Google OAuth 2.0、Jest。
+Google OAuth 2.0、Jest。
+
+所有工具都在瀏覽器裡完成，沒有伺服器端的資料儲存，也沒有任何 API route。
 
 編輯器與各工具的核心邏輯都抽在 `lib/` 與 `app/tools/*/_lib/` 底下，
 與 React 元件分離，方便單獨測試——目前 4 個測試檔、121 個測試。
@@ -40,25 +40,14 @@ npm install
 
 ### 2. 環境變數
 
-複製 `.env.example` 成 `.env.local` 再填值。四個變數都是選用的——
-沒設 Google 的話編輯器仍可用，只是 Google Docs 匯入匯出會停用；
-沒設 Supabase 的話故事館會顯示空狀態，其餘工具不受影響。
+複製 `.env.example` 成 `.env.local` 再填值。只有一個變數，而且是選用的——
+沒設的話編輯器仍可用，只是 Google Docs 匯入匯出會停用。
 
 | 變數 | 是否進前端 | 用途 |
 |---|---|---|
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | 是 | Google OAuth Client ID。請在 Google Cloud Console 限制 Authorized JavaScript origins |
-| `NEXT_PUBLIC_SUPABASE_URL` | 是 | Supabase 專案網址 |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | 是 | Supabase anon key，寫入權限一律由 RLS 控管 |
-| `SUPABASE_SERVICE_ROLE_KEY` | **否** | 只在 `/api/admin/*` 使用。絕對不要加 `NEXT_PUBLIC_` 前綴 |
-| `ADMIN_EMAIL` | **否** | 後台管理員的 Google 帳號 email |
 
-### 3. 資料庫
-
-要用故事館的話，把 `supabase-schema.sql` 整份貼進 Supabase Dashboard 的
-SQL Editor 執行。裡面包含資料表、`updated_at` trigger、索引，以及
-**Row Level Security policy——這段不能略過**，公開讀取的邊界靠它守住。
-
-### 4. 執行
+### 3. 執行
 
 ```bash
 npm run dev     # 開發伺服器 http://localhost:3000
@@ -69,12 +58,8 @@ npm run build   # 正式建置
 
 ## 安全性
 
-- 後台認證比對 Google access token 的 `aud`、`email_verified` 與 `ADMIN_EMAIL`
-  三項，缺任何環境變數一律拒絕（fail closed）。只比對 email 而不驗 `aud`
-  會讓任何第三方網站拿到的 token 都能通過，這點必須留著。
-- Admin 寫入走欄位白名單（`lib/admin-fields.ts`），擋 mass assignment。
-- 500 錯誤一律回固定訊息，原始的 Postgres 錯誤只留在伺服器 log。
 - Markdown / HTML 預覽的產物一律經過 DOMPurify，且關閉 SVG 與 MathML profile。
+- 所有工具都在本機完成，貼進去的文字與圖片不會送到任何伺服器。
 - `.env.local`、憑證 JSON、私鑰都在 `.gitignore` 內，不要提交。
 
 發現安全問題請開 issue（若涉及可利用的漏洞，請先私下聯絡而非公開細節）。
@@ -82,6 +67,3 @@ npm run build   # 正式建置
 ## 授權
 
 MIT，見 [LICENSE](LICENSE)。
-
-本 repo 只包含程式碼。作品內容（角色設定、故事原文）存放在 Supabase，
-不隨程式碼一起授權。
