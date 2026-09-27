@@ -1,15 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  GoogleOAuthProvider,
-  useGoogleLogin,
-  type TokenResponse,
-} from "@react-oauth/google";
-import { type WritingDoc, createNewDoc } from "@/lib/storage";
+import { createNewDoc } from "@/lib/storage";
 import { EDITOR_THEME } from "@/lib/theme";
 import EditorSidebar from "@/components/editor/editor-sidebar";
-import EditorToolbar from "@/components/editor/editor-toolbar";
+import EditorGoogleToolbar from "@/components/editor/editor-google-toolbar";
 import EditorSettingsPanel from "@/components/editor/editor-settings-panel";
 import EditorTextarea from "@/components/editor/editor-textarea";
 import EditorPreview from "@/components/editor/editor-preview";
@@ -22,7 +17,6 @@ import EditorStatsBar from "@/components/editor/editor-stats-bar";
 import { getEditorStats } from "@/lib/editor-stats";
 import CollapsibleSection from "@/components/editor/collapsible-section";
 import { formatDateTime24h } from "@/lib/datetime";
-import { exportDoc, importDoc, extractDocId } from "@/lib/google-docs";
 import { isRenderableMode } from "@/lib/markdown";
 import {
   hasRichFormatting,
@@ -35,7 +29,7 @@ import { useDocuments } from "@/hooks/useDocuments";
 import { useEditorPreferences } from "@/hooks/useEditorPreferences";
 import { useEditorHistory } from "@/hooks/useEditorHistory";
 
-function EditorPageContent({ googleEnabled }: { googleEnabled: boolean }) {
+export default function EditorPage() {
   const {
     docs,
     activeDoc,
@@ -161,82 +155,6 @@ function EditorPageContent({ googleEnabled }: { googleEnabled: boolean }) {
     handlePaste(payload, thenExport);
   }
 
-  const exportToGoogleDocs = useGoogleLogin({
-    scope: [
-      "https://www.googleapis.com/auth/documents",
-      "https://www.googleapis.com/auth/drive.file",
-    ].join(" "),
-    onSuccess: async (tokenResponse: TokenResponse) => {
-      try {
-        if (!activeDoc) {
-          alert("目前沒有可匯出的文件。");
-          return;
-        }
-
-        const { documentId, url, isUpdate } = await exportDoc(
-          tokenResponse.access_token,
-          activeDoc.title,
-          activeDoc.content,
-          activeDoc.googleDocId
-        );
-
-        if (!activeDoc.googleDocId) {
-          updateActiveDoc({ googleDocId: documentId });
-        }
-
-        alert(isUpdate ? "已成功更新 Google Docs！" : "已成功匯出到 Google Docs！");
-        window.open(url, "_blank");
-      } catch (error) {
-        console.error("匯出失敗：", error);
-        alert("匯出失敗，請按 F12 查看 Console 錯誤。");
-      }
-    },
-    onError: () => {
-      alert("Google 授權失敗。");
-    },
-  });
-
-  const importFromGoogleDocs = useGoogleLogin({
-    scope: [
-      "https://www.googleapis.com/auth/documents.readonly",
-      "https://www.googleapis.com/auth/drive.readonly",
-    ].join(" "),
-    onSuccess: async (tokenResponse: TokenResponse) => {
-      try {
-        const input = window.prompt("請貼上 Google Docs 文件連結：");
-        if (!input) return;
-
-        const documentId = extractDocId(input);
-        if (!documentId) {
-          alert("看起來不是有效的 Google Docs 連結。");
-          return;
-        }
-
-        const { title, content, documentId: docId } = await importDoc(
-          tokenResponse.access_token,
-          documentId
-        );
-
-        const importedDoc: WritingDoc = {
-          ...createNewDoc(),
-          title,
-          content,
-          mode: "plain",
-          googleDocId: docId,
-        };
-
-        addDoc(importedDoc);
-        alert("已成功從 Google Docs 匯入！");
-      } catch (error) {
-        console.error("匯入失敗：", error);
-        alert("匯入失敗，請按 F12 查看 Console 錯誤。");
-      }
-    },
-    onError: () => {
-      alert("Google 授權失敗。");
-    },
-  });
-
   const theme = EDITOR_THEME;
 
   const validationResult = useMemo(
@@ -296,10 +214,10 @@ function EditorPageContent({ googleEnabled }: { googleEnabled: boolean }) {
                     <label className={`mb-2 block text-sm ${theme.mutedText}`}>
                       操作
                     </label>
-                    <EditorToolbar
-                      onImport={importFromGoogleDocs}
-                      onExport={exportToGoogleDocs}
-                      googleEnabled={googleEnabled}
+                    <EditorGoogleToolbar
+                      activeDoc={activeDoc}
+                      updateActiveDoc={updateActiveDoc}
+                      addDoc={addDoc}
                       theme={theme}
                     />
                   </div>
@@ -497,23 +415,5 @@ function EditorPageContent({ googleEnabled }: { googleEnabled: boolean }) {
         </section>
       </div>
     </main>
-  );
-}
-
-export default function EditorPage() {
-  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-
-  /*
-    沒設 client id 時只停用 Google Docs 匯入匯出,編輯器本身照常開——
-    以前是整頁擋掉只顯示一行 CLIENT ID MISSING,跟 README 講的不一樣,
-    而且 NEXT_PUBLIC_* 是 build 時烤進去的,換主機忘了設就會整個編輯器不見。
-
-    provider 不能條件套用:useGoogleLogin 是 hook,拿掉上層 provider 會直接丟錯。
-    所以 provider 一定在,只是按鈕藏起來,登入流程永遠不會被觸發。
-  */
-  return (
-    <GoogleOAuthProvider clientId={clientId ?? ""}>
-      <EditorPageContent googleEnabled={!!clientId} />
-    </GoogleOAuthProvider>
   );
 }
