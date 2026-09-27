@@ -11,9 +11,26 @@ const huninn = Huninn({
   variable: "--font-huninn",
 });
 
+const SITE_URL = "https://tool-box.dasbaerchen.site";
+const SITE_NAME = "Das Baerchen Tool Box";
+const SITE_DESCRIPTION =
+  "給中文寫作者的網頁工具箱：標點轉換、長文切段、影像處理、社群排版，全部在瀏覽器內完成。";
+
 export const metadata: Metadata = {
-  title: "Das Baerchen Tool Box",
-  description: "寫作工具集・故事館・Das Baerchen",
+  // 有了正式網域才設得了。之後 metadata 裡若出現相對路徑(例如 og 圖),
+  // 會以這個為基準補成完整網址;沒設的話 build 會直接報錯。
+  metadataBase: new URL(SITE_URL),
+  title: SITE_NAME,
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    // 這裡刻意不寫 url:openGraph 整組會被沒有自己 openGraph 的子頁面繼承,
+    // 寫了就會變成每一頁的 og:url 都指向首頁。
+    type: "website",
+    locale: "zh_TW",
+    siteName: SITE_NAME,
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+  },
   verification: {
     google: "iussrliej7Z_Mq1_thPKiAdmcmkJwLCtLS7Qli4in3k",
   },
