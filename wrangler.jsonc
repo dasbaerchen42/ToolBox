@@ -1,0 +1,16 @@
+{
+  // Cloudflare Workers 的靜態資產部署設定。
+  //
+  // 這個站沒有任何 Worker 程式碼,只有 next build 匯出的靜態檔案,
+  // 所以沒有 "main",也不要加 "binding": "ASSETS"——那個只有在有
+  // Worker 腳本時才有意義。
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "toolbox",
+  "compatibility_date": "2026-09-27",
+  "assets": {
+    // next.config.ts 的 output: "export" 會把整站輸出到這裡
+    "directory": "./out",
+    // 找不到對應檔案時回最近的 404.html(next 匯出時會產生 out/404.html)
+    "not_found_handling": "404-page"
+  }
+}
