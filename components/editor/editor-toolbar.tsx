@@ -3,6 +3,8 @@
 type EditorToolbarProps = {
   onExport: () => void;
   onImport: () => void;
+  /** 沒設 NEXT_PUBLIC_GOOGLE_CLIENT_ID 時為 false:按鈕停用,編輯器其餘功能照常 */
+  googleEnabled: boolean;
   theme: {
     border: string;
     panelBg: string;
@@ -17,8 +19,18 @@ type EditorToolbarProps = {
 export default function EditorToolbar({
   onExport,
   onImport,
+  googleEnabled,
   theme,
 }: EditorToolbarProps) {
+  if (!googleEnabled) {
+    return (
+      <p className={`text-xs leading-6 ${theme.mutedText}`}>
+        這個站沒有設定 Google Client ID，Google Docs 匯入匯出停用中。
+        編輯器其餘功能都可以照常使用。
+      </p>
+    );
+  }
+
   return (
     <div className="flex w-full gap-2">
       <button
