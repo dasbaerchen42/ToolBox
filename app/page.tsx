@@ -51,7 +51,7 @@ export default function HomePage() {
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-6">
         <header className="pt-10 pb-8 text-center md:pt-14 md:pb-10">
           <h1 className="text-2xl font-semibold tracking-[0.16em] md:text-3xl">
-            創作區｜工具箱
+            工具箱
           </h1>
           <p className={`mt-3 text-sm tracking-[0.08em] ${t.muted}`}>
             圓夢的地方：小工具，以及可能更多的未來。
