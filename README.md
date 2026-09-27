@@ -2,6 +2,8 @@
 
 一套給中文寫作者用的網頁工具箱，用 Next.js App Router + TypeScript 寫成。
 
+線上版：<https://tool-box.dasbaerchen.site>
+
 起因是自己在寫長篇時反覆卡住的那些地方：貼到社群平台前要把半形標點換成全形、
 一篇兩萬字要按平台字數上限切成好幾段、要把長截圖切開或把某幾段遮掉再發出去。
 與其每次手動處理，不如一個個做成工具。
@@ -60,25 +62,52 @@ npm run build   # 建置並匯出靜態檔案到 out/
 ## 部署
 
 `next.config.ts` 設了 `output: "export"`，`npm run build` 會把整站輸出到 `out/`，
-丟給任何靜態主機（Cloudflare Pages、GitHub Pages、Netlify……）都能跑，
-不需要 Node runtime 也不需要任何 adapter。
+丟給任何靜態主機都能跑，不需要 Node runtime 也不需要任何 adapter。
 
 同時設了 `trailingSlash: true`，匯出的是 `editor/index.html` 而不是 `editor.html`。
 少了這行，不會自動補 `.html` 的靜態主機會對每個子頁面回 404。
 
-Cloudflare Pages 的設定：
+### 目前的部署：Cloudflare Workers
+
+`wrangler.jsonc` 就是部署設定，`assets.directory` 指向 `out/`。這是 assets-only
+的 Worker——沒有 `main`（沒有任何 Worker 程式碼），也沒有 `binding`（那個欄位
+只有在有 Worker 腳本時才有意義，這裡加了會出錯）。
+
+專案在 Cloudflare 儀表板上要設的：
 
 | 欄位 | 值 |
 |---|---|
-| Build command | `npm run build` |
-| Build output directory | `out` |
-| 環境變數 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID`（選用，見下） |
+| 組建命令 | `npm run build` |
+| 部署命令 | `npx wrangler deploy` |
+| 根目錄 | `/` |
+| 分支控制 | `main` |
 
-`NEXT_PUBLIC_*` 是**建置時**烤進 bundle 的，不是執行時讀的——要在主機的建置環境
-設好，不是部署完再補。沒設的話編輯器照常開，只有 Google Docs 匯入匯出會停用。
+Cloudflare 偵測到 Next.js 專案時會**自動**把組建命令設成
+`npx opennextjs-cloudflare build`（SSR 轉接器那條路）。這個專案是純靜態匯出、
+沒有裝那個套件，維持自動設定的話建置會直接失敗。要手動改回 `npm run build`。
 
-換網域之後記得到 Google Cloud Console 把新網域加進 OAuth 用戶端的
-Authorized JavaScript origins，否則編輯器的 Google 登入會被擋。
+### 環境變數要放在「建置」那一區
+
+Cloudflare 有兩個長得很像的變數區塊，放錯地方不會生效：
+
+| 區塊 | 位置 | 用途 |
+|---|---|---|
+| 建置變數和祕密 | 設定 → 組建 | 跑建置指令時才存在 ← **`NEXT_PUBLIC_*` 放這裡** |
+| 執行時變數和祕密 | 設定 → 變數和祕密 | Worker 執行時用 `env.X` 讀 |
+
+assets-only 的 Worker 沒有執行時，第二區會整個是灰的，那是正常的。
+
+`NEXT_PUBLIC_*` 是**建置時**烤進 bundle 的，不是執行時讀的。變數加完要重新
+建置一次才會生效（部署頁 → 檢視建置歷程 → 該筆右邊的 ⋯ → 重試建置；重試套用
+的是按下當下的設定）。沒設的話編輯器照常開，只有 Google Docs 匯入匯出會停用。
+
+### 換網域之後
+
+到 Google Cloud Console 把新網域加進 OAuth 用戶端的 Authorized JavaScript
+origins，否則編輯器的 Google 登入會被擋。每一個實際提供網站的網址都要各自登記
+一次（`example.com` 和 `www.example.com` 算兩個）。
+
+`app/layout.tsx` 裡的 `SITE_URL` 也要一起改。
 
 ## 安全性
 
