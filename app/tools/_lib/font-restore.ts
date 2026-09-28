@@ -6,7 +6,7 @@
 // 反查表不是手寫的,是拿探針字串去跑正向轉換再配對出來的——
 // fancy-fonts 增減樣式時這裡自動跟上,不會有兩份清單走鐘。
 
-import { getFontResults } from "./fancy-fonts";
+import { getFontResults, toGraphemes } from "./fancy-fonts";
 
 const PROBE =
   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -67,4 +67,14 @@ export function hasStyledText(input: string): boolean {
 
   if (COMBINING_ONE.test(input)) return true;
   return [...input].some((char) => table.has(char));
+}
+
+/**
+ * 字體面板每顆按鈕的預覽用字。
+ *
+ * 先還原:選取範圍已經套過字體時,不還原的話每種樣式都認不得、每顆按鈕都長一樣。
+ * 以字素截斷:花式字母是代理對,用 slice 按 UTF-16 碼元切會把最後一個字切成 �。
+ */
+export function fontPreviewSample(sample: string, limit: number): string {
+  return toGraphemes(toPlainText(sample)).slice(0, limit).join("");
 }

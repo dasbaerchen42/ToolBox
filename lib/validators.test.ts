@@ -90,6 +90,16 @@ describe('validateContent – markdown', () => {
     const result = validateContent('markdown', '# Proper heading');
     expect(result.status).toBe('success');
   });
+
+  it('does not warn on deeper headings that have a space', () => {
+    const result = validateContent('markdown', '## Level two\n\n###### Level six');
+    expect(result.status).toBe('success');
+  });
+
+  it('still warns on deeper headings without a space', () => {
+    const result = validateContent('markdown', '##NoSpace');
+    expect(result.status).toBe('warning');
+  });
 });
 
 // ─── HTML mode ───────────────────────────────────────────────────────────────
