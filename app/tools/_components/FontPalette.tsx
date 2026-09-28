@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { getFontResults } from "../_lib/fancy-fonts";
 import { gapsFor, hasNonAscii } from "../_lib/font-notes";
-import { hasStyledText } from "../_lib/font-restore";
+import { fontPreviewSample, hasStyledText } from "../_lib/font-restore";
 import type { ThemeClasses } from "@/lib/theme";
 
 type Props = {
@@ -26,7 +26,7 @@ const PREVIEW_LIMIT = 12;
  * 中文也一律維持原樣,不先看到的話按下去才發現只轉了一半。
  */
 export default function FontPalette({ sample, scope, onApply, onRestore, t }: Props) {
-  const preview = (sample || FALLBACK).slice(0, PREVIEW_LIMIT);
+  const preview = fontPreviewSample(sample || FALLBACK, PREVIEW_LIMIT);
   const results = useMemo(() => getFontResults(preview), [preview]);
 
   const hasDigits = /[0-9]/.test(preview);

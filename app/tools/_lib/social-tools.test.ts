@@ -12,7 +12,7 @@ import { filterKaomoji, KAOMOJI_GROUPS } from "./kaomoji";
 import { describeGaps, gapsFor } from "./font-notes";
 import { matchesKeyword } from "./search";
 import { getFontResults } from "./fancy-fonts";
-import { hasStyledText, toPlainText } from "./font-restore";
+import { fontPreviewSample, hasStyledText, toPlainText } from "./font-restore";
 import {
   addCustom,
   emptySets,
@@ -249,6 +249,21 @@ describe("matchesKeyword:雙向包含", () => {
 
   it("不相干的查詢不會命中", () => {
     expect(matchesKeyword("心 heart 空心 愛", "箭頭")).toBe(false);
+  });
+});
+
+describe("font-restore:字體面板的預覽用字", () => {
+  const styled = (input: string, key: string) =>
+    getFontResults(input).find((item) => item.key === key)!.value;
+
+  it("已經套過字體的選取範圍,預覽從原文算", () => {
+    expect(fontPreviewSample(styled("Tool Box", "boldFraktur"), 12)).toBe("Tool Box");
+  });
+
+  it("截斷不會把代理對切成一半", () => {
+    const preview = fontPreviewSample(`${styled("Tool Box", "boldFraktur")} 搬新家了`, 6);
+    expect(preview).toBe("Tool B");
+    expect(preview).not.toContain("\uFFFD");
   });
 });
 

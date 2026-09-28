@@ -108,7 +108,8 @@ function validateMarkdown(content: string): ValidationResult {
   const lines = content.split("\n");
 
   lines.forEach((line, index) => {
-    if (/^#{1,6}\S/.test(line)) {
+    // 排除 #:否則 "## 標題" 會被 #{1,6} 只吃一個 #、第二個 # 當成 \S 而誤報
+    if (/^#{1,6}[^\s#]/.test(line)) {
       warnings.push(`第 ${index + 1} 行標題 # 後面建議加空格。`);
     }
 
