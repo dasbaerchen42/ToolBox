@@ -17,6 +17,8 @@ import type { MergeLayout } from "@/lib/tools/image/merge";
 import type { Span } from "@/lib/tools/image/slice";
 import {
   applyFrame,
+  applyWatermark,
+  prepareWatermarkFont,
   applyMasks,
   clearColorCache,
   convertForOutput,
@@ -44,6 +46,7 @@ import MaskTool from "./_components/MaskTool";
 import SliceTool from "./_components/SliceTool";
 import MergeTool from "./_components/MergeTool";
 import FrameTool, { type FrameSettings } from "./_components/FrameTool";
+import WatermarkTool, { type WatermarkJob } from "./_components/WatermarkTool";
 import OutputTool from "./_components/OutputTool";
 
 /** 復原只留這麼多步:每一步都抓著一整組 blob,再多就開始吃記憶體 */
@@ -358,6 +361,34 @@ export default function ImageWorkbenchPage() {
       return `已套用到 ${results.length} 張。`;
     });
 
+  const handleWatermark = ({ watermark, noise, logo }: WatermarkJob) =>
+    run(async () => {
+      if (selected.length === 0) return;
+
+      // 字體只要備一次,每張圖共用
+      const fontFamily =
+        watermark.enabled && watermark.source === "text"
+          ? await prepareWatermarkFont(watermark)
+          : "sans-serif";
+
+      const done = new Map<string, WorkImage>();
+      for (const image of selected) {
+        done.set(
+          image.id,
+          await applyWatermark(image, watermark, noise, { logo, fontFamily }, WORKING_OUTPUT)
+        );
+      }
+
+      const results = [...done.values()];
+      track(results);
+
+      commit(
+        images.map((image) => done.get(image.id) ?? image),
+        selectedIds.map((id) => done.get(id)?.id ?? id)
+      );
+      return `已壓上浮水印：${results.length} 張。`;
+    });
+
   const buildOutputFiles = async (targets: WorkImage[]) => {
     const files: ExportedImage[] = [];
     for (const [index, image] of targets.entries()) {
@@ -522,6 +553,15 @@ export default function ImageWorkbenchPage() {
             busy={busy}
             t={t}
             onApply={(settings) => void handleFrame(settings)}
+          />
+        )}
+
+        {tool === "watermark" && (
+          <WatermarkTool
+            images={selected}
+            busy={busy}
+            t={t}
+            onApply={(job) => void handleWatermark(job)}
           />
         )}
 
