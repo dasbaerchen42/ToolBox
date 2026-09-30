@@ -1,3 +1,4 @@
+import { getFontFamily } from "@/lib/editor-font";
 import { type FontFamilyName } from "@/lib/preferences";
 
 // 中文網路字體的 @font-face 宣告一套就有一兩百條 unicode-range,
@@ -41,4 +42,27 @@ export function ensureWebFont(font: FontFamilyName): Promise<void> {
     loading.set(font, task);
   }
   return task;
+}
+
+/**
+ * canvas 的 ctx.font 不認 CSS 變數,要先換成真正的字體名稱。
+ * 順便把這段文字要用到的字抓下來,畫的當下才不會用到備援字體。
+ */
+export async function canvasFontFamily(
+  font: FontFamilyName,
+  sample: string,
+  weight: number
+): Promise<string> {
+  await ensureWebFont(font);
+  const root = getComputedStyle(document.documentElement);
+  const family = getFontFamily(font).replace(
+    /var\((--[\w-]+)\)/g,
+    (_, name: string) => root.getPropertyValue(name).trim() || "sans-serif"
+  );
+  try {
+    await document.fonts?.load(`${weight} 48px ${family}`, sample);
+  } catch (error) {
+    console.warn("字體載入失敗:", error);
+  }
+  return family;
 }

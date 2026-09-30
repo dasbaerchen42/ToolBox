@@ -156,3 +156,43 @@ export function StationHint({ children, t }: { children: ReactNode; t: ThemeClas
     </p>
   );
 }
+
+/** 拉桿:標籤右邊直接顯示目前的值 */
+export function RangeField({
+  label,
+  display,
+  value,
+  min,
+  max,
+  step = 1,
+  onChange,
+  t,
+}: {
+  label: string;
+  display: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  onChange: (value: number) => void;
+  t: ThemeClasses;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between text-xs tracking-[0.08em]">
+        <span>{label}</span>
+        <span className={t.muted}>{display}</span>
+      </div>
+      <input
+        type="range"
+        aria-label={label}
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="w-full accent-(--accent)"
+      />
+    </div>
+  );
+}

@@ -6,12 +6,22 @@ import type { FrameLayout } from "./frame";
 import { baseNameOf, mimeFor, supportsAlpha } from "./format";
 import { spanToRect, type Span } from "./slice";
 import type { MergeLayout } from "./merge";
+import {
+  markScale,
+  seededRandom,
+  singleCenter,
+  tileCenters,
+  type NoiseSettings,
+  type WatermarkSettings,
+} from "./watermark";
+import { canvasFontFamily } from "@/lib/web-fonts";
 import type {
   Axis,
   MaskRect,
   OutputOptions,
   Point,
   Rect,
+  Size,
   WorkImage,
 } from "./types";
 
@@ -326,6 +336,269 @@ export async function applyFrame(
           layout.canvas.height - border
         );
       },
+    });
+
+    return toWorkImage(blob, image.name);
+  } finally {
+    bitmap.close();
+  }
+}
+
+/** 浮水印工具的預覽要自己畫,需要解碼後的圖 */
+export function loadBitmap(image: WorkImage): Promise<ImageBitmap> {
+  return decode(image.blob, image.name);
+}
+
+/**
+ * 讀進使用者上傳的浮水印圖。
+ * 去白底:接近純白的像素變透明,介於之間的依白的程度漸變,
+ * 簽名、Logo 掃描或截圖來的白底才不會留下一圈鋸齒白邊。
+ */
+export async function loadWatermarkImage(
+  blob: Blob,
+  fileName: string,
+  removeWhite: boolean
+): Promise<ImageBitmap> {
+  const bitmap = await decode(blob, fileName);
+  if (!removeWhite) return bitmap;
+
+  try {
+    assertCanvasSize(bitmap.width, bitmap.height);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) throw new Error("無法建立繪圖環境");
+
+    ctx.drawImage(bitmap, 0, 0);
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const px = data.data;
+    const OPAQUE_BELOW = 215;
+    const CLEAR_ABOVE = 245;
+    for (let i = 0; i < px.length; i += 4) {
+      const whiteness = Math.min(px[i], px[i + 1], px[i + 2]);
+      if (whiteness <= OPAQUE_BELOW) continue;
+      const keep =
+        whiteness >= CLEAR_ABOVE
+          ? 0
+          : (CLEAR_ABOVE - whiteness) / (CLEAR_ABOVE - OPAQUE_BELOW);
+      px[i + 3] = Math.round(px[i + 3] * keep);
+    }
+    ctx.putImageData(data, 0, 0);
+    return await createImageBitmap(canvas);
+  } finally {
+    bitmap.close();
+  }
+}
+
+export type WatermarkAssets = {
+  /** 圖片浮水印;文字浮水印時是 null */
+  logo: ImageBitmap | null;
+  /** 已經換成真實字體名稱的 font-family(見 prepareWatermarkFont) */
+  fontFamily: string;
+};
+
+const watermarkWeight = (settings: WatermarkSettings) => (settings.bold ? 700 : 400);
+
+/** 畫文字浮水印前先把字體備好;回傳可以直接塞進 ctx.font 的字體名稱 */
+export function prepareWatermarkFont(settings: WatermarkSettings): Promise<string> {
+  return canvasFontFamily(settings.fontKey, settings.text, watermarkWeight(settings));
+}
+
+let noiseTiles: { color: boolean; tile: HTMLCanvasElement } | null = null;
+
+/** 128×128 的雜訊磚,用固定種子,預覽與輸出的顆粒一模一樣 */
+function noiseTile(color: boolean): HTMLCanvasElement {
+  if (noiseTiles?.color === color) return noiseTiles.tile;
+
+  const size = 128;
+  const tile = document.createElement("canvas");
+  tile.width = size;
+  tile.height = size;
+  const ctx = tile.getContext("2d");
+  if (!ctx) throw new Error("無法建立繪圖環境");
+
+  const data = ctx.createImageData(size, size);
+  const random = seededRandom(20260930);
+  for (let i = 0; i < data.data.length; i += 4) {
+    const gray = random() * 255;
+    data.data[i] = color ? random() * 255 : gray;
+    data.data[i + 1] = color ? random() * 255 : gray;
+    data.data[i + 2] = color ? random() * 255 : gray;
+    data.data[i + 3] = 255;
+  }
+  ctx.putImageData(data, 0, 0);
+
+  noiseTiles = { color, tile };
+  return tile;
+}
+
+function drawNoise(
+  ctx: CanvasRenderingContext2D,
+  size: Size,
+  source: CanvasImageSource,
+  noise: NoiseSettings,
+  grainScale: number
+) {
+  const layer = document.createElement("canvas");
+  layer.width = Math.round(size.width);
+  layer.height = Math.round(size.height);
+  const lctx = layer.getContext("2d");
+  if (!lctx) throw new Error("無法建立繪圖環境");
+
+  const pattern = lctx.createPattern(noiseTile(noise.color), "repeat");
+  if (!pattern) return;
+  const grain = Math.max(0.25, noise.grain * grainScale);
+  pattern.setTransform(new DOMMatrix().scale(grain));
+
+  // 顆粒要銳利,放大時不要被抹成一團霧
+  lctx.imageSmoothingEnabled = false;
+  lctx.fillStyle = pattern;
+  lctx.fillRect(0, 0, layer.width, layer.height);
+
+  // 只留在原圖不透明的地方:透明背景的貼圖不會被灑出一片灰
+  lctx.globalCompositeOperation = "destination-in";
+  lctx.imageSmoothingEnabled = true;
+  lctx.drawImage(source, 0, 0, layer.width, layer.height);
+
+  ctx.save();
+  ctx.globalAlpha = noise.opacity;
+  ctx.globalCompositeOperation = noise.blend;
+  ctx.drawImage(layer, 0, 0);
+  ctx.restore();
+}
+
+/** 在原點畫一個浮水印(中心對齊原點),回傳它的大小給版面計算用 */
+function measureMark(
+  ctx: CanvasRenderingContext2D,
+  size: Size,
+  settings: WatermarkSettings,
+  assets: WatermarkAssets
+): { mark: Size; draw: () => void } | null {
+  const scale = markScale(
+    size,
+    settings.source === "image" ? settings.imageSize : settings.size
+  );
+
+  if (settings.source === "image") {
+    const logo = assets.logo;
+    if (!logo) return null;
+    const width = scale;
+    const height = (scale * logo.height) / logo.width;
+    return {
+      mark: { width, height },
+      draw: () => ctx.drawImage(logo, -width / 2, -height / 2, width, height),
+    };
+  }
+
+  const text = settings.text.trim();
+  if (!text) return null;
+
+  ctx.font = `${watermarkWeight(settings)} ${scale}px ${assets.fontFamily}`;
+  const textWidth = ctx.measureText(text).width;
+  const pill = settings.frame === "pill";
+  const padX = pill ? scale * 0.7 : 0;
+  const padY = pill ? scale * 0.4 : scale * 0.1;
+  const width = textWidth + padX * 2;
+  const height = scale + padY * 2;
+  const line = Math.max(1, scale * 0.08);
+
+  return {
+    mark: { width, height },
+    draw: () => {
+      ctx.fillStyle = settings.color;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, 0, 0);
+      if (!pill) return;
+      ctx.strokeStyle = settings.color;
+      ctx.lineWidth = line;
+      ctx.beginPath();
+      ctx.roundRect(
+        -width / 2 + line / 2,
+        -height / 2 + line / 2,
+        width - line,
+        height - line,
+        (height - line) / 2
+      );
+      ctx.stroke();
+    },
+  };
+}
+
+function drawMarks(
+  ctx: CanvasRenderingContext2D,
+  size: Size,
+  settings: WatermarkSettings,
+  assets: WatermarkAssets
+) {
+  ctx.save();
+  const measured = measureMark(ctx, size, settings, assets);
+  if (!measured) {
+    ctx.restore();
+    return;
+  }
+
+  const { mark, draw } = measured;
+  const rad = (settings.angle * Math.PI) / 180;
+  ctx.globalAlpha = settings.opacity;
+
+  if (settings.layout === "tile") {
+    ctx.translate(size.width / 2, size.height / 2);
+    ctx.rotate(rad);
+    for (const point of tileCenters(size, mark, settings.spacing)) {
+      ctx.save();
+      ctx.translate(point.x, point.y);
+      draw();
+      ctx.restore();
+    }
+  } else {
+    const center = singleCenter(size, mark, settings.angle, settings.anchor, settings.margin);
+    ctx.translate(center.x, center.y);
+    ctx.rotate(rad);
+    draw();
+  }
+
+  ctx.restore();
+}
+
+/**
+ * 原圖 → 雜訊 → 浮水印。預覽與輸出都走這一支,只差在畫布大小。
+ * 大小都是相對短邊的比例,縮小的預覽畫出來就是等比例的樣子;
+ * 只有雜訊顆粒是絕對像素,預覽要傳 grainScale 等比縮。
+ */
+export function drawWatermarkLayers(
+  ctx: CanvasRenderingContext2D,
+  size: Size,
+  source: CanvasImageSource,
+  watermark: WatermarkSettings,
+  noise: NoiseSettings,
+  assets: WatermarkAssets,
+  grainScale = 1
+) {
+  ctx.drawImage(source, 0, 0, size.width, size.height);
+  if (noise.enabled) drawNoise(ctx, size, source, noise, grainScale);
+  if (watermark.enabled) drawMarks(ctx, size, watermark, assets);
+}
+
+/** 浮水印:壓平成新圖 */
+export async function applyWatermark(
+  image: WorkImage,
+  watermark: WatermarkSettings,
+  noise: NoiseSettings,
+  assets: WatermarkAssets,
+  output: OutputOptions
+): Promise<WorkImage> {
+  const bitmap = await decode(image.blob, image.name);
+
+  try {
+    const blob = await drawToBlob({
+      width: image.width,
+      height: image.height,
+      background: null,
+      output,
+      draw: (ctx) =>
+        drawWatermarkLayers(ctx, image, bitmap, watermark, noise, assets),
     });
 
     return toWorkImage(blob, image.name);
