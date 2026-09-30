@@ -49,3 +49,51 @@ export function downloadBlob({ name, blob }: ExportedImage): void {
   // 立刻 revoke 有機會讓瀏覽器來不及讀到檔名,延後釋放
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
+
+let shareSupport: boolean | null = null;
+
+/**
+ * 瀏覽器能不能把圖片檔交給系統的分享選單。
+ * 手機上那個選單裡就有「儲存影像」,這是網頁唯一能直接把圖放進相簿的路。
+ * 桌機多半不支援,那就只顯示下載。
+ */
+export function canShareImages(): boolean {
+  if (shareSupport !== null) return shareSupport;
+  if (typeof navigator === "undefined" || typeof File === "undefined") return false;
+  try {
+    const probe = new File([new Uint8Array(1)], "probe.png", { type: "image/png" });
+    shareSupport = navigator.canShare?.({ files: [probe] }) ?? false;
+  } catch {
+    shareSupport = false;
+  }
+  return shareSupport;
+}
+
+/**
+ * shared:已交給系統(使用者選了存相簿或傳給誰)
+ * cancelled:使用者自己把選單關掉
+ * needs-tap:瀏覽器認為這次不算「使用者剛按下去」——
+ *   產圖花太久,按鈕帶來的授權過期了。圖已經在手上,再按一次就會成功。
+ */
+export type ShareResult = "shared" | "cancelled" | "needs-tap";
+
+export async function shareImages(images: ExportedImage[]): Promise<ShareResult> {
+  const files = images.map(
+    ({ name, blob }) => new File([blob], name, { type: blob.type || "image/png" })
+  );
+  if (!navigator.canShare?.({ files })) {
+    throw new Error("這個瀏覽器無法分享這些圖片");
+  }
+
+  try {
+    // 刻意不帶 title/text:有些 App 收到文字就不把它當成純圖片分享
+    await navigator.share({ files });
+    return "shared";
+  } catch (error) {
+    if (error instanceof DOMException) {
+      if (error.name === "AbortError") return "cancelled";
+      if (error.name === "NotAllowedError") return "needs-tap";
+    }
+    throw error;
+  }
+}

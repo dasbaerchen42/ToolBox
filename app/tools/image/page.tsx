@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getThemeClasses } from "@/lib/theme";
 import { readClipboardImages, readPasteImages } from "@/lib/clipboard";
-import { downloadBlob, zipImages, type ExportedImage } from "@/lib/download";
+import {
+  downloadBlob,
+  shareImages,
+  zipImages,
+  type ExportedImage,
+} from "@/lib/download";
+import { useCanShareImages } from "@/hooks/useCanShareImages";
 import { CanvasTooLargeError } from "@/lib/canvas-limits";
 import { borderLayout, ratioLayout } from "@/lib/tools/image/frame";
 import { buildFileName } from "@/lib/tools/image/format";
@@ -53,6 +59,8 @@ export default function ImageWorkbenchPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [history, setHistory] = useState<WorkImage[][]>([]);
   const [busy, setBusy] = useState(false);
+  const canShare = useCanShareImages();
+  const pendingShareRef = useRef<{ key: string; files: ExportedImage[] } | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const [output, setOutput] = useState<OutputOptions>({
     format: "png",
@@ -350,18 +358,22 @@ export default function ImageWorkbenchPage() {
       return `已套用到 ${results.length} 張。`;
     });
 
+  const buildOutputFiles = async (targets: WorkImage[]) => {
+    const files: ExportedImage[] = [];
+    for (const [index, image] of targets.entries()) {
+      files.push({
+        name: buildFileName(image.name, output.format, index, targets.length),
+        blob: await convertForOutput(image, output),
+      });
+    }
+    return files;
+  };
+
   const handleDownload = (targets: WorkImage[]) =>
     run(async () => {
       if (targets.length === 0) return;
 
-      const files: ExportedImage[] = [];
-
-      for (const [index, image] of targets.entries()) {
-        files.push({
-          name: buildFileName(image.name, output.format, index, targets.length),
-          blob: await convertForOutput(image, output),
-        });
-      }
+      const files = await buildOutputFiles(targets);
 
       if (files.length === 1) {
         downloadBlob(files[0]);
@@ -370,6 +382,35 @@ export default function ImageWorkbenchPage() {
 
       downloadBlob(await zipImages(files, `${targets[0].name}-${files.length}張`));
       return `已打包 ${files.length} 張。`;
+    });
+
+  const outputKey = (targets: WorkImage[]) =>
+    JSON.stringify([targets.map((image) => image.id), output]);
+
+  const handleShare = (targets: WorkImage[]) =>
+    run(async () => {
+      if (targets.length === 0) return;
+
+      // 上一次轉好了但被瀏覽器擋下來的那批:同樣的圖、同樣的格式就直接拿來分享,
+      // 這樣 share 前面沒有任何 await,按鈕的授權一定還有效。
+      const key = outputKey(targets);
+      const pending = pendingShareRef.current;
+      const reuse = pending?.key === key;
+      const files = reuse ? pending.files : await buildOutputFiles(targets);
+      pendingShareRef.current = null;
+
+      let result;
+      try {
+        result = await shareImages(files);
+      } catch (error) {
+        console.error(error);
+        return "這個瀏覽器沒辦法分享這種格式，請改用下載。";
+      }
+      if (result === "needs-tap") {
+        pendingShareRef.current = { key, files };
+        return "圖準備好了，再按一次「存到相簿／分享」就會開啟選單。";
+      }
+      return result === "shared" ? `已交給分享選單（${files.length} 張）。` : undefined;
     });
 
   const handleReadClipboard = () =>
@@ -493,6 +534,7 @@ export default function ImageWorkbenchPage() {
             t={t}
             onChange={setOutput}
             onDownload={(targets) => void handleDownload(targets)}
+            onShare={canShare ? (targets) => void handleShare(targets) : undefined}
           />
         )}
       </WorkbenchShell>

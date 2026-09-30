@@ -2,6 +2,7 @@ import {
   EditorPreferences,
   FontFamilyName,
 } from "@/lib/preferences";
+import { FONT_OPTIONS } from "@/lib/editor-font";
 import { WritingMode } from "@/lib/storage";
 import type { EditorThemeConfig } from "@/lib/theme";
 
@@ -16,13 +17,6 @@ type EditorSettingsPanelProps = {
   adjustLetterSpacing: (amount: number) => void;
 };
 
-const fontOptions: { key: FontFamilyName; label: string }[] = [
-  { key: "sans", label: "無襯線" },
-  { key: "serif", label: "襯線" },
-  { key: "mono", label: "等寬" },
-  { key: "cursive", label: "手寫感" },
-  { key: "round", label: "粉圓" },
-];
 
 const modeOptions: { value: WritingMode; label: string }[] = [
   { value: "plain", label: "Plain" },
@@ -77,7 +71,7 @@ export default function EditorSettingsPanel({
           }
           className={`w-full rounded-2xl border px-4 py-3 text-sm font-medium tracking-[0.04em] outline-none ${theme.border} ${theme.inputBg}`}
         >
-          {fontOptions.map((font) => (
+          {FONT_OPTIONS.map((font) => (
             <option key={font.key} value={font.key}>
               {font.label}
             </option>
