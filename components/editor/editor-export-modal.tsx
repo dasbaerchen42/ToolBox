@@ -10,7 +10,11 @@ import {
   type EditorPreferences,
   type ExportImageWidth,
   type ExportPaginate,
+  type FontFamilyName,
 } from "@/lib/preferences";
+import { FONT_OPTIONS, getFontFamily } from "@/lib/editor-font";
+import { shareImages } from "@/lib/download";
+import { useCanShareImages } from "@/hooks/useCanShareImages";
 import { type WritingMode } from "@/lib/storage";
 import {
   isRenderableMode,
@@ -69,6 +73,7 @@ export default function EditorExportModal({
   const [status, setStatus] = useState<string | null>(null);
   const anchorRef = useRef<number | null>(null);
   const urlsRef = useRef<string[]>([]);
+  const canShare = useCanShareImages();
 
   const revokeUrls = useCallback(() => {
     for (const url of urlsRef.current) URL.revokeObjectURL(url);
@@ -260,6 +265,34 @@ export default function EditorExportModal({
     }
   }
 
+  async function share() {
+    if (!images) return;
+    const picked = images.filter((_, index) => pickedPages.has(index));
+    if (picked.length === 0) {
+      setStatus("至少要挑一張。");
+      return;
+    }
+
+    // 圖已經產好了,這裡不能再有任何耗時的 await 擋在 share 前面:
+    // 手機瀏覽器只給按鈕一小段時間的授權,過了就會拒絕開分享選單。
+    setBusy(true);
+    try {
+      const result = await shareImages(picked);
+      setStatus(
+        result === "shared"
+          ? `已交給分享選單（${picked.length} 張）。`
+          : result === "cancelled"
+            ? null
+            : "瀏覽器擋下了這次分享，請再按一次。"
+      );
+    } catch (error) {
+      console.error("分享失敗：", error);
+      setStatus("這個瀏覽器沒辦法分享圖片，請改用下載。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!open) return null;
 
   return (
@@ -319,6 +352,21 @@ export default function EditorExportModal({
             ))}
           </select>
 
+          <select
+            value={preferences.fontFamily}
+            onChange={(e) =>
+              updatePreference({ fontFamily: e.target.value as FontFamilyName })
+            }
+            className={`rounded-2xl border px-3 py-1.5 outline-none ${theme.border} ${theme.inputBg}`}
+            aria-label="字體"
+          >
+            {FONT_OPTIONS.map((font) => (
+              <option key={font.key} value={font.key}>
+                {font.label}
+              </option>
+            ))}
+          </select>
+
           <label className={`flex items-center gap-2 ${theme.mutedText}`}>
             <input
               type="checkbox"
@@ -372,7 +420,10 @@ export default function EditorExportModal({
           {blocks.length === 0 ? (
             <p className={`text-sm ${theme.mutedText}`}>沒有內容可以轉圖。</p>
           ) : (
-            <div className="md-preview">
+            <div
+              className="md-preview"
+              style={{ fontFamily: getFontFamily(preferences.fontFamily) }}
+            >
               {blocks.map((block, index) => (
                 <div key={index}>
                   <div
@@ -478,6 +529,16 @@ export default function EditorExportModal({
               className={`rounded-2xl border px-4 py-2 text-sm transition disabled:opacity-50 ${theme.border} ${theme.primaryButton} ${theme.primaryButtonText}`}
             >
               下載選取的（{pickedPages.size}）
+            </button>
+          )}
+          {images && canShare && (
+            <button
+              type="button"
+              onClick={share}
+              disabled={busy}
+              className={`rounded-2xl border px-4 py-2 text-sm transition disabled:opacity-50 ${theme.border} ${theme.primaryButton} ${theme.primaryButtonText}`}
+            >
+              存到相簿／分享（{pickedPages.size}）
             </button>
           )}
         </div>

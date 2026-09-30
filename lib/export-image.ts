@@ -1,4 +1,5 @@
 import { getFontFamily } from "@/lib/editor-font";
+import { ensureWebFont } from "@/lib/web-fonts";
 import { type EditorPreferences } from "@/lib/preferences";
 import { DEVICE_MAX_AREA, DEVICE_MAX_SIDE } from "@/lib/canvas-limits";
 import {
@@ -69,6 +70,32 @@ function toBlob(canvas: HTMLCanvasElement): Promise<Blob> {
       else reject(new Error("無法產生圖片檔"));
     }, "image/png");
   });
+}
+
+/**
+ * 中文網路字體被切成上百片,瀏覽器要等真的排版到那些字才開始抓。
+ * 剛選的字體、剛插進畫面外的節點,document.fonts.ready 可能在抓之前就 resolve 了,
+ * 只等它會截到系統字。這裡直接要求載入「這段內容會用到的字」(一般與粗體各一次)。
+ */
+async function loadFontsFor(page: HTMLElement): Promise<void> {
+  if (!document.fonts?.load) return;
+  const { fontSize, fontFamily } = getComputedStyle(page);
+  const text = page.textContent ?? "";
+  if (!text.trim()) return;
+  // 粗體是另一組字檔,只替真的是粗體的那些字抓,不然整篇會多下載一倍
+  const boldText = Array.from(
+    page.querySelectorAll("strong, b, h1, h2, h3, h4, h5, h6, th, .md-preview-title"),
+    (el) => el.textContent ?? ""
+  ).join("");
+  try {
+    await Promise.all([
+      document.fonts.load(`${fontSize} ${fontFamily}`, text),
+      boldText && document.fonts.load(`bold ${fontSize} ${fontFamily}`, boldText),
+    ]);
+  } catch (error) {
+    // 字載不到就用備援字體截,不要讓整張圖失敗
+    console.warn("字體載入失敗:", error);
+  }
 }
 
 /** 一頁內容區(不含留白)最多能有多高,超過就得換頁 */
@@ -226,6 +253,8 @@ export async function exportContentToImages({
 
   try {
     // 不等字型載完就截圖,粉圓體會掉回系統字
+    await ensureWebFont(preferences.fontFamily);
+    await loadFontsFor(page);
     if (document.fonts?.ready) await document.fonts.ready;
 
     const maxHeight = maxContentHeight(width, padding);

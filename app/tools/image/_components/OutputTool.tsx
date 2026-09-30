@@ -19,6 +19,8 @@ type Props = {
   t: ThemeClasses;
   onChange: (output: OutputOptions) => void;
   onDownload: (images: WorkImage[]) => void;
+  /** 瀏覽器不支援分享圖片時不傳,按鈕就不出現 */
+  onShare?: (images: WorkImage[]) => void;
 };
 
 export default function OutputTool({
@@ -29,6 +31,7 @@ export default function OutputTool({
   t,
   onChange,
   onDownload,
+  onShare,
 }: Props) {
   const update = <K extends keyof OutputOptions>(key: K, value: OutputOptions[K]) =>
     onChange({ ...output, [key]: value });
@@ -134,6 +137,20 @@ export default function OutputTool({
             >
               下載全部 {images.length} 張
             </ActionButton>
+            {onShare && (
+              <>
+                <ActionButton
+                  t={t}
+                  onClick={() => onShare(selected.length > 0 ? selected : images)}
+                  disabled={images.length === 0 || busy}
+                >
+                  存到相簿／分享 {selected.length > 0 ? selected.length : images.length} 張
+                </ActionButton>
+                <p className={`text-xs ${t.muted}`}>
+                  會打開手機的分享選單，選「儲存影像」就會進相簿。一張一張給，不打包 zip。
+                </p>
+              </>
+            )}
             <p className={`text-xs ${t.muted}`}>目前暫存 {formatBytes(totalBytes)}</p>
           </div>
         </>

@@ -6,6 +6,7 @@ import {
   type EditorPreferences,
   defaultPreferences,
 } from "@/lib/preferences";
+import { ensureWebFont } from "@/lib/web-fonts";
 
 export function useEditorPreferences() {
   const [preferences, setPreferences] =
@@ -32,6 +33,11 @@ export function useEditorPreferences() {
     if (!loaded) return;
     localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences));
   }, [preferences, loaded]);
+
+  // 中文網路字體是選到才載入的
+  useEffect(() => {
+    void ensureWebFont(preferences.fontFamily);
+  }, [preferences.fontFamily]);
 
   function adjustFontSize(amount: number) {
     setPreferences((prev) => ({
