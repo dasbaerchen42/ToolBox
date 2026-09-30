@@ -44,9 +44,10 @@ type Props = {
   onApply: (job: WatermarkJob) => void;
 };
 
-/** 預覽畫布的長邊上限:夠看清楚顆粒與間距,又不至於每動一下拉桿都重畫一張大圖 */
-const PREVIEW_MAX = 900;
-const PREVIEW_MAX_HEIGHT = 460;
+/** 預覽畫布的長邊上限:放大到整個預覽區也不糊,又不至於每動一下拉桿都重畫一張原圖 */
+const PREVIEW_MAX = 1600;
+/** 預覽最高佔視窗多少:直式圖才能用滿預覽區,不會被壓成窄窄一條 */
+const PREVIEW_MAX_VH = 75;
 
 // 設定與上傳過的浮水印圖都記在這台瀏覽器,下次打開不用重設
 const SETTINGS_KEY = "toolbox-watermark-settings";
@@ -119,6 +120,9 @@ export default function WatermarkTool({ images, busy, t, onApply }: Props) {
   const [restored, setRestored] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  // 原尺寸檢視:記住點下去的位置(0–1),畫完原尺寸之後捲到那裡
+  const [zoomAt, setZoomAt] = useState<{ x: number; y: number } | null>(null);
   const logoInput = useRef<HTMLInputElement>(null);
   const bitmapRef = useRef<{ id: string; bitmap: ImageBitmap } | null>(null);
 
@@ -193,7 +197,10 @@ export default function WatermarkTool({ images, busy, t, onApply }: Props) {
       const source = bitmapRef.current?.bitmap;
       if (cancelled || !canvas || !source) return;
 
-      const scale = Math.min(1, PREVIEW_MAX / Math.max(sample.width, sample.height));
+      // 原尺寸檢視時畫原圖大小:顆粒與浮水印密度要看實際像素才準
+      const scale = zoomAt
+        ? 1
+        : Math.min(1, PREVIEW_MAX / Math.max(sample.width, sample.height));
       const size = {
         width: Math.max(1, Math.round(sample.width * scale)),
         height: Math.max(1, Math.round(sample.height * scale)),
@@ -204,12 +211,18 @@ export default function WatermarkTool({ images, busy, t, onApply }: Props) {
       if (!ctx) return;
       ctx.clearRect(0, 0, size.width, size.height);
       drawWatermarkLayers(ctx, size, source, watermark, noise, { logo, fontFamily }, scale);
+
+      const frame = frameRef.current;
+      if (zoomAt && frame) {
+        frame.scrollLeft = zoomAt.x * frame.scrollWidth - frame.clientWidth / 2;
+        frame.scrollTop = zoomAt.y * frame.scrollHeight - frame.clientHeight / 2;
+      }
     })().catch((error: unknown) => console.error("預覽失敗:", error));
 
     return () => {
       cancelled = true;
     };
-  }, [sample, watermark, noise, logo]);
+  }, [sample, watermark, noise, logo, zoomAt]);
 
   useEffect(
     () => () => {
@@ -237,25 +250,48 @@ export default function WatermarkTool({ images, busy, t, onApply }: Props) {
     watermark.source === "text" ? watermark.text.trim().length > 0 : logo !== null;
   const canApply = (watermark.enabled && markReady) || noise.enabled;
   const aspect = sample.width / sample.height;
+  // 原尺寸 = 一個圖片像素對一個螢幕實體像素,高解析度螢幕上要除掉 DPR
+  const dpr = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
 
   return (
     <ToolPane
       workspace={
         <div className="space-y-2">
-          <div className="flex justify-center overflow-hidden rounded-2xl border border-(--border-light) bg-(--paper-bg-3) p-3">
+          <div
+            ref={frameRef}
+            className={`flex rounded-2xl border border-(--border-light) bg-(--paper-bg-3) p-3 ${
+              zoomAt ? "items-start overflow-auto" : "justify-center overflow-hidden"
+            }`}
+            style={zoomAt ? { maxHeight: `${PREVIEW_MAX_VH}dvh` } : undefined}
+          >
             <canvas
               ref={canvasRef}
               aria-label="浮水印預覽"
+              title={zoomAt ? "點一下回到全圖" : "點一下看原尺寸"}
+              onClick={(event) => {
+                if (zoomAt) {
+                  setZoomAt(null);
+                  return;
+                }
+                const box = event.currentTarget.getBoundingClientRect();
+                setZoomAt({
+                  x: (event.clientX - box.left) / box.width,
+                  y: (event.clientY - box.top) / box.height,
+                });
+              }}
+              className={zoomAt ? "shrink-0 cursor-zoom-out" : "cursor-zoom-in"}
               style={{
                 aspectRatio: `${sample.width} / ${sample.height}`,
-                width: "100%",
-                maxWidth: PREVIEW_MAX_HEIGHT * aspect,
+                ...(zoomAt
+                  ? { width: sample.width / dpr, height: sample.height / dpr, maxWidth: "none" }
+                  : { width: "100%", maxWidth: `calc(${PREVIEW_MAX_VH}dvh * ${aspect})` }),
                 ...backgroundStyle(null),
               }}
             />
           </div>
           <p className={`text-center text-xs ${t.muted}`}>
-            以「{sample.name}」為例：{sample.width} × {sample.height}
+            以「{sample.name}」為例：{sample.width} × {sample.height}・
+            {zoomAt ? "原尺寸檢視，點圖回到全圖" : "點圖任一處看原尺寸"}
           </p>
         </div>
       }
