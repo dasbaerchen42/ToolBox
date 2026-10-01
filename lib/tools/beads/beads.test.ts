@@ -1,7 +1,10 @@
 import { hexToRgb, labDistanceSq, linearToSrgb, rgbToHex, rgbToOklab, shade, srgbToLinear } from "./color";
 import { DEFAULT_PALETTE, paletteLab } from "./palette";
 import {
+  boardSize,
   clearColors,
+  MAX_BOARD_SIDE,
+  sampleMajority,
   countColors,
   dropOrder,
   fitRect,
@@ -225,5 +228,88 @@ describe("draw:熨燙參數", () => {
     expect(meltGeometry(2)).toEqual(meltGeometry(1));
     expect(smoothstep(-1)).toBe(0);
     expect(smoothstep(0.5)).toBe(0.5);
+  });
+});
+
+describe("pattern:板子大小", () => {
+  it("照照片比例:寬固定,高跟著照片算", () => {
+    expect(boardSize(1000, 500, 58, "aspect")).toEqual({ cols: 58, rows: 29 });
+    expect(boardSize(484, 258, 116, "aspect")).toEqual({ cols: 116, rows: 62 });
+  });
+
+  it("正方形就是寬×寬", () => {
+    expect(boardSize(1000, 500, 58, "square")).toEqual({ cols: 58, rows: 58 });
+  });
+
+  it("很高的直幅照片:高頂到上限,寬照比例縮", () => {
+    const size = boardSize(500, 2000, 116, "aspect");
+    expect(size.rows).toBe(MAX_BOARD_SIDE);
+    expect(size.cols).toBe(29);
+  });
+
+  it("超寬的照片高度至少一格", () => {
+    expect(boardSize(10000, 10, 29, "aspect").rows).toBe(1);
+  });
+});
+
+describe("pattern:取主色", () => {
+  const sampleOf = (hex: string) => rgbToOklab(hexToRgb(hex));
+
+  it("一條細黑線穿過淺色格子:平均會變灰,主色維持背景色", () => {
+    // 1 格 10×10:左邊 3 欄是黑線,其餘是白
+    const pixels = makePixels(10, 10, (x) => (x < 3 ? [13, 0, 21, 255] : [255, 255, 255, 255]));
+    const [majority] = sampleMajority(pixels, 1, 1, labs);
+    expect(majority).toBe(labs[indexOf("白")]);
+
+    const [average] = sampleCells(pixels, 1, 1);
+    const [cell] = matchPalette([average], labs, 99);
+    expect(cell).not.toBe(indexOf("白"));
+    expect(cell).not.toBe(indexOf("漆黒"));
+  });
+
+  it("線條佔多數的格子就是線條色", () => {
+    const pixels = makePixels(10, 10, (x) => (x < 6 ? [13, 0, 21, 255] : [255, 255, 255, 255]));
+    expect(sampleMajority(pixels, 1, 1, labs)[0]).toBe(labs[indexOf("漆黒")]);
+  });
+
+  it("透明的格子是空格,半透明的邊不投票", () => {
+    const pixels = makePixels(20, 10, (x) =>
+      x < 10 ? [0, 0, 0, 0] : x < 12 ? [255, 255, 255, 60] : [226, 4, 27, 255]
+    );
+    const [left, right] = sampleMajority(pixels, 2, 1, labs);
+    expect(left).toBeNull();
+    expect(right).toBe(labs[indexOf("猩々緋")]);
+  });
+
+  it("結果可以直接接 matchPalette", () => {
+    const pixels = makePixels(4, 2, (x) => (x < 2 ? [255, 255, 255, 255] : [226, 4, 27, 255]));
+    const cells = matchPalette(sampleMajority(pixels, 2, 1, labs), labs, 99);
+    expect(cells).toEqual([indexOf("白"), indexOf("猩々緋")]);
+    expect(sampleOf("#ffffff")).toEqual(labs[indexOf("白")]);
+  });
+});
+
+describe("pattern:併掉稀有色", () => {
+  const sampleOf = (hex: string) => rgbToOklab(hexToRgb(hex));
+  const samples = [
+    ...Array(10).fill(sampleOf(hexOf("白"))),
+    ...Array(6).fill(sampleOf(hexOf("漆黒"))),
+    ...Array(2).fill(sampleOf(hexOf("紫黒"))),
+  ];
+
+  it("門檻 0 就不併", () => {
+    expect(countColors(matchPalette(samples, labs, 99, 0))).toHaveLength(3);
+  });
+
+  it("少於門檻的顏色併進最接近的顏色,色數上限沒到也一樣", () => {
+    const cells = matchPalette(samples, labs, 99, 5);
+    expect(countColors(cells)).toEqual([
+      { index: indexOf("白"), count: 10 },
+      { index: indexOf("漆黒"), count: 8 },
+    ]);
+  });
+
+  it("門檻比所有顏色都高時至少留一色", () => {
+    expect(countColors(matchPalette(samples, labs, 99, 1000))).toHaveLength(1);
   });
 });

@@ -1,12 +1,30 @@
 // 照片 → 格子資料。全部是純函式,不碰 canvas,方便單獨測試。
 //
-// 管線:照片先畫成每格 SAMPLES×SAMPLES 個像素的小圖(這一步在瀏覽器裡做),
-// 再由這裡把每一格平均成一個顏色、換成最接近的豆子、最後壓到指定色數。
+// 管線:照片先畫成每格 N×N 個像素的小圖(這一步在瀏覽器裡做),
+// 再由這裡決定每一格的顏色(平均或取主色)、換成最接近的豆子、最後壓到指定色數。
 
 import { labDistanceSq, linearToOklab, srgbToLinear, type Lab } from "./color";
 
 /** 一格取樣幾×幾個像素來平均;太少會被雜點帶偏,太多只是白算 */
 export const SAMPLES = 6;
+
+/**
+ * 取主色時一格看幾×幾個像素。要比平均法多:
+ * 細線只佔格子的一小條,像素太少的話線條那一色永遠搶不到票。
+ */
+export const MAJORITY_SAMPLES = 10;
+
+/**
+ * average:每格取平均色。照片的漸層比較順,但細線會跟背景平均成中間色。
+ * majority:每格先把每個像素換成豆子色,取出現最多的那一色。插畫的線條與色塊會乾淨很多。
+ */
+export type SampleMethod = "average" | "majority";
+
+/** 板子形狀:依照片比例(寬固定、高跟著照片算)或正方形 */
+export type BoardShape = "aspect" | "square";
+
+/** 板子邊長的上限:116 = 2×2 塊大板 */
+export const MAX_BOARD_SIDE = 116;
 
 /** 一格平均後的不透明度沒超過這個就當作空格(透明 PNG 的背景、完整放進時的留白) */
 const EMPTY_ALPHA = 0.5;
@@ -49,6 +67,30 @@ export function fitRect(
   const height = srcHeight * scale;
 
   return { x: (cols - width) / 2, y: (rows - height) / 2, width, height };
+}
+
+/**
+ * 板子要幾格寬、幾格高。依照片比例時高度跟著照片算,
+ * 但至少 1 格、最多 MAX_BOARD_SIDE 格(太高的直幅照片會改成以高為準縮寬)。
+ */
+export function boardSize(
+  photoWidth: number,
+  photoHeight: number,
+  width: number,
+  shape: BoardShape
+): { cols: number; rows: number } {
+  if (shape === "square" || photoWidth <= 0 || photoHeight <= 0) {
+    return { cols: width, rows: width };
+  }
+
+  const rows = Math.round((width * photoHeight) / photoWidth);
+  if (rows <= MAX_BOARD_SIDE) return { cols: width, rows: Math.max(1, rows) };
+
+  // 很高的直幅照片:高度頂到上限,寬度照比例縮
+  return {
+    cols: Math.max(1, Math.round((MAX_BOARD_SIDE * photoWidth) / photoHeight)),
+    rows: MAX_BOARD_SIDE,
+  };
 }
 
 /** 一格的平均色;null 是空格 */
@@ -100,6 +142,78 @@ export function sampleCells(pixels: PixelData, cols: number, rows: number): Cell
   return samples;
 }
 
+/**
+ * 每格取主色:格內每個像素先找最接近的豆子,票數最多的那一色就是這格的顏色。
+ * 回傳那顆豆子的 OKLab 值,後面壓色數時拿它重新配對。
+ *
+ * 插畫裡同一個顏色會重複出現很多次,所以「像素色 → 豆子」用快取,
+ * 不然大板(116 格)要比對上億次。
+ */
+export function sampleMajority(
+  pixels: PixelData,
+  cols: number,
+  rows: number,
+  palette: Lab[]
+): CellSample[] {
+  const cellWidth = pixels.width / cols;
+  const cellHeight = pixels.height / rows;
+  const all = palette.map((_, index) => index);
+  const cache = new Map<number, number>();
+  const votes = new Float64Array(palette.length);
+  const samples: CellSample[] = [];
+
+  for (let row = 0; row < rows; row += 1) {
+    const y0 = Math.floor(row * cellHeight);
+    const y1 = Math.max(y0 + 1, Math.floor((row + 1) * cellHeight));
+
+    for (let col = 0; col < cols; col += 1) {
+      const x0 = Math.floor(col * cellWidth);
+      const x1 = Math.max(x0 + 1, Math.floor((col + 1) * cellWidth));
+
+      votes.fill(0);
+      let alpha = 0;
+      let count = 0;
+
+      for (let y = y0; y < y1; y += 1) {
+        for (let x = x0; x < x1; x += 1) {
+          const i = (y * pixels.width + x) * 4;
+          const a = pixels.data[i + 3] / 255;
+          count += 1;
+          alpha += a;
+          // 幾乎透明的像素(去背圖的邊)不投票,免得邊緣被染成背景色
+          if (a <= EMPTY_ALPHA) continue;
+
+          const key = (pixels.data[i] << 16) | (pixels.data[i + 1] << 8) | pixels.data[i + 2];
+          let bead = cache.get(key);
+          if (bead === undefined) {
+            const lab = linearToOklab(
+              srgbToLinear(pixels.data[i]),
+              srgbToLinear(pixels.data[i + 1]),
+              srgbToLinear(pixels.data[i + 2])
+            );
+            bead = nearest(lab, palette, all);
+            cache.set(key, bead);
+          }
+          votes[bead] += a;
+        }
+      }
+
+      if (count === 0 || alpha / count <= EMPTY_ALPHA) {
+        samples.push(null);
+        continue;
+      }
+
+      let best = 0;
+      for (let index = 1; index < votes.length; index += 1) {
+        if (votes[index] > votes[best]) best = index;
+      }
+      samples.push(palette[best]);
+    }
+  }
+
+  return samples;
+}
+
 function nearest(sample: Lab, palette: Lab[], allowed: number[]): number {
   let best = allowed[0];
   let bestDistance = Infinity;
@@ -116,16 +230,19 @@ function nearest(sample: Lab, palette: Lab[], allowed: number[]): number {
 }
 
 /**
- * 每格換成最接近的豆子,再把色數壓到 maxColors 以下。
+ * 每格換成最接近的豆子,再把色數壓到 maxColors 以下、
+ * 並把用量少於 minCount 顆的顏色併掉(實際去拼時,為了一兩顆買一整包不划算)。
  *
- * 壓色數的做法:每次拿掉用量最少的那一色,原本用它的格子
- * 拿「原始的平均色」重新找最近的豆子——不是找離被拿掉那顆豆子最近的,
+ * 做法:每次拿掉用量最少的那一色,原本用它的格子
+ * 拿「原始的取樣色」重新找最近的豆子——不是找離被拿掉那顆豆子最近的,
  * 否則一路換下去顏色會越漂越遠。不抖色,保留一格一色的味道。
+ * 不管門檻多高,至少留一色。
  */
 export function matchPalette(
   samples: CellSample[],
   palette: Lab[],
-  maxColors: number
+  maxColors: number,
+  minCount = 0
 ): number[] {
   let allowed = palette.map((_, index) => index);
   const cells = samples.map((sample) => (sample ? nearest(sample, palette, allowed) : -1));
@@ -136,7 +253,9 @@ export function matchPalette(
     for (const cell of cells) {
       if (cell >= 0) usage.set(cell, (usage.get(cell) ?? 0) + 1);
     }
-    if (usage.size <= limit) break;
+    if (usage.size <= 1) break;
+    const fewest = Math.min(...usage.values());
+    if (usage.size <= limit && fewest >= minCount) break;
 
     // 用量最少的先走;一樣少就拿掉索引大的,結果才是固定的
     let drop = -1;
