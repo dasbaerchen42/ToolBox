@@ -11,6 +11,7 @@ const navItems = [
   { href: "/tools/knife", label: "文字切割刀" },
   { href: "/tools/fullwidth", label: "標點置換所" },
   { href: "/tools/image", label: "影像工作檯" },
+  { href: "/tools/beads", label: "拼豆工坊" },
 ];
 
 export default function SiteNavigation() {
@@ -21,7 +22,7 @@ export default function SiteNavigation() {
       <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-3">
         {/*
           左側:導覽列按鈕區塊。
-          窄畫面改成單行橫向捲動而不是換行——六個項目換行會變成三列,
+          窄畫面改成單行橫向捲動而不是換行——七個項目換行會變成三列,
           在手機上每一頁都先吃掉快五分之一個螢幕。
         */}
         <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto md:flex-wrap md:overflow-x-visible">
