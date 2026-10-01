@@ -478,7 +478,10 @@ function ColorList({
               style={{ background: PALETTE[index].hex }}
             />
             <span className={`w-8 shrink-0 font-mono text-[11px] ${t.muted}`}>{PALETTE[index].code}</span>
-            <span className="min-w-0 flex-1 truncate">{PALETTE[index].name}</span>
+            <span className="min-w-0 flex-1 truncate">
+              {PALETTE[index].name}
+              <span className={`ml-1.5 text-[10px] ${t.muted}`}>{PALETTE[index].reading}</span>
+            </span>
             <span className={`shrink-0 tabular-nums ${t.muted}`}>{count} 顆</span>
             <button
               type="button"

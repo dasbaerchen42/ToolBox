@@ -27,7 +27,12 @@ function makePixels(
 }
 
 const labs = paletteLab(DEFAULT_PALETTE);
-const indexOf = (code: string) => DEFAULT_PALETTE.findIndex((color) => color.code === code);
+/** 用色盤自己的顏色當取樣,測試就不綁定色盤挑了哪些色 */
+const indexOf = (name: string, reading?: string) =>
+  DEFAULT_PALETTE.findIndex(
+    (color) => color.name === name && (reading === undefined || color.reading === reading)
+  );
+const hexOf = (name: string) => DEFAULT_PALETTE[indexOf(name)].hex;
 
 describe("color:色彩換算", () => {
   it("sRGB 與線性光來回換不會走樣", () => {
@@ -61,6 +66,12 @@ describe("palette:預設色盤", () => {
     const codes = new Set(DEFAULT_PALETTE.map((color) => color.code));
     expect(codes.size).toBe(DEFAULT_PALETTE.length);
     for (const color of DEFAULT_PALETTE) expect(color.hex).toMatch(/^#[0-9a-f]{6}$/);
+  });
+
+  it("同名的色靠讀音分得開", () => {
+    const keys = new Set(DEFAULT_PALETTE.map((color) => `${color.name}/${color.reading}`));
+    expect(keys.size).toBe(DEFAULT_PALETTE.length);
+    expect(indexOf("葡萄色", "えびいろ")).not.toBe(indexOf("葡萄色", "ぶどういろ"));
   });
 
   it("任兩色不會近到分不出來", () => {
@@ -126,36 +137,36 @@ describe("pattern:換成豆子色", () => {
   const sampleOf = (hex: string) => rgbToOklab(hexToRgb(hex));
 
   it("每格找最接近的豆子,空格維持空格", () => {
-    const cells = matchPalette([sampleOf("#f7f7f2"), null, sampleOf("#d2342e")], labs, 36);
-    expect(cells).toEqual([indexOf("P01"), -1, indexOf("P14")]);
+    const cells = matchPalette([sampleOf("#fcfcfa"), null, sampleOf(hexOf("臙脂"))], labs, 99);
+    expect(cells).toEqual([indexOf("白"), -1, indexOf("臙脂")]);
   });
 
   it("壓色數:用量最少的顏色併到其他顏色,總色數不超過上限", () => {
     const samples = [
-      ...Array(5).fill(sampleOf("#1e1f22")), // 黑 ×5
-      ...Array(3).fill(sampleOf("#f7f7f2")), // 白 ×3
-      sampleOf("#4e5257"), // 深灰 ×1,最少
+      ...Array(5).fill(sampleOf(hexOf("漆黒"))), // ×5
+      ...Array(3).fill(sampleOf(hexOf("白"))), // ×3
+      sampleOf(hexOf("紫黒")), // ×1,最少
     ];
     const cells = matchPalette(samples, labs, 2);
 
     expect(countColors(cells).length).toBe(2);
-    // 深灰比較接近黑,應該併進黑
-    expect(cells[8]).toBe(indexOf("P06"));
+    // 紫黒很暗,比較接近漆黒,應該併進漆黒
+    expect(cells[8]).toBe(indexOf("漆黒"));
   });
 
   it("被拿掉的格子用原始顏色重新找,不是找離被拿掉那顆最近的", () => {
-    // 淺灰被拿掉後,要回頭用自己的原色去比剩下的白與黑
+    // 桜鼠被拿掉後,要回頭用自己的原色去比剩下的白與漆黒
     const samples = [
-      ...Array(4).fill(sampleOf("#f7f7f2")),
-      ...Array(4).fill(sampleOf("#1e1f22")),
-      sampleOf("#c9cbcc"),
+      ...Array(4).fill(sampleOf(hexOf("白"))),
+      ...Array(4).fill(sampleOf(hexOf("漆黒"))),
+      sampleOf(hexOf("桜鼠")),
     ];
     const cells = matchPalette(samples, labs, 2);
-    expect(cells[8]).toBe(indexOf("P01"));
+    expect(cells[8]).toBe(indexOf("白"));
   });
 
   it("上限給 0 或小數也至少留一色", () => {
-    const cells = matchPalette([sampleOf("#d2342e"), sampleOf("#2d5fb8")], labs, 0);
+    const cells = matchPalette([sampleOf(hexOf("臙脂")), sampleOf(hexOf("杜若色"))], labs, 0);
     expect(countColors(cells).length).toBe(1);
   });
 });
