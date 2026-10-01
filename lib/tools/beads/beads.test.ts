@@ -12,7 +12,8 @@ import {
   sampleCells,
   type PixelData,
 } from "./pattern";
-import { meltGeometry, smoothstep } from "./draw";
+import { meltGeometry, smoothstep, tileGeometry } from "./draw";
+import { meltOf } from "./finish";
 
 /** 做一張 width×height 的假圖,每個像素的顏色由 paint 決定 */
 function makePixels(
@@ -219,9 +220,25 @@ describe("draw:熨燙參數", () => {
     expect(meltGeometry(1).outer).toBeGreaterThan(0.5);
   });
 
-  it("燙好時斜對角之間還留著小縫,洞也沒有完全消失", () => {
-    expect(meltGeometry(1).outer).toBeLessThan(Math.SQRT1_2);
-    expect(meltGeometry(1).hole).toBeGreaterThan(0);
+  it("輕燙還是一顆顆、洞清楚;中燙黏在一起但斜對角留縫;全燙整片封住、洞消失", () => {
+    const light = meltGeometry(meltOf("light"));
+    const medium = meltGeometry(meltOf("medium"));
+    const full = meltGeometry(meltOf("full"));
+
+    expect(light.hole).toBeGreaterThan(0.1);
+    expect(medium.outer).toBeGreaterThan(0.5);
+    expect(medium.outer).toBeLessThan(Math.SQRT1_2);
+    expect(medium.hole).toBeGreaterThan(0);
+    expect(full.outer).toBeGreaterThan(Math.SQRT1_2);
+    expect(full.hole).toBe(0);
+  });
+
+  it("方磚燙越久越方、越往外擴,全燙時碰到隔壁", () => {
+    const raw = tileGeometry(0);
+    const full = tileGeometry(1);
+    expect(full.half).toBeGreaterThan(raw.half);
+    expect(full.corner).toBeLessThan(raw.corner);
+    expect(full.half).toBeGreaterThanOrEqual(0.5);
   });
 
   it("超出範圍的程度會被夾住", () => {

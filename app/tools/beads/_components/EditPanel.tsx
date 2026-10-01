@@ -1,22 +1,27 @@
 "use client";
 
 import type { Symmetry } from "@/lib/tools/beads/edit";
+import { MATERIALS } from "@/lib/tools/beads/finish";
 import type { BeadColor } from "@/lib/tools/beads/palette";
 import type { ThemeClasses } from "@/lib/theme";
 import { Field, Segmented } from "../../image/_components/controls";
 
-export type EditTool = "pen" | "eraser" | "fill" | "picker";
+export type EditTool = "pen" | "eraser" | "fill" | "picker" | "material";
 
 type Props = {
   palette: BeadColor[];
   tool: EditTool;
   color: number;
+  material: number;
   symmetry: Symmetry;
   canUndo: boolean;
   canRedo: boolean;
   t: ThemeClasses;
   onTool: (tool: EditTool) => void;
   onColor: (color: number) => void;
+  onMaterial: (material: number) => void;
+  /** 整幅作品都換成目前的材質 */
+  onMaterialAll: () => void;
   onSymmetry: (symmetry: Symmetry) => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -26,7 +31,8 @@ const TOOL_HINTS: Record<EditTool, string> = {
   pen: "點一下放一顆，按住拖曳連續放",
   eraser: "把豆子拿掉，留下空格",
   fill: "相連的同色區塊整片換成目前的顏色（空格也算一種顏色）",
-  picker: "點板子上的豆子，取它的顏色來用",
+  picker: "點板子上的豆子，取它的顏色與材質來用",
+  material: "只改材質不改顏色，例如眼睛用亮粉、背景用霧面",
 };
 
 /** 工具列 + 色盤:只在底圖(編輯)階段出現 */
@@ -34,12 +40,15 @@ export default function EditPanel({
   palette,
   tool,
   color,
+  material,
   symmetry,
   canUndo,
   canRedo,
   t,
   onTool,
   onColor,
+  onMaterial,
+  onMaterialAll,
   onSymmetry,
   onUndo,
   onRedo,
@@ -59,8 +68,30 @@ export default function EditPanel({
             { value: "eraser", label: "橡皮擦" },
             { value: "fill", label: "油漆桶" },
             { value: "picker", label: "滴管" },
+            { value: "material", label: "材質筆" },
           ]}
         />
+      </Field>
+
+      <Field
+        label="材質"
+        hint={`${MATERIALS[material].hint}。畫筆、油漆桶、材質筆都用這個材質；不是霧面的格子在底圖上會有一個小白點`}
+        t={t}
+      >
+        <Segmented
+          value={String(material)}
+          onChange={(value) => onMaterial(Number(value))}
+          t={t}
+          label="材質"
+          options={MATERIALS.map((item) => ({ value: String(item.id), label: item.label }))}
+        />
+        <button
+          type="button"
+          onClick={onMaterialAll}
+          className={`self-start rounded-xl border px-3 py-1.5 text-xs transition ${t.secondary}`}
+        >
+          整幅都換成「{MATERIALS[material].label}」
+        </button>
       </Field>
 
       <Field label="對稱" t={t}>

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
-import { fromSavedWork, type SavedWork } from "@/lib/tools/beads/album";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { fromSavedWork, type AlbumKind, type SavedWork } from "@/lib/tools/beads/album";
 import { drawBoard, drawFlat } from "@/lib/tools/beads/draw";
 import type { BeadColor } from "@/lib/tools/beads/palette";
 import type { ThemeClasses } from "@/lib/theme";
@@ -57,6 +57,9 @@ export default function AlbumPanel({
   onImport,
 }: Props) {
   const fileInput = useRef<HTMLInputElement>(null);
+  const [tab, setTab] = useState<AlbumKind>("work");
+  const shown = works.filter((work) => work.kind === tab);
+  const countOf = (kind: AlbumKind) => works.filter((work) => work.kind === kind).length;
 
   return (
     <section aria-label="收藏冊" className={`border-t pt-4 ${t.divider}`}>
@@ -97,11 +100,37 @@ export default function AlbumPanel({
         只存在這個瀏覽器裡，不會上傳。清除瀏覽器資料就會不見，記得偶爾匯出備份。
       </p>
 
-      {works.length === 0 ? (
-        <p className={`text-xs ${t.muted}`}>還沒有收藏的作品。</p>
+      <div role="tablist" aria-label="收藏冊分頁" className="mb-3 flex gap-1.5">
+        {(
+          [
+            ["work", "作品"],
+            ["material", "素材"],
+          ] as const
+        ).map(([kind, label]) => (
+          <button
+            key={kind}
+            type="button"
+            role="tab"
+            aria-selected={tab === kind}
+            onClick={() => setTab(kind)}
+            className={`rounded-xl border px-3 py-1 text-xs transition ${
+              tab === kind ? t.selected : t.unselected
+            }`}
+          >
+            {label}（{countOf(kind)}）
+          </button>
+        ))}
+      </div>
+
+      {shown.length === 0 ? (
+        <p className={`text-xs ${t.muted}`}>
+          {tab === "work"
+            ? "還沒有收藏的作品。"
+            : "還沒有素材。用迷你板拼星星、愛心這類小零件，收藏時選「素材」就會放在這裡。"}
+        </p>
       ) : (
         <ul className="space-y-2">
-          {works.map((work) => (
+          {shown.map((work) => (
             <li
               key={work.id}
               className={`flex items-center gap-2 rounded-xl border p-1.5 ${
