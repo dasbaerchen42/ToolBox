@@ -35,6 +35,11 @@ const tools = [
     href: "/tools/image",
     tags: ["貼上即用", "塗遮罩", "切割拼貼", "全程本機"],
   },
+  {
+    title: "拼豆工坊",
+    href: "/tools/beads",
+    tags: ["照片轉拼豆", "自動落豆", "熨燙動畫", "全程本機"],
+  },
 ];
 
 const aside = {
