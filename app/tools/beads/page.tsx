@@ -1,17 +1,36 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getThemeClasses, type ThemeClasses } from "@/lib/theme";
+import { getThemeClasses } from "@/lib/theme";
 import { readClipboardImages, readPasteImages } from "@/lib/clipboard";
 import { downloadBlob, sanitizeFileName, shareImages, type ExportedImage } from "@/lib/download";
 import { useCanShareImages } from "@/hooks/useCanShareImages";
+import {
+  loadAlbum,
+  mergeAlbum,
+  parseAlbum,
+  serializeAlbum,
+  sortAlbum,
+  storeAlbum,
+  toSavedWork,
+  fromSavedWork,
+  type SavedWork,
+} from "@/lib/tools/beads/album";
 import { renderPatternPng } from "@/lib/tools/beads/draw";
+import {
+  blankPattern,
+  floodFill,
+  lineBetween,
+  paint,
+  replaceColor,
+  type Symmetry,
+} from "@/lib/tools/beads/edit";
 import { DEFAULT_PALETTE, paletteLab } from "@/lib/tools/beads/palette";
 import {
-  clearColors,
   countColors,
   matchPalette,
   type BeadPattern,
+  type CellSample,
   type FitMode,
 } from "@/lib/tools/beads/pattern";
 import { decodePhoto, samplePhoto } from "@/lib/tools/beads/photo";
@@ -27,31 +46,68 @@ import {
   Toggle,
 } from "../image/_components/controls";
 import BeadCanvas, { type Stage } from "./_components/BeadCanvas";
+import EditPanel, { type EditTool } from "./_components/EditPanel";
+import ColorList from "./_components/ColorList";
+import AlbumPanel from "./_components/AlbumPanel";
 
 const PALETTE = DEFAULT_PALETTE;
 const PALETTE_LAB = paletteLab(PALETTE);
 
 type BoardSize = "29" | "58";
 
-/** 畫面上每格幾像素:小板格子大一點,大板才塞得進畫面 */
-const DISPLAY_CELL: Record<BoardSize, number> = { "29": 20, "58": 12 };
-
 /** 輸出 PNG 每格幾像素:29 格約 700px、58 格約 1400px,社群貼圖夠用 */
 const EXPORT_CELL = 24;
 
+/** 復原最多記這麼多步;一步就是一份 cells,大板也才幾 KB */
+const HISTORY_LIMIT = 100;
+
+/** 預設畫筆顏色:猩々緋,空板上第一筆畫下去看得清楚 */
+const DEFAULT_COLOR = Math.max(0, PALETTE.findIndex((color) => color.name === "猩々緋"));
+
+/** 畫面上每格幾像素:小板格子大一點,大板才塞得進畫面 */
+function displayCell(cols: number): number {
+  if (cols <= 29) return 20;
+  if (cols <= 58) return 12;
+  return Math.max(4, Math.floor(700 / cols));
+}
+
 type Photo = { bitmap: ImageBitmap; name: string };
 type Notice = { kind: "info" | "error"; text: string } | null;
+
+/** 現在板子上的東西從哪來:照片轉的才有轉換參數可以調 */
+type Source = "photo" | "blank" | "album";
 
 export default function BeadsPage() {
   const t = getThemeClasses();
   const canShare = useCanShareImages();
   const fileInput = useRef<HTMLInputElement>(null);
 
+  // 照片轉換
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [size, setSize] = useState<BoardSize>("29");
   const [fit, setFit] = useState<FitMode>("cover");
   const [maxColors, setMaxColors] = useState(16);
-  const [removed, setRemoved] = useState<Set<number>>(() => new Set());
+  const samplesCache = useRef<{ key: string; samples: CellSample[] } | null>(null);
+
+  // 板子與編輯
+  const [source, setSource] = useState<Source | null>(null);
+  const [pattern, setPattern] = useState<BeadPattern | null>(null);
+  const [past, setPast] = useState<number[][]>([]);
+  const [future, setFuture] = useState<number[][]>([]);
+  const [tool, setTool] = useState<EditTool>("pen");
+  const [color, setColor] = useState(DEFAULT_COLOR);
+  const [symmetry, setSymmetry] = useState<Symmetry>("none");
+  const patternRef = useRef<BeadPattern | null>(null);
+  const stroke = useRef<{ base: number[]; last: number; color: number } | null>(null);
+
+  // 收藏
+  const [album, setAlbum] = useState<SavedWork[]>([]);
+  const [savedAs, setSavedAs] = useState<Pick<SavedWork, "id" | "createdAt"> | null>(null);
+  const [name, setName] = useState("");
+  /** 有沒有還沒收進收藏冊的改動:離開頁面、換圖、開別的作品前要問 */
+  const [dirty, setDirty] = useState(false);
+
+  // 落豆、熨燙、輸出
   const [stage, setStage] = useState<Stage>("pattern");
   const [withBoard, setWithBoard] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -59,47 +115,65 @@ export default function BeadsPage() {
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingShare = useRef<{ key: string; file: ExportedImage } | null>(null);
 
+  useEffect(() => {
+    patternRef.current = pattern;
+  }, [pattern]);
+
+  useEffect(() => {
+    setAlbum(loadAlbum());
+  }, []);
+
   const showNotice = useCallback((text: string, kind: "info" | "error" = "info") => {
     setNotice({ kind, text });
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
     noticeTimer.current = setTimeout(() => setNotice(null), kind === "error" ? 8000 : 3000);
   }, []);
 
-  // 動到圖或參數,板子上的豆子就跟底圖對不上了,一律回到底圖重新開始
-  const resetStage = () => setStage("pattern");
+  /** 換一塊新的板子:復原紀錄、落豆進度一律從頭 */
+  const loadPattern = useCallback((next: BeadPattern, from: Source) => {
+    setPattern(next);
+    setSource(from);
+    setPast([]);
+    setFuture([]);
+    setStage("pattern");
+    pendingShare.current = null;
+  }, []);
 
-  const samples = useMemo(() => {
-    if (!photo) return null;
-    const cells = Number(size);
-    return samplePhoto(photo.bitmap, cells, cells, fit);
-  }, [photo, size, fit]);
+  const confirmDiscard = useCallback(
+    (what: string) => !dirty || window.confirm(`目前的作品還沒收進收藏冊，${what}會把它蓋掉。要繼續嗎？`),
+    [dirty]
+  );
 
-  const pattern = useMemo<BeadPattern | null>(() => {
-    if (!samples) return null;
-    const cells = Number(size);
-    const base = {
-      cols: cells,
-      rows: cells,
-      cells: matchPalette(samples, PALETTE_LAB, maxColors),
-    };
-    return clearColors(base, removed);
-  }, [samples, size, maxColors, removed]);
-
-  const counts = useMemo(() => (pattern ? countColors(pattern.cells) : []), [pattern]);
-  const total = counts.reduce((sum, item) => sum + item.count, 0);
+  /** 照片 → 格子。取樣結果依尺寸與構圖快取,只調色數時不必重畫一次照片 */
+  const convert = useCallback(
+    (target: Photo, nextSize: BoardSize, nextFit: FitMode, nextMax: number) => {
+      const cells = Number(nextSize);
+      const key = `${target.name}|${target.bitmap.width}x${target.bitmap.height}|${nextSize}|${nextFit}`;
+      let samples = samplesCache.current?.key === key ? samplesCache.current.samples : null;
+      if (!samples) {
+        samples = samplePhoto(target.bitmap, cells, cells, nextFit);
+        samplesCache.current = { key, samples };
+      }
+      loadPattern({ cols: cells, rows: cells, cells: matchPalette(samples, PALETTE_LAB, nextMax) }, "photo");
+      setDirty(true);
+    },
+    [loadPattern]
+  );
 
   const loadFile = useCallback(
     async (file: File) => {
+      if (!confirmDiscard("換照片")) return;
       setBusy(true);
       try {
         const bitmap = await decodePhoto(file, file.name);
-        setPhoto((previous) => {
-          previous?.bitmap.close();
-          return { bitmap, name: baseNameOf(file.name) };
-        });
-        setRemoved(new Set());
-        setStage("pattern");
-        showNotice("轉好了。點底圖上的背景可以整色清掉。");
+        const next = { bitmap, name: baseNameOf(file.name) };
+        photo?.bitmap.close();
+        samplesCache.current = null;
+        setPhoto(next);
+        setName(next.name);
+        setSavedAs(null);
+        convert(next, size, fit, maxColors);
+        showNotice("轉好了。可以直接在板子上修，或先按「自動落豆」。");
       } catch (error) {
         showNotice(
           error instanceof ImageDecodeError ? error.message : `無法讀取「${file.name}」`,
@@ -109,8 +183,41 @@ export default function BeadsPage() {
         setBusy(false);
       }
     },
-    [showNotice]
+    [confirmDiscard, convert, fit, maxColors, photo, showNotice, size]
   );
+
+  /** 轉換參數改了:照片轉的板子會重新轉,手動改過的部分會被蓋掉 */
+  function changeConversion(next: { size?: BoardSize; fit?: FitMode; maxColors?: number }) {
+    const nextSize = next.size ?? size;
+    const nextFit = next.fit ?? fit;
+    const nextMax = next.maxColors ?? maxColors;
+
+    if (source === "photo" && photo) {
+      if (past.length > 0 && !window.confirm("重新轉換會蓋掉你在板子上手動改的部分。要繼續嗎？")) {
+        return;
+      }
+      convert(photo, nextSize, nextFit, nextMax);
+    } else if (source === "blank" && next.size && next.size !== size) {
+      if (past.length > 0 && !window.confirm("換板子尺寸會清空目前畫的內容。要繼續嗎？")) return;
+      const cells = Number(next.size);
+      loadPattern(blankPattern(cells, cells), "blank");
+    }
+
+    setSize(nextSize);
+    setFit(nextFit);
+    setMaxColors(nextMax);
+  }
+
+  function startBlank(nextSize: BoardSize) {
+    if (!confirmDiscard("開新的空板")) return;
+    const cells = Number(nextSize);
+    setSize(nextSize);
+    setName("");
+    setSavedAs(null);
+    setDirty(false);
+    loadPattern(blankPattern(cells, cells), "blank");
+    showNotice("空板準備好了，選個顏色開始拼。");
+  }
 
   // 整頁的貼上:游標不在輸入框裡時按 ⌘V / Ctrl+V 直接換圖
   useEffect(() => {
@@ -129,46 +236,203 @@ export default function BeadsPage() {
     return () => window.removeEventListener("paste", handle);
   }, [loadFile]);
 
-  // 不保存,燙好了還沒帶走就重新整理會全沒,離開前攔一下
+  // 還沒收藏的作品、或燙好了還沒帶走,離開前攔一下
   useEffect(() => {
-    if (stage !== "ironed" && stage !== "placed") return;
+    if (!dirty && stage !== "ironed") return;
     const handle = (event: BeforeUnloadEvent) => event.preventDefault();
     window.addEventListener("beforeunload", handle);
     return () => window.removeEventListener("beforeunload", handle);
-  }, [stage]);
+  }, [dirty, stage]);
 
-  async function handleReadClipboard() {
-    const [file] = await readClipboardImages();
-    if (file) await loadFile(file);
-    else showNotice("讀不到剪貼簿裡的圖，改用鍵盤 Ctrl / ⌘ + V 貼上試試。", "error");
+  // ---- 編輯 ----
+
+  /** 一次完整的改動(一筆畫、一次倒油漆、清一個色)記成一步復原 */
+  const commitEdit = useCallback((base: number[], next: number[]) => {
+    if (base === next) return;
+    setPast((previous) => [...previous, base].slice(-HISTORY_LIMIT));
+    setFuture([]);
+    setDirty(true);
+  }, []);
+
+  const applyCells = (cells: number[]) =>
+    setPattern((previous) => (previous && previous.cells !== cells ? { ...previous, cells } : previous));
+
+  const editing = stage === "pattern" && pattern !== null;
+
+  function strokeStart(index: number) {
+    const current = patternRef.current;
+    if (!current) return;
+
+    if (tool === "picker") {
+      const picked = current.cells[index];
+      if (picked < 0) {
+        showNotice("這格是空的，點有豆子的格子。");
+        return;
+      }
+      setColor(picked);
+      setTool("pen");
+      showNotice(`取到「${PALETTE[picked].name}」，換回畫筆。`);
+      return;
+    }
+
+    if (tool === "fill") {
+      const next = floodFill(current, index, color, symmetry);
+      applyCells(next);
+      commitEdit(current.cells, next);
+      return;
+    }
+
+    const paintColor = tool === "eraser" ? -1 : color;
+    const next = paint(current, [index], paintColor, symmetry);
+    stroke.current = { base: current.cells, last: index, color: paintColor };
+    applyCells(next);
+    patternRef.current = { ...current, cells: next };
   }
 
-  function removeColor(index: number) {
-    setRemoved((previous) => new Set(previous).add(index));
-    resetStage();
+  function strokeMove(index: number) {
+    const active = stroke.current;
+    const current = patternRef.current;
+    if (!active || !current || index === active.last) return;
+
+    const next = paint(current, lineBetween(active.last, index, current.cols), active.color, symmetry);
+    active.last = index;
+    applyCells(next);
+    patternRef.current = { ...current, cells: next };
   }
 
-  function restoreColor(index: number) {
-    setRemoved((previous) => {
-      const next = new Set(previous);
-      next.delete(index);
-      return next;
+  function strokeEnd() {
+    const active = stroke.current;
+    stroke.current = null;
+    if (active && patternRef.current) commitEdit(active.base, patternRef.current.cells);
+  }
+
+  const undo = useCallback(() => {
+    const previous = past.at(-1);
+    const current = patternRef.current;
+    if (!previous || !current) return;
+    setPast(past.slice(0, -1));
+    setFuture((list) => [current.cells, ...list].slice(0, HISTORY_LIMIT));
+    setPattern({ ...current, cells: previous });
+    setStage("pattern");
+    setDirty(true);
+  }, [past]);
+
+  const redo = useCallback(() => {
+    const next = future[0];
+    const current = patternRef.current;
+    if (!next || !current) return;
+    setFuture(future.slice(1));
+    setPast((list) => [...list, current.cells].slice(-HISTORY_LIMIT));
+    setPattern({ ...current, cells: next });
+    setStage("pattern");
+    setDirty(true);
+  }, [future]);
+
+  // 復原/重做快捷鍵;游標在輸入框裡時留給瀏覽器自己的復原
+  useEffect(() => {
+    function handle(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || target?.isContentEditable) return;
+      if (!(event.ctrlKey || event.metaKey)) return;
+
+      const key = event.key.toLowerCase();
+      if (key === "z" && !event.shiftKey) {
+        event.preventDefault();
+        undo();
+      } else if ((key === "z" && event.shiftKey) || key === "y") {
+        event.preventDefault();
+        redo();
+      }
+    }
+
+    window.addEventListener("keydown", handle);
+    return () => window.removeEventListener("keydown", handle);
+  }, [undo, redo]);
+
+  function clearColor(index: number) {
+    const current = patternRef.current;
+    if (!current) return;
+    const count = current.cells.filter((cell) => cell === index).length;
+    const next = replaceColor(current.cells, index, -1);
+    applyCells(next);
+    commitEdit(current.cells, next);
+    setStage("pattern");
+    showNotice(`清掉「${PALETTE[index].name}」${count} 顆，按「復原」可以拿回來。`);
+  }
+
+  // ---- 收藏冊 ----
+
+  function persist(next: SavedWork[], success: string) {
+    const sorted = sortAlbum(next);
+    setAlbum(sorted);
+    if (storeAlbum(sorted)) showNotice(success);
+    else showNotice("瀏覽器不讓存（空間滿了或是無痕模式），請先用「匯出備份」帶走。", "error");
+  }
+
+  function saveWork(asNew: boolean) {
+    if (!pattern) return;
+    const target = asNew ? undefined : (savedAs ?? undefined);
+    const work = toSavedWork(pattern, PALETTE, name, target);
+    setSavedAs({ id: work.id, createdAt: work.createdAt });
+    setName(work.name);
+    setDirty(false);
+    persist(
+      [work, ...album.filter((item) => item.id !== work.id)],
+      target ? `已更新「${work.name}」。` : `已收進收藏冊：「${work.name}」。`
+    );
+  }
+
+  function openWork(work: SavedWork) {
+    if (savedAs?.id !== work.id && !confirmDiscard("打開別的作品")) return;
+    const next = fromSavedWork(work, PALETTE);
+    setSavedAs({ id: work.id, createdAt: work.createdAt });
+    setName(work.name);
+    setDirty(false);
+    if (next.cols === 29 || next.cols === 58) setSize(String(next.cols) as BoardSize);
+    loadPattern(next, "album");
+    showNotice(`打開了「${work.name}」。`);
+  }
+
+  function deleteWork(work: SavedWork) {
+    if (!window.confirm(`刪除「${work.name}」？刪掉就找不回來了。`)) return;
+    if (savedAs?.id === work.id) {
+      setSavedAs(null);
+      setDirty(true);
+    }
+    persist(
+      album.filter((item) => item.id !== work.id),
+      `已刪除「${work.name}」。`
+    );
+  }
+
+  function exportAlbum() {
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadBlob({
+      name: `拼豆收藏冊-${stamp}.json`,
+      blob: new Blob([serializeAlbum(album)], { type: "application/json" }),
     });
-    resetStage();
+    showNotice(`已匯出 ${album.length} 件作品。`);
   }
 
-  function handlePickCell(index: number) {
-    const color = pattern?.cells[index] ?? -1;
-    if (color < 0) return;
-    const count = counts.find((item) => item.index === color)?.count ?? 0;
-    removeColor(color);
-    showNotice(`清掉「${PALETTE[color].name}」${count} 顆，可以在右邊恢復。`);
+  async function importAlbum(file: File) {
+    const { works, skipped } = parseAlbum(await file.text());
+    if (works.length === 0) {
+      showNotice("這個檔案裡沒有讀得懂的作品。", "error");
+      return;
+    }
+    persist(
+      mergeAlbum(album, works),
+      `匯入 ${works.length} 件${skipped > 0 ? `，${skipped} 件格式不對略過了` : ""}。`
+    );
   }
 
-  const handleSettled = useCallback((next: "placed" | "ironed") => setStage(next), []);
+  // ---- 輸出 ----
 
-  const fileTitle = `${photo?.name ?? "拼豆"}-拼豆`;
-  const exportKey = JSON.stringify([fileTitle, size, fit, maxColors, [...removed], stage, withBoard]);
+  const counts = useMemo(() => (pattern ? countColors(pattern.cells) : []), [pattern]);
+  const total = counts.reduce((sum, item) => sum + item.count, 0);
+  const fileTitle = `${name.trim() || "拼豆"}-拼豆`;
+  const exportKey = JSON.stringify([fileTitle, pattern?.cells, stage, withBoard]);
 
   async function buildPng(): Promise<ExportedImage | null> {
     if (!pattern) return null;
@@ -203,7 +467,7 @@ export default function BeadsPage() {
 
   const handleShare = () =>
     run(async () => {
-      // 上一次產好但被瀏覽器擋下來的那張:同樣的設定就直接拿來分享,
+      // 上一次產好但被瀏覽器擋下來的那張:同樣的內容就直接拿來分享,
       // share 前面沒有任何 await,按鈕的授權才不會過期
       const pending = pendingShare.current;
       const file = pending?.key === exportKey ? pending.file : await buildPng();
@@ -222,6 +486,14 @@ export default function BeadsPage() {
         return "這個瀏覽器沒辦法分享圖片，請改用下載。";
       }
     });
+
+  async function handleReadClipboard() {
+    const [file] = await readClipboardImages();
+    if (file) await loadFile(file);
+    else showNotice("讀不到剪貼簿裡的圖，改用鍵盤 Ctrl / ⌘ + V 貼上試試。", "error");
+  }
+
+  const handleSettled = useCallback((next: "placed" | "ironed") => setStage(next), []);
 
   const animating = stage === "dropping" || stage === "ironing";
   const placed = stage === "placed" || stage === "ironed";
@@ -243,7 +515,7 @@ export default function BeadsPage() {
           <div>
             <h1 className="text-xl font-semibold tracking-[0.08em]">拼豆工坊</h1>
             <p className={`mt-0.5 text-xs tracking-[0.04em] ${t.muted}`}>
-              照片轉成拼豆，看豆子落進板子再燙成一片・全部在你的瀏覽器裡完成，照片不會離開這台電腦
+              照片轉成拼豆或在空板上自己拼，看豆子落進板子再燙成一片・全部在你的瀏覽器裡完成，照片不會離開這台電腦
             </p>
           </div>
 
@@ -264,61 +536,87 @@ export default function BeadsPage() {
                     pattern={pattern}
                     palette={PALETTE}
                     stage={stage}
-                    cell={DISPLAY_CELL[size]}
+                    cell={displayCell(pattern.cols)}
                     onSettled={handleSettled}
-                    onPickCell={stage === "pattern" ? handlePickCell : undefined}
+                    editing={
+                      editing
+                        ? {
+                            symmetry,
+                            onStrokeStart: strokeStart,
+                            onStrokeMove: strokeMove,
+                            onStrokeEnd: strokeEnd,
+                          }
+                        : undefined
+                    }
                   />
                 </div>
               </div>
             ) : (
               <EmptyWorkspace t={t}>
-                選一張照片，或直接拖進來、按 Ctrl / ⌘ + V 貼上。
+                選一張照片（或直接拖進來、按 Ctrl / ⌘ + V 貼上），
                 <br />
-                有透明背景的 PNG 會自動留空。
+                或開一塊空板自己拼。
               </EmptyWorkspace>
             )
           }
           controls={
             <>
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => fileInput.current?.click()}
-                  disabled={busy || animating}
-                  className={`rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40 ${t.primary}`}
-                >
-                  {photo ? "換一張照片" : "選擇照片"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleReadClipboard()}
-                  disabled={busy || animating}
-                  className={`rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40 ${t.secondary}`}
-                >
-                  讀剪貼簿
-                </button>
-                <input
-                  ref={fileInput}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) void loadFile(file);
-                    event.target.value = "";
-                  }}
-                />
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => fileInput.current?.click()}
+                    disabled={busy || animating}
+                    className={`rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40 ${t.primary}`}
+                  >
+                    {photo ? "換一張照片" : "選擇照片"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleReadClipboard()}
+                    disabled={busy || animating}
+                    className={`rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40 ${t.secondary}`}
+                  >
+                    讀剪貼簿
+                  </button>
+                  <input
+                    ref={fileInput}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void loadFile(file);
+                      event.target.value = "";
+                    }}
+                  />
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => startBlank("29")}
+                    disabled={busy || animating}
+                    className={`rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40 ${t.secondary}`}
+                  >
+                    空白小板
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => startBlank("58")}
+                    disabled={busy || animating}
+                    className={`rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40 ${t.secondary}`}
+                  >
+                    空白大板
+                  </button>
+                </div>
               </div>
 
-              {pattern && (
+              {pattern && source === "photo" && (
                 <>
                   <Field label="板子" t={t}>
                     <Segmented
                       value={size}
-                      onChange={(value) => {
-                        setSize(value);
-                        resetStage();
-                      }}
+                      onChange={(value) => changeConversion({ size: value })}
                       t={t}
                       label="板子尺寸"
                       options={[
@@ -335,10 +633,7 @@ export default function BeadsPage() {
                   >
                     <Segmented
                       value={fit}
-                      onChange={(value) => {
-                        setFit(value);
-                        resetStage();
-                      }}
+                      onChange={(value) => changeConversion({ fit: value })}
                       t={t}
                       label="構圖"
                       options={[
@@ -354,172 +649,178 @@ export default function BeadsPage() {
                     value={maxColors}
                     min={2}
                     max={PALETTE.length}
-                    onChange={(value) => {
-                      setMaxColors(value);
-                      resetStage();
-                    }}
-                    t={t}
-                  />
-
-                  <div className="space-y-2">
-                    {stage === "pattern" && (
-                      <ActionButton t={t} onClick={() => setStage("dropping")} disabled={total === 0}>
-                        自動落豆
-                      </ActionButton>
-                    )}
-                    {stage === "dropping" && (
-                      <ActionButton tone="secondary" t={t} onClick={() => setStage("placed")}>
-                        略過，直接放好
-                      </ActionButton>
-                    )}
-                    {stage === "placed" && (
-                      <ActionButton t={t} onClick={() => setStage("ironing")}>
-                        熨燙
-                      </ActionButton>
-                    )}
-                    {stage === "ironing" && (
-                      <ActionButton tone="secondary" t={t} onClick={() => setStage("ironed")}>
-                        略過，直接燙好
-                      </ActionButton>
-                    )}
-                    {placed && (
-                      <ActionButton tone="secondary" t={t} onClick={resetStage}>
-                        倒回底圖
-                      </ActionButton>
-                    )}
-                  </div>
-
-                  {placed && (
-                    <div className={`space-y-3 border-t pt-4 ${t.divider}`}>
-                      <Toggle
-                        checked={withBoard}
-                        onChange={setWithBoard}
-                        label="連板子一起輸出（不勾就是透明背景）"
-                        t={t}
-                      />
-                      <div className="space-y-2">
-                        <ActionButton t={t} onClick={() => void handleDownload()} disabled={busy}>
-                          下載 PNG
-                        </ActionButton>
-                        {canShare && (
-                          <ActionButton
-                            tone="secondary"
-                            t={t}
-                            onClick={() => void handleShare()}
-                            disabled={busy}
-                          >
-                            存到相簿／分享
-                          </ActionButton>
-                        )}
-                      </div>
-                      {stage === "placed" && (
-                        <p className={`text-[11px] leading-5 ${t.muted}`}>
-                          現在下載的是還沒燙的樣子，想要燙好的就先按「熨燙」。
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  <ColorList
-                    counts={counts}
-                    total={total}
-                    removed={removed}
-                    canEdit={!animating}
-                    onRemove={removeColor}
-                    onRestore={restoreColor}
+                    onChange={(value) => changeConversion({ maxColors: value })}
                     t={t}
                   />
                 </>
               )}
 
+              {pattern && source === "blank" && (
+                <Field label="板子" t={t}>
+                  <Segmented
+                    value={size}
+                    onChange={(value) => changeConversion({ size: value })}
+                    t={t}
+                    label="板子尺寸"
+                    options={[
+                      { value: "29", label: "小板 29×29" },
+                      { value: "58", label: "大板 58×58" },
+                    ]}
+                  />
+                </Field>
+              )}
+
+              {pattern && (
+                <div className="space-y-2">
+                  {stage === "pattern" && (
+                    <ActionButton t={t} onClick={() => setStage("dropping")} disabled={total === 0}>
+                      自動落豆
+                    </ActionButton>
+                  )}
+                  {stage === "dropping" && (
+                    <ActionButton tone="secondary" t={t} onClick={() => setStage("placed")}>
+                      略過，直接放好
+                    </ActionButton>
+                  )}
+                  {stage === "placed" && (
+                    <ActionButton t={t} onClick={() => setStage("ironing")}>
+                      熨燙
+                    </ActionButton>
+                  )}
+                  {stage === "ironing" && (
+                    <ActionButton tone="secondary" t={t} onClick={() => setStage("ironed")}>
+                      略過，直接燙好
+                    </ActionButton>
+                  )}
+                  {placed && (
+                    <ActionButton tone="secondary" t={t} onClick={() => setStage("pattern")}>
+                      回到編輯
+                    </ActionButton>
+                  )}
+                </div>
+              )}
+
+              {pattern && editing && (
+                <EditPanel
+                  palette={PALETTE}
+                  tool={tool}
+                  color={color}
+                  symmetry={symmetry}
+                  canUndo={past.length > 0}
+                  canRedo={future.length > 0}
+                  t={t}
+                  onTool={setTool}
+                  onColor={(index) => {
+                    setColor(index);
+                    if (tool === "eraser" || tool === "picker") setTool("pen");
+                  }}
+                  onSymmetry={setSymmetry}
+                  onUndo={undo}
+                  onRedo={redo}
+                />
+              )}
+
+              {pattern && placed && (
+                <div className={`space-y-3 border-t pt-4 ${t.divider}`}>
+                  <Toggle
+                    checked={withBoard}
+                    onChange={setWithBoard}
+                    label="連板子一起輸出（不勾就是透明背景）"
+                    t={t}
+                  />
+                  <div className="space-y-2">
+                    <ActionButton t={t} onClick={() => void handleDownload()} disabled={busy}>
+                      下載 PNG
+                    </ActionButton>
+                    {canShare && (
+                      <ActionButton tone="secondary" t={t} onClick={() => void handleShare()} disabled={busy}>
+                        存到相簿／分享
+                      </ActionButton>
+                    )}
+                  </div>
+                  {stage === "placed" && (
+                    <p className={`text-[11px] leading-5 ${t.muted}`}>
+                      現在下載的是還沒燙的樣子，想要燙好的就先按「熨燙」。
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {pattern && (
+                <div className={`space-y-2 border-t pt-4 ${t.divider}`}>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-xs tracking-[0.08em]">作品名稱</span>
+                    <input
+                      type="text"
+                      value={name}
+                      maxLength={60}
+                      placeholder="未命名作品"
+                      onChange={(event) => {
+                        setName(event.target.value);
+                        setDirty(true);
+                      }}
+                      className={`w-full rounded-xl border px-3 py-2 text-sm ${t.input}`}
+                    />
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    <ActionButton
+                      t={t}
+                      tone={dirty ? "primary" : "secondary"}
+                      onClick={() => saveWork(false)}
+                      disabled={busy || animating}
+                    >
+                      {savedAs ? "更新收藏" : "收進收藏冊"}
+                    </ActionButton>
+                    {savedAs && (
+                      <ActionButton
+                        t={t}
+                        tone="secondary"
+                        onClick={() => saveWork(true)}
+                        disabled={busy || animating}
+                      >
+                        另存一份
+                      </ActionButton>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {pattern && (
+                <ColorList
+                  palette={PALETTE}
+                  counts={counts}
+                  canEdit={editing}
+                  t={t}
+                  onPick={(index) => {
+                    setColor(index);
+                    setTool("pen");
+                  }}
+                  onClear={clearColor}
+                />
+              )}
+
               {!pattern && (
                 <StationHint t={t}>
-                  照片會依板子大小切成格子，每格換成最接近的豆子顏色。
+                  照片會依板子大小切成格子，每格換成最接近的豆子顏色，轉好之後還能用畫筆修。
                   色數越少越有拼豆的味道。
                 </StationHint>
               )}
+
+              <AlbumPanel
+                works={album}
+                palette={PALETTE}
+                activeId={savedAs?.id ?? null}
+                busy={busy || animating}
+                t={t}
+                onOpen={openWork}
+                onDelete={deleteWork}
+                onExport={exportAlbum}
+                onImport={(file) => void importAlbum(file)}
+              />
             </>
           }
         />
       </section>
     </main>
-  );
-}
-
-function ColorList({
-  counts,
-  total,
-  removed,
-  canEdit,
-  onRemove,
-  onRestore,
-  t,
-}: {
-  counts: { index: number; count: number }[];
-  total: number;
-  removed: Set<number>;
-  canEdit: boolean;
-  onRemove: (index: number) => void;
-  onRestore: (index: number) => void;
-  t: ThemeClasses;
-}) {
-  return (
-    <div className={`border-t pt-4 ${t.divider}`}>
-      <p className="mb-2 text-xs tracking-[0.08em]">
-        用到 {counts.length} 色・共 {total} 顆
-      </p>
-
-      <ul className="space-y-1">
-        {counts.map(({ index, count }) => (
-          <li key={index} className="flex items-center gap-2 text-xs">
-            <span
-              aria-hidden
-              className="h-4 w-4 shrink-0 rounded-full border border-(--border-light)"
-              style={{ background: PALETTE[index].hex }}
-            />
-            <span className={`w-8 shrink-0 font-mono text-[11px] ${t.muted}`}>{PALETTE[index].code}</span>
-            <span className="min-w-0 flex-1 truncate">
-              {PALETTE[index].name}
-              <span className={`ml-1.5 text-[10px] ${t.muted}`}>{PALETTE[index].reading}</span>
-            </span>
-            <span className={`shrink-0 tabular-nums ${t.muted}`}>{count} 顆</span>
-            <button
-              type="button"
-              onClick={() => onRemove(index)}
-              disabled={!canEdit}
-              className={`shrink-0 rounded-lg border px-2 py-0.5 text-[11px] transition disabled:opacity-40 ${t.secondary}`}
-              aria-label={`清掉「${PALETTE[index].name}」`}
-            >
-              清掉
-            </button>
-          </li>
-        ))}
-      </ul>
-
-      {removed.size > 0 && (
-        <div className="mt-3">
-          <p className={`mb-1.5 text-[11px] tracking-[0.08em] ${t.muted}`}>已清掉</p>
-          <div className="flex flex-wrap gap-1.5">
-            {[...removed].map((index) => (
-              <button
-                key={index}
-                type="button"
-                onClick={() => onRestore(index)}
-                disabled={!canEdit}
-                className={`flex items-center gap-1.5 rounded-lg border px-2 py-0.5 text-[11px] transition disabled:opacity-40 ${t.secondary}`}
-                aria-label={`恢復「${PALETTE[index].name}」`}
-              >
-                <span
-                  aria-hidden
-                  className="h-3 w-3 rounded-full border border-(--border-light)"
-                  style={{ background: PALETTE[index].hex }}
-                />
-                {PALETTE[index].name}・恢復
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
   );
 }

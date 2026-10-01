@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type PointerEvent } from "react";
 import {
   beadShades,
   drawBeads,
@@ -11,10 +11,11 @@ import {
   smoothstep,
 } from "@/lib/tools/beads/draw";
 import type { BeadColor } from "@/lib/tools/beads/palette";
+import type { Symmetry } from "@/lib/tools/beads/edit";
 import { dropOrder, type BeadPattern } from "@/lib/tools/beads/pattern";
 
 /**
- * pattern:只看轉換結果(平的色塊)
+ * pattern:平的色塊,可以編輯
  * dropping → placed:豆子一顆顆落進板子
  * ironing → ironed:熨斗推過去,洞縮小、豆子黏起來
  */
@@ -37,12 +38,44 @@ type Props = {
   cell: number;
   /** 動畫播完(或被略過)時通知:dropping → placed、ironing → ironed */
   onSettled: (stage: "placed" | "ironed") => void;
-  /** 只有底圖階段可以點;回傳點到哪一格 */
-  onPickCell?: (index: number) => void;
+  /** 給了就可以在板子上拖曳編輯(只有底圖階段) */
+  editing?: {
+    symmetry: Symmetry;
+    onStrokeStart: (index: number) => void;
+    onStrokeMove: (index: number) => void;
+    onStrokeEnd: () => void;
+  };
 };
 
-export default function BeadCanvas({ pattern, palette, stage, cell, onSettled, onPickCell }: Props) {
+/** 對稱軸:虛線畫在板子中央,提醒現在畫一邊另一邊會跟著長 */
+function drawSymmetryGuides(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  symmetry: Symmetry
+) {
+  if (symmetry === "none") return;
+  ctx.save();
+  ctx.strokeStyle = "rgba(200, 60, 60, 0.7)";
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  if (symmetry === "x" || symmetry === "both") {
+    ctx.moveTo(width / 2, 0);
+    ctx.lineTo(width / 2, height);
+  }
+  if (symmetry === "y" || symmetry === "both") {
+    ctx.moveTo(0, height / 2);
+    ctx.lineTo(width, height / 2);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+export default function BeadCanvas({ pattern, palette, stage, cell, onSettled, editing }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const strokingRef = useRef(false);
+  const symmetry = editing?.symmetry ?? "none";
   // 動畫跑到一半時父層重繪不該讓它從頭開始,所以 onSettled 走 ref
   const settledRef = useRef(onSettled);
   useEffect(() => {
@@ -74,6 +107,7 @@ export default function BeadCanvas({ pattern, palette, stage, cell, onSettled, o
 
     if (stage === "pattern") {
       paintStatic(null);
+      drawSymmetryGuides(ctx, width, height, symmetry);
       return;
     }
     if (stage === "placed") {
@@ -159,21 +193,46 @@ export default function BeadCanvas({ pattern, palette, stage, cell, onSettled, o
     }
 
     return () => cancelAnimationFrame(frame);
-  }, [pattern, palette, stage, cell]);
+  }, [pattern, palette, stage, cell, symmetry]);
+
+  const cellAt = (event: PointerEvent<HTMLCanvasElement>): number | null => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+    const col = Math.floor(((event.clientX - rect.left) / rect.width) * pattern.cols);
+    const row = Math.floor(((event.clientY - rect.top) / rect.height) * pattern.rows);
+    if (col < 0 || row < 0 || col >= pattern.cols || row >= pattern.rows) return null;
+    return row * pattern.cols + col;
+  };
 
   return (
     <canvas
       ref={canvasRef}
-      onClick={(event) => {
-        if (!onPickCell) return;
-        const rect = event.currentTarget.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) return;
-        const col = Math.floor(((event.clientX - rect.left) / rect.width) * pattern.cols);
-        const row = Math.floor(((event.clientY - rect.top) / rect.height) * pattern.rows);
-        if (col < 0 || row < 0 || col >= pattern.cols || row >= pattern.rows) return;
-        onPickCell(row * pattern.cols + col);
+      onPointerDown={(event) => {
+        if (!editing || event.button !== 0) return;
+        const index = cellAt(event);
+        if (index === null) return;
+        event.preventDefault();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        strokingRef.current = true;
+        editing.onStrokeStart(index);
       }}
-      className={`block h-auto w-full rounded-xl ${onPickCell ? "cursor-crosshair" : ""}`}
+      onPointerMove={(event) => {
+        if (!editing || !strokingRef.current) return;
+        const index = cellAt(event);
+        if (index !== null) editing.onStrokeMove(index);
+      }}
+      onPointerUp={() => {
+        if (!editing || !strokingRef.current) return;
+        strokingRef.current = false;
+        editing.onStrokeEnd();
+      }}
+      onPointerCancel={() => {
+        if (!editing || !strokingRef.current) return;
+        strokingRef.current = false;
+        editing.onStrokeEnd();
+      }}
+      // 編輯時關掉觸控捲動,手指在板子上拖才是畫畫而不是捲頁面
+      className={`block h-auto w-full rounded-xl ${editing ? "cursor-crosshair touch-none" : ""}`}
       style={{ maxWidth: pattern.cols * cell, aspectRatio: `${pattern.cols} / ${pattern.rows}` }}
       role="img"
       aria-label={
