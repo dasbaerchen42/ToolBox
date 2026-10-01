@@ -47,6 +47,9 @@ import SliceTool from "./_components/SliceTool";
 import MergeTool from "./_components/MergeTool";
 import FrameTool, { type FrameSettings } from "./_components/FrameTool";
 import WatermarkTool, { type WatermarkJob } from "./_components/WatermarkTool";
+import PrintTool from "./_components/PrintTool";
+import { applyPrint } from "@/lib/tools/image/print/compose";
+import type { PrintSettings } from "@/lib/tools/image/print/settings";
 import OutputTool from "./_components/OutputTool";
 
 /** 復原只留這麼多步:每一步都抓著一整組 blob,再多就開始吃記憶體 */
@@ -389,6 +392,25 @@ export default function ImageWorkbenchPage() {
       return `已壓上浮水印：${results.length} 張。`;
     });
 
+  const handlePrint = (settings: PrintSettings) =>
+    run(async () => {
+      if (selected.length === 0) return;
+
+      const done = new Map<string, WorkImage>();
+      for (const image of selected) {
+        done.set(image.id, await applyPrint(image, settings));
+      }
+
+      const results = [...done.values()];
+      track(results);
+
+      commit(
+        images.map((image) => done.get(image.id) ?? image),
+        selectedIds.map((id) => done.get(id)?.id ?? id)
+      );
+      return `沖印好了：${results.length} 張。`;
+    });
+
   const buildOutputFiles = async (targets: WorkImage[]) => {
     const files: ExportedImage[] = [];
     for (const [index, image] of targets.entries()) {
@@ -562,6 +584,15 @@ export default function ImageWorkbenchPage() {
             busy={busy}
             t={t}
             onApply={(job) => void handleWatermark(job)}
+          />
+        )}
+
+        {tool === "print" && (
+          <PrintTool
+            images={selected}
+            busy={busy}
+            t={t}
+            onApply={(settings) => void handlePrint(settings)}
           />
         )}
 
