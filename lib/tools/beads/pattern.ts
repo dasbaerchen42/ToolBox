@@ -34,6 +34,8 @@ export type BeadPattern = {
   cols: number;
   rows: number;
   cells: number[];
+  /** 每一格的材質(見 finish.ts);沒有就是全部霧面 */
+  materials?: number[];
 };
 
 export type FitMode = "cover" | "contain";

@@ -4,6 +4,7 @@
 // 之後色盤增減或重排,舊作品照色號找回來;色號不見了就拿色碼找最接近的豆子。
 
 import { hexToRgb, labDistanceSq, rgbToOklab } from "./color";
+import { allMatte, isMaterialId } from "./finish";
 import { paletteLab, type BeadColor } from "./palette";
 import type { BeadPattern } from "./pattern";
 
@@ -14,8 +15,12 @@ const FILE_VERSION = 1;
 /** 板子邊長的上限:大板 58,留一點餘裕給之後的多板拼接 */
 const MAX_SIDE = 232;
 
+/** 作品:完整的一幅;素材:迷你板拼的小零件,之後給周邊工坊用 */
+export type AlbumKind = "work" | "material";
+
 export type SavedWork = {
   id: string;
+  kind: AlbumKind;
   name: string;
   createdAt: string;
   updatedAt: string;
@@ -24,6 +29,8 @@ export type SavedWork = {
   colors: { code: string; hex: string }[];
   /** 指向 colors 的索引,-1 是空格 */
   cells: number[];
+  /** 每格的材質;全部霧面時不存 */
+  materials?: number[];
 };
 
 function createId(): string {
@@ -39,7 +46,8 @@ export function toSavedWork(
   palette: BeadColor[],
   name: string,
   existing?: Pick<SavedWork, "id" | "createdAt">,
-  now = new Date().toISOString()
+  now = new Date().toISOString(),
+  kind: AlbumKind = "work"
 ): SavedWork {
   const used = new Map<number, number>();
   const colors: SavedWork["colors"] = [];
@@ -57,6 +65,7 @@ export function toSavedWork(
 
   return {
     id: existing?.id ?? createId(),
+    kind,
     name: name.trim() || "未命名作品",
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
@@ -64,6 +73,7 @@ export function toSavedWork(
     rows: pattern.rows,
     colors,
     cells,
+    ...(allMatte(pattern.materials) ? {} : { materials: [...(pattern.materials as number[])] }),
   };
 }
 
@@ -92,6 +102,7 @@ export function fromSavedWork(work: SavedWork, palette: BeadColor[]): BeadPatter
     cols: work.cols,
     rows: work.rows,
     cells: work.cells.map((cell) => (cell < 0 ? -1 : mapping[cell])),
+    ...(work.materials ? { materials: [...work.materials] } : {}),
   };
 }
 
@@ -123,9 +134,18 @@ function readWork(value: unknown): SavedWork | null {
   );
   if (!cellsOk) return null;
 
+  // 材質壞掉就當作全部霧面,不為了材質丟掉整件作品
+  const materials =
+    Array.isArray(raw.materials) &&
+    raw.materials.length === size &&
+    raw.materials.every(isMaterialId)
+      ? (raw.materials as number[])
+      : undefined;
+
   const now = new Date().toISOString();
   return {
     id: raw.id,
+    kind: raw.kind === "material" ? "material" : "work",
     name: raw.name.slice(0, 60),
     createdAt: isText(raw.createdAt) ? raw.createdAt : now,
     updatedAt: isText(raw.updatedAt) ? raw.updatedAt : now,
@@ -133,6 +153,7 @@ function readWork(value: unknown): SavedWork | null {
     rows: raw.rows,
     colors,
     cells: raw.cells as number[],
+    ...(materials ? { materials } : {}),
   };
 }
 

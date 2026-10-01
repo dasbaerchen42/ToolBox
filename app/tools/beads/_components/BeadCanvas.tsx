@@ -8,8 +8,11 @@ import {
   drawFallingBead,
   drawFlat,
   drawIron,
+  drawScorch,
+  ironLength,
   smoothstep,
 } from "@/lib/tools/beads/draw";
+import type { BeadShape } from "@/lib/tools/beads/finish";
 import type { BeadColor } from "@/lib/tools/beads/palette";
 import type { Symmetry } from "@/lib/tools/beads/edit";
 import { dropOrder, type BeadPattern } from "@/lib/tools/beads/pattern";
@@ -36,6 +39,13 @@ type Props = {
   stage: Stage;
   /** 畫面上每格幾 CSS 像素 */
   cell: number;
+  /** 燙好時燙到什麼程度(0–1) */
+  melt: number;
+  shape: BeadShape;
+  /** 夜光材質要不要發光 */
+  glow: boolean;
+  /** 焦痕的種子;0 = 沒有 */
+  scorchSeed: number;
   /** 動畫播完(或被略過)時通知:dropping → placed、ironing → ironed */
   onSettled: (stage: "placed" | "ironed") => void;
   /** 給了就可以在板子上拖曳編輯(只有底圖階段) */
@@ -72,7 +82,18 @@ function drawSymmetryGuides(
   ctx.restore();
 }
 
-export default function BeadCanvas({ pattern, palette, stage, cell, onSettled, editing }: Props) {
+export default function BeadCanvas({
+  pattern,
+  palette,
+  stage,
+  cell,
+  melt: targetMelt,
+  shape,
+  glow,
+  scorchSeed,
+  onSettled,
+  editing,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokingRef = useRef(false);
   // 空板子(柱子)只跟尺寸有關;編輯時每畫一格都要重畫,大板的柱子有一萬多根,先畫好存著
@@ -98,6 +119,7 @@ export default function BeadCanvas({ pattern, palette, stage, cell, onSettled, e
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const shades = beadShades(palette);
+    const style = { shape, glow };
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const boardKey = `${cols}x${rows}@${cell}x${dpr}`;
@@ -115,8 +137,12 @@ export default function BeadCanvas({ pattern, palette, stage, cell, onSettled, e
     const paintStatic = (melt: number | null) => {
       ctx.clearRect(0, 0, width, height);
       ctx.drawImage(board, 0, 0, width, height);
-      if (melt === null) drawFlat(ctx, pattern, palette, cell);
-      else drawBeads(ctx, pattern, shades, cell, () => melt);
+      if (melt === null) {
+        drawFlat(ctx, pattern, palette, cell);
+        return;
+      }
+      drawBeads(ctx, pattern, shades, cell, () => melt, style);
+      if (melt > 0) drawScorch(ctx, cols, rows, cell, scorchSeed, melt);
     };
 
     if (stage === "pattern") {
@@ -129,7 +155,7 @@ export default function BeadCanvas({ pattern, palette, stage, cell, onSettled, e
       return;
     }
     if (stage === "ironed") {
-      paintStatic(1);
+      paintStatic(targetMelt);
       return;
     }
 
@@ -165,7 +191,7 @@ export default function BeadCanvas({ pattern, palette, stage, cell, onSettled, e
           newlyLanded.push(order[landed]);
           landed += 1;
         }
-        if (newlyLanded.length > 0) drawBeads(layerCtx, pattern, shades, cell, () => 0, newlyLanded);
+        if (newlyLanded.length > 0) drawBeads(layerCtx, pattern, shades, cell, () => 0, style, newlyLanded);
 
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -173,7 +199,15 @@ export default function BeadCanvas({ pattern, palette, stage, cell, onSettled, e
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
         for (let i = landed; i < order.length && startOf(i) <= elapsed; i += 1) {
-          drawFallingBead(ctx, pattern, shades, cell, order[i], (elapsed - startOf(i)) / FALL_MS);
+          drawFallingBead(
+            ctx,
+            pattern,
+            shades,
+            cell,
+            order[i],
+            (elapsed - startOf(i)) / FALL_MS,
+            style
+          );
         }
 
         if (landed >= order.length) settledRef.current("placed");
@@ -183,11 +217,10 @@ export default function BeadCanvas({ pattern, palette, stage, cell, onSettled, e
       frame = requestAnimationFrame(tick);
     } else {
       // 熨斗:尖端從板子左邊外面推到右邊外面(連機身一起離開畫面)
-      const ironLength = Math.max(cell * 7, height * 0.42);
-      const travel = width + ironLength;
-      // 尖端經過之後約五格的距離才燙到定
+      const travel = width + ironLength(height, cell);
+      // 尖端經過之後約五格的距離才燙到定;progress 是 0–1,乘上目標燙度才是實際的 melt
       const meltSpan = cell * 5;
-      const meltAt = (tipX: number, col: number) =>
+      const progressAt = (tipX: number, col: number) =>
         smoothstep((tipX - (col + 0.5) * cell) / meltSpan);
 
       // 大板(116 格)一萬多顆豆子,每格全部重畫會掉到一秒幾格。
@@ -206,11 +239,12 @@ export default function BeadCanvas({ pattern, palette, stage, cell, onSettled, e
       const boardLayer = board;
       const rawLayer = layer((c) => {
         c.drawImage(boardLayer, 0, 0, width, height);
-        drawBeads(c, pattern, shades, cell, () => 0);
+        drawBeads(c, pattern, shades, cell, () => 0, style);
       });
       const doneLayer = layer((c) => {
         c.drawImage(boardLayer, 0, 0, width, height);
-        drawBeads(c, pattern, shades, cell, () => 1);
+        drawBeads(c, pattern, shades, cell, () => targetMelt, style);
+        drawScorch(c, cols, rows, cell, scorchSeed, targetMelt);
       });
 
       /** 把預畫好的那張,只貼 x0–x1 這一段(CSS 像素) */
@@ -227,9 +261,9 @@ export default function BeadCanvas({ pattern, palette, stage, cell, onSettled, e
 
         // 燙到一半的欄:左邊整片燙好、右邊還沒碰到,只有中間這段要逐顆畫
         let bandStart = 0;
-        while (bandStart < cols && meltAt(tipX, bandStart) >= 1) bandStart += 1;
+        while (bandStart < cols && progressAt(tipX, bandStart) >= 1) bandStart += 1;
         let bandEnd = bandStart;
-        while (bandEnd < cols && meltAt(tipX, bandEnd) > 0) bandEnd += 1;
+        while (bandEnd < cols && progressAt(tipX, bandEnd) > 0) bandEnd += 1;
 
         ctx.clearRect(0, 0, width, height);
         blit(doneLayer, 0, bandStart * cell);
@@ -241,9 +275,9 @@ export default function BeadCanvas({ pattern, palette, stage, cell, onSettled, e
           for (let row = 0; row < rows; row += 1) {
             for (let col = bandStart; col < bandEnd; col += 1) band.push(row * cols + col);
           }
-          drawBeads(ctx, pattern, shades, cell, (col) => meltAt(tipX, col), band);
+          drawBeads(ctx, pattern, shades, cell, (col) => progressAt(tipX, col) * targetMelt, style, band);
         }
-        if (t < 1) drawIron(ctx, tipX, height, cell);
+        if (t < 1) drawIron(ctx, tipX, height, cell, now - start);
 
         if (t >= 1) settledRef.current("ironed");
         else frame = requestAnimationFrame(tick);
@@ -253,7 +287,7 @@ export default function BeadCanvas({ pattern, palette, stage, cell, onSettled, e
     }
 
     return () => cancelAnimationFrame(frame);
-  }, [pattern, palette, stage, cell, symmetry]);
+  }, [pattern, palette, stage, cell, symmetry, targetMelt, shape, glow, scorchSeed]);
 
   const cellAt = (event: PointerEvent<HTMLCanvasElement>): number | null => {
     const rect = event.currentTarget.getBoundingClientRect();

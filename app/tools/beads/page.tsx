@@ -14,17 +14,31 @@ import {
   storeAlbum,
   toSavedWork,
   fromSavedWork,
+  type AlbumKind,
   type SavedWork,
 } from "@/lib/tools/beads/album";
 import { renderPatternPng } from "@/lib/tools/beads/draw";
 import {
   blankPattern,
+  fillMaterial,
   floodFill,
   lineBetween,
   paint,
+  paintMaterial,
   replaceColor,
+  stampMaterial,
   type Symmetry,
 } from "@/lib/tools/beads/edit";
+import { patternToSvg, renderSheetPng } from "@/lib/tools/beads/export";
+import {
+  MATERIALS,
+  MELT_LEVELS,
+  materialAt,
+  meltOf,
+  type BeadShape,
+  type MeltLevel,
+} from "@/lib/tools/beads/finish";
+import { TEMPLATES, templatePattern, type BeadTemplate } from "@/lib/tools/beads/templates";
 import { DEFAULT_PALETTE, paletteLab } from "@/lib/tools/beads/palette";
 import {
   countColors,
@@ -38,6 +52,7 @@ import {
 } from "@/lib/tools/beads/pattern";
 import { decodePhoto, samplePhoto } from "@/lib/tools/beads/photo";
 import { ImageDecodeError } from "@/lib/tools/image/render";
+import { CanvasTooLargeError } from "@/lib/canvas-limits";
 import { baseNameOf } from "@/lib/tools/image/format";
 import { EmptyWorkspace, ToolPane } from "../image/_components/WorkbenchLayout";
 import {
@@ -52,12 +67,13 @@ import BeadCanvas, { type Stage } from "./_components/BeadCanvas";
 import EditPanel, { type EditTool } from "./_components/EditPanel";
 import ColorList from "./_components/ColorList";
 import AlbumPanel from "./_components/AlbumPanel";
+import { useDarkBackground } from "./_components/useDarkBackground";
 
 const PALETTE = DEFAULT_PALETTE;
 const PALETTE_LAB = paletteLab(PALETTE);
 
-/** 板子寬度:29 是一塊小板,58 是一塊大板,87、116 是大板拼接 */
-type BoardSize = "29" | "58" | "87" | "116";
+/** 板子寬度:29 是一塊小板,58 是一塊大板,87、116 是大板拼接;5、7 是拼小零件的迷你板 */
+type BoardSize = "5" | "7" | "29" | "58" | "87" | "116";
 
 const BOARD_WIDTHS: { value: BoardSize; label: string }[] = [
   { value: "29", label: "29" },
@@ -65,6 +81,16 @@ const BOARD_WIDTHS: { value: BoardSize; label: string }[] = [
   { value: "87", label: "87" },
   { value: "116", label: "116" },
 ];
+
+/** 空板可選的尺寸(含迷你板) */
+const BLANK_SIZES: { value: BoardSize; label: string }[] = [
+  { value: "5", label: "迷你 5" },
+  { value: "7", label: "迷你 7" },
+  ...BOARD_WIDTHS,
+];
+
+/** 這麼小的板子拼的是素材(星星、愛心這類小零件),收藏時預設放素材分頁 */
+const MINI_MAX = 16;
 
 /** 照片轉換的所有參數 */
 type ConvertSettings = {
@@ -89,17 +115,15 @@ const DEFAULT_SETTINGS: ConvertSettings = {
 /** 輸出 PNG 每格幾像素:29 格約 700px、58 格約 1400px,社群貼圖夠用 */
 const EXPORT_CELL = 24;
 
-/** 復原最多記這麼多步;一步就是一份 cells,大板也才幾 KB */
+/** 復原最多記這麼多步;一步就是一份 cells(加材質),大板也才幾十 KB */
 const HISTORY_LIMIT = 100;
 
 /** 預設畫筆顏色:猩々緋,空板上第一筆畫下去看得清楚 */
 const DEFAULT_COLOR = Math.max(0, PALETTE.findIndex((color) => color.name === "猩々緋"));
 
-/** 畫面上每格幾像素:小板格子大一點,大板才塞得進畫面 */
-function displayCell(cols: number): number {
-  if (cols <= 29) return 20;
-  if (cols <= 58) return 12;
-  return Math.max(4, Math.floor(700 / cols));
+/** 畫面上每格幾像素:板子大約 700px 寬;迷你板格子放大,但不要大到像在看單顆豆子 */
+function displayCell(cols: number, rows: number): number {
+  return Math.min(72, Math.max(4, Math.floor(700 / Math.max(cols, rows))));
 }
 
 type Photo = { bitmap: ImageBitmap; name: string };
@@ -107,6 +131,20 @@ type Notice = { kind: "info" | "error"; text: string } | null;
 
 /** 現在板子上的東西從哪來:照片轉的才有轉換參數可以調 */
 type Source = "photo" | "blank" | "album";
+
+/** 復原紀錄的一步:顏色與材質一起記,復原時材質才不會跟著不見 */
+type Snapshot = Pick<BeadPattern, "cells" | "materials">;
+
+const snapshotOf = (pattern: BeadPattern): Snapshot => ({
+  cells: pattern.cells,
+  materials: pattern.materials,
+});
+
+const sameSnapshot = (a: Snapshot, b: Snapshot) =>
+  a.cells === b.cells && a.materials === b.materials;
+
+/** 每燙一次換一個焦痕種子;畫面與下載的圖用同一個 */
+const newScorchSeed = () => 1 + Math.floor(Math.random() * 1_000_000);
 
 export default function BeadsPage() {
   const t = getThemeClasses();
@@ -122,23 +160,36 @@ export default function BeadsPage() {
   // 板子與編輯
   const [source, setSource] = useState<Source | null>(null);
   const [pattern, setPattern] = useState<BeadPattern | null>(null);
-  const [past, setPast] = useState<number[][]>([]);
-  const [future, setFuture] = useState<number[][]>([]);
+  const [past, setPast] = useState<Snapshot[]>([]);
+  const [future, setFuture] = useState<Snapshot[]>([]);
   const [tool, setTool] = useState<EditTool>("pen");
   const [color, setColor] = useState(DEFAULT_COLOR);
+  const [material, setMaterial] = useState(0);
   const [symmetry, setSymmetry] = useState<Symmetry>("none");
   const patternRef = useRef<BeadPattern | null>(null);
-  const stroke = useRef<{ base: number[]; last: number; color: number } | null>(null);
+  const stroke = useRef<{
+    base: Snapshot;
+    last: number;
+    color: number;
+    material: number;
+    mode: "color" | "material";
+  } | null>(null);
 
   // 收藏
   const [album, setAlbum] = useState<SavedWork[]>([]);
   const [savedAs, setSavedAs] = useState<Pick<SavedWork, "id" | "createdAt"> | null>(null);
+  const [saveKind, setSaveKind] = useState<AlbumKind>("work");
   const [name, setName] = useState("");
   /** 有沒有還沒收進收藏冊的改動:離開頁面、換圖、開別的作品前要問 */
   const [dirty, setDirty] = useState(false);
 
   // 落豆、熨燙、輸出
   const [stage, setStage] = useState<Stage>("pattern");
+  const [meltLevel, setMeltLevel] = useState<MeltLevel>("medium");
+  const [beadShape, setBeadShape] = useState<BeadShape>("round");
+  const [scorch, setScorch] = useState(true);
+  const [scorchSeed, setScorchSeed] = useState(0);
+  const glow = useDarkBackground();
   const [withBoard, setWithBoard] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
@@ -209,6 +260,7 @@ export default function BeadsPage() {
         setPhoto(next);
         setName(next.name);
         setSavedAs(null);
+        setSaveKind("work");
         convert(next, settings);
         showNotice("轉好了。可以直接在板子上修，或先按「自動落豆」。");
       } catch (error) {
@@ -244,9 +296,26 @@ export default function BeadsPage() {
     loadPattern(blankPattern(cells, cells), "blank");
   }
 
+  /** 迷你板拼的是小零件,收藏時預設放素材分頁 */
+  const defaultKind = (cols: number, rows: number): AlbumKind =>
+    Math.max(cols, rows) <= MINI_MAX ? "material" : "work";
+
+  /** 套用內建模板:色位用模板預設的顏色,之後在色位清單換色 */
+  function startTemplate(template: BeadTemplate) {
+    if (!confirmDiscard("套用模板")) return;
+    const next = templatePattern(template, PALETTE);
+    setName(template.name);
+    setSavedAs(null);
+    setSaveKind(defaultKind(next.cols, next.rows));
+    setDirty(true);
+    loadPattern(next, "album");
+    showNotice(`套用了「${template.name}」。在下方色位清單按「換色」就能整個換顏色。`);
+  }
+
   function startBlank(nextSize: BoardSize) {
     if (!confirmDiscard("開新的空板")) return;
     const cells = Number(nextSize);
+    setSaveKind(defaultKind(cells, cells));
     setBlankSize(nextSize);
     setName("");
     setSavedAs(null);
@@ -282,22 +351,27 @@ export default function BeadsPage() {
 
   // ---- 編輯 ----
 
-  /** 一次完整的改動(一筆畫、一次倒油漆、清一個色)記成一步復原 */
-  const commitEdit = useCallback((base: number[], next: number[]) => {
-    if (base === next) return;
+  /** 一次完整的改動(一筆畫、一次倒油漆、清一個色、換一個色位)記成一步復原 */
+  const commitEdit = useCallback((base: Snapshot, next: Snapshot) => {
+    if (sameSnapshot(base, next)) return;
     setPast((previous) => [...previous, base].slice(-HISTORY_LIMIT));
     setFuture([]);
     setDirty(true);
   }, []);
 
-  const applyCells = (cells: number[]) =>
-    setPattern((previous) => (previous && previous.cells !== cells ? { ...previous, cells } : previous));
+  /** 套用改動;patternRef 同步更新,拖曳時下一次 pointermove 才拿得到最新的 */
+  function editTo(current: BeadPattern, next: Snapshot) {
+    const updated = { ...current, cells: next.cells, materials: next.materials };
+    patternRef.current = updated;
+    setPattern((previous) => (previous && !sameSnapshot(previous, next) ? updated : previous));
+  }
 
   const editing = stage === "pattern" && pattern !== null;
 
   function strokeStart(index: number) {
     const current = patternRef.current;
     if (!current) return;
+    const base = snapshotOf(current);
 
     if (tool === "picker") {
       const picked = current.cells[index];
@@ -306,23 +380,34 @@ export default function BeadsPage() {
         return;
       }
       setColor(picked);
+      setMaterial(materialAt(current, index));
       setTool("pen");
       showNotice(`取到「${PALETTE[picked].name}」，換回畫筆。`);
       return;
     }
 
     if (tool === "fill") {
-      const next = floodFill(current, index, color, symmetry);
-      applyCells(next);
-      commitEdit(current.cells, next);
+      const cells = floodFill(current, index, color, symmetry);
+      const next = { cells, materials: stampMaterial(current, cells, material) };
+      editTo(current, next);
+      commitEdit(base, next);
+      return;
+    }
+
+    if (tool === "material") {
+      stroke.current = { base, last: index, color, material, mode: "material" };
+      editTo(current, {
+        cells: current.cells,
+        materials: paintMaterial(current, [index], material, symmetry),
+      });
       return;
     }
 
     const paintColor = tool === "eraser" ? -1 : color;
-    const next = paint(current, [index], paintColor, symmetry);
-    stroke.current = { base: current.cells, last: index, color: paintColor };
-    applyCells(next);
-    patternRef.current = { ...current, cells: next };
+    const paintMaterialId = tool === "eraser" ? 0 : material;
+    const cells = paint(current, [index], paintColor, symmetry);
+    stroke.current = { base, last: index, color: paintColor, material: paintMaterialId, mode: "color" };
+    editTo(current, { cells, materials: stampMaterial(current, cells, paintMaterialId) });
   }
 
   function strokeMove(index: number) {
@@ -330,16 +415,23 @@ export default function BeadsPage() {
     const current = patternRef.current;
     if (!active || !current || index === active.last) return;
 
-    const next = paint(current, lineBetween(active.last, index, current.cols), active.color, symmetry);
+    const line = lineBetween(active.last, index, current.cols);
     active.last = index;
-    applyCells(next);
-    patternRef.current = { ...current, cells: next };
+    if (active.mode === "material") {
+      editTo(current, {
+        cells: current.cells,
+        materials: paintMaterial(current, line, active.material, symmetry),
+      });
+    } else {
+      const cells = paint(current, line, active.color, symmetry);
+      editTo(current, { cells, materials: stampMaterial(current, cells, active.material) });
+    }
   }
 
   function strokeEnd() {
     const active = stroke.current;
     stroke.current = null;
-    if (active && patternRef.current) commitEdit(active.base, patternRef.current.cells);
+    if (active && patternRef.current) commitEdit(active.base, snapshotOf(patternRef.current));
   }
 
   const undo = useCallback(() => {
@@ -347,8 +439,8 @@ export default function BeadsPage() {
     const current = patternRef.current;
     if (!previous || !current) return;
     setPast(past.slice(0, -1));
-    setFuture((list) => [current.cells, ...list].slice(0, HISTORY_LIMIT));
-    setPattern({ ...current, cells: previous });
+    setFuture((list) => [snapshotOf(current), ...list].slice(0, HISTORY_LIMIT));
+    setPattern({ ...current, ...previous });
     setStage("pattern");
     setDirty(true);
   }, [past]);
@@ -358,8 +450,8 @@ export default function BeadsPage() {
     const current = patternRef.current;
     if (!next || !current) return;
     setFuture(future.slice(1));
-    setPast((list) => [...list, current.cells].slice(-HISTORY_LIMIT));
-    setPattern({ ...current, cells: next });
+    setPast((list) => [...list, snapshotOf(current)].slice(-HISTORY_LIMIT));
+    setPattern({ ...current, ...next });
     setStage("pattern");
     setDirty(true);
   }, [future]);
@@ -386,15 +478,40 @@ export default function BeadsPage() {
     return () => window.removeEventListener("keydown", handle);
   }, [undo, redo]);
 
-  function clearColor(index: number) {
+  /** 不是一筆一筆畫的整體改動(清色、換色位、全部換材質):直接記一步 */
+  function editWhole(next: (current: BeadPattern) => Snapshot): BeadPattern | null {
     const current = patternRef.current;
+    if (!current) return null;
+    const snapshot = next(current);
+    editTo(current, snapshot);
+    commitEdit(snapshotOf(current), snapshot);
+    setStage("pattern");
+    return current;
+  }
+
+  function clearColor(index: number) {
+    const current = editWhole((p) => ({ cells: replaceColor(p.cells, index, -1), materials: p.materials }));
     if (!current) return;
     const count = current.cells.filter((cell) => cell === index).length;
-    const next = replaceColor(current.cells, index, -1);
-    applyCells(next);
-    commitEdit(current.cells, next);
-    setStage("pattern");
     showNotice(`清掉「${PALETTE[index].name}」${count} 顆，按「復原」可以拿回來。`);
+  }
+
+  /** 色位換色:這個顏色的每一顆都換成另一個顏色,整張圖跟著變 */
+  function recolor(from: number, to: number) {
+    if (from === to) return;
+    const current = editWhole((p) => ({ cells: replaceColor(p.cells, from, to), materials: p.materials }));
+    if (!current) return;
+    const merged = current.cells.includes(to);
+    showNotice(
+      merged
+        ? `「${PALETTE[from].name}」換成「${PALETTE[to].name}」，跟原本的「${PALETTE[to].name}」併成同一色了。`
+        : `「${PALETTE[from].name}」換成「${PALETTE[to].name}」。`
+    );
+  }
+
+  function applyMaterialToAll(id: number) {
+    editWhole((p) => ({ cells: p.cells, materials: fillMaterial(p, id) }));
+    showNotice(`整幅都換成「${MATERIALS[id].label}」。`);
   }
 
   // ---- 收藏冊 ----
@@ -409,13 +526,15 @@ export default function BeadsPage() {
   function saveWork(asNew: boolean) {
     if (!pattern) return;
     const target = asNew ? undefined : (savedAs ?? undefined);
-    const work = toSavedWork(pattern, PALETTE, name, target);
+    const work = toSavedWork(pattern, PALETTE, name, target, undefined, saveKind);
     setSavedAs({ id: work.id, createdAt: work.createdAt });
     setName(work.name);
     setDirty(false);
     persist(
       [work, ...album.filter((item) => item.id !== work.id)],
-      target ? `已更新「${work.name}」。` : `已收進收藏冊：「${work.name}」。`
+      target
+        ? `已更新「${work.name}」。`
+        : `已收進收藏冊的${saveKind === "material" ? "素材" : "作品"}：「${work.name}」。`
     );
   }
 
@@ -424,6 +543,7 @@ export default function BeadsPage() {
     const next = fromSavedWork(work, PALETTE);
     setSavedAs({ id: work.id, createdAt: work.createdAt });
     setName(work.name);
+    setSaveKind(work.kind);
     setDirty(false);
     loadPattern(next, "album");
     showNotice(`打開了「${work.name}」。`);
@@ -467,16 +587,60 @@ export default function BeadsPage() {
   const counts = useMemo(() => (pattern ? countColors(pattern.cells) : []), [pattern]);
   const total = counts.reduce((sum, item) => sum + item.count, 0);
   const fileTitle = `${name.trim() || "拼豆"}-拼豆`;
-  const exportKey = JSON.stringify([fileTitle, pattern?.cells, stage, withBoard]);
+  /** 現在畫面上的燙度:燙好了才算,還沒燙就是 0 */
+  const currentMelt = stage === "ironed" ? meltOf(meltLevel) : 0;
+  const style = { shape: beadShape, glow };
+  const exportKey = JSON.stringify([
+    fileTitle,
+    pattern?.cells,
+    pattern?.materials,
+    currentMelt,
+    beadShape,
+    glow,
+    scorchSeed,
+    withBoard,
+  ]);
 
   async function buildPng(): Promise<ExportedImage | null> {
     if (!pattern) return null;
     const blob = await renderPatternPng(pattern, PALETTE, {
       cell: EXPORT_CELL,
-      melt: stage === "ironed" ? 1 : 0,
+      melt: currentMelt,
       board: withBoard,
+      style,
+      scorchSeed,
     });
     return { name: `${sanitizeFileName(fileTitle)}.png`, blob };
+  }
+
+  /** SVG:向量檔,放多大都不糊,可以拿去印實體貼紙(不含焦痕、亮粉這類質感) */
+  const handleSvg = () =>
+    run(async () => {
+      if (!pattern) return;
+      const svg = patternToSvg(pattern, PALETTE, {
+        melt: currentMelt,
+        shape: beadShape,
+        board: withBoard,
+      });
+      downloadBlob({
+        name: `${sanitizeFileName(fileTitle)}.svg`,
+        blob: new Blob([svg], { type: "image/svg+xml" }),
+      });
+      return "已下載 SVG。";
+    });
+
+  /** 圖紙:每格寫色號、附每色顆數,照著用實體豆子拼 */
+  const handleSheet = () =>
+    run(async () => {
+      if (!pattern) return;
+      const blob = await renderSheetPng(pattern, PALETTE, name.trim() || "拼豆圖紙");
+      downloadBlob({ name: `${sanitizeFileName(`${name.trim() || "拼豆"}-圖紙`)}.png`, blob });
+      return "已下載圖紙。";
+    });
+
+  function startIroning() {
+    setScorchSeed(scorch ? newScorchSeed() : 0);
+    setStage("ironing");
   }
 
   async function run(task: () => Promise<string | void>) {
@@ -486,7 +650,12 @@ export default function BeadsPage() {
       if (message) showNotice(message);
     } catch (error) {
       console.error(error);
-      showNotice("輸出失敗了，請再試一次。", "error");
+      showNotice(
+        error instanceof CanvasTooLargeError
+          ? `${error.message}，圖紙太大畫不出來。`
+          : "輸出失敗了，請再試一次。",
+        "error"
+      );
     } finally {
       setBusy(false);
     }
@@ -571,7 +740,11 @@ export default function BeadsPage() {
                     pattern={pattern}
                     palette={PALETTE}
                     stage={stage}
-                    cell={displayCell(pattern.cols)}
+                    cell={displayCell(pattern.cols, pattern.rows)}
+                    melt={meltOf(meltLevel)}
+                    shape={beadShape}
+                    glow={glow}
+                    scorchSeed={scorchSeed}
                     onSettled={handleSettled}
                     editing={
                       editing
@@ -643,6 +816,28 @@ export default function BeadsPage() {
                   >
                     空白大板
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => startBlank("7")}
+                    disabled={busy || animating}
+                    className={`rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40 ${t.secondary}`}
+                  >
+                    迷你板
+                  </button>
+                </div>
+                <div role="group" aria-label="模板" className="flex flex-wrap items-center gap-1.5">
+                  <span className={`text-[11px] tracking-[0.08em] ${t.muted}`}>模板</span>
+                  {TEMPLATES.map((template) => (
+                    <button
+                      key={template.id}
+                      type="button"
+                      onClick={() => startTemplate(template)}
+                      disabled={busy || animating}
+                      className={`rounded-xl border px-2.5 py-1 text-xs transition disabled:opacity-40 ${t.unselected}`}
+                    >
+                      {template.name}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -752,9 +947,9 @@ export default function BeadsPage() {
                     onChange={changeBlankSize}
                     t={t}
                     label="板子尺寸"
-                    options={BOARD_WIDTHS.map((item) => ({
+                    options={BLANK_SIZES.map((item) => ({
                       value: item.value,
-                      label: `${item.label}×${item.label}`,
+                      label: item.value === "5" || item.value === "7" ? item.label : `${item.label}×${item.label}`,
                     }))}
                   />
                 </Field>
@@ -773,7 +968,7 @@ export default function BeadsPage() {
                     </ActionButton>
                   )}
                   {stage === "placed" && (
-                    <ActionButton t={t} onClick={() => setStage("ironing")}>
+                    <ActionButton t={t} onClick={startIroning}>
                       熨燙
                     </ActionButton>
                   )}
@@ -790,11 +985,56 @@ export default function BeadsPage() {
                 </div>
               )}
 
+              {pattern && (
+                <div className={`space-y-3 border-t pt-4 ${t.divider}`}>
+                  <Field
+                    label="燙的程度"
+                    hint={MELT_LEVELS.find((item) => item.value === meltLevel)?.hint}
+                    t={t}
+                  >
+                    <Segmented
+                      value={meltLevel}
+                      onChange={setMeltLevel}
+                      t={t}
+                      label="燙的程度"
+                      options={MELT_LEVELS.map(({ value, label }) => ({ value, label }))}
+                    />
+                  </Field>
+                  <Field
+                    label="豆子形狀"
+                    hint={beadShape === "square" ? "方形磁磚，做出馬賽克的質感" : "一般的圓豆"}
+                    t={t}
+                  >
+                    <Segmented
+                      value={beadShape}
+                      onChange={setBeadShape}
+                      t={t}
+                      label="豆子形狀"
+                      options={[
+                        { value: "round", label: "圓豆" },
+                        { value: "square", label: "方形磁磚" },
+                      ]}
+                    />
+                  </Field>
+                  <Toggle
+                    checked={scorch}
+                    onChange={(on) => {
+                      setScorch(on);
+                      // 已經燙好的話馬上看得到差別;再燙一次會換一批焦痕
+                      setScorchSeed(on ? newScorchSeed() : 0);
+                    }}
+                    label="燙出一點焦痕（位置與深淺隨機）"
+                    t={t}
+                  />
+                </div>
+              )}
+
               {pattern && editing && (
                 <EditPanel
                   palette={PALETTE}
                   tool={tool}
                   color={color}
+                  material={material}
                   symmetry={symmetry}
                   canUndo={past.length > 0}
                   canRedo={future.length > 0}
@@ -804,6 +1044,11 @@ export default function BeadsPage() {
                     setColor(index);
                     if (tool === "eraser" || tool === "picker") setTool("pen");
                   }}
+                  onMaterial={(id) => {
+                    setMaterial(id);
+                    if (tool === "eraser" || tool === "picker") setTool("material");
+                  }}
+                  onMaterialAll={() => applyMaterialToAll(material)}
                   onSymmetry={setSymmetry}
                   onUndo={undo}
                   onRedo={redo}
@@ -827,6 +1072,9 @@ export default function BeadsPage() {
                         存到相簿／分享
                       </ActionButton>
                     )}
+                    <ActionButton tone="secondary" t={t} onClick={() => void handleSvg()} disabled={busy}>
+                      下載 SVG（向量，可印貼紙）
+                    </ActionButton>
                   </div>
                   {stage === "placed" && (
                     <p className={`text-[11px] leading-5 ${t.muted}`}>
@@ -852,6 +1100,21 @@ export default function BeadsPage() {
                       className={`w-full rounded-xl border px-3 py-2 text-sm ${t.input}`}
                     />
                   </label>
+                  <Field label="收在哪一頁" t={t}>
+                    <Segmented
+                      value={saveKind}
+                      onChange={(value) => {
+                        setSaveKind(value);
+                        setDirty(true);
+                      }}
+                      t={t}
+                      label="收藏分頁"
+                      options={[
+                        { value: "work", label: "作品" },
+                        { value: "material", label: "素材（小零件）" },
+                      ]}
+                    />
+                  </Field>
                   <div className="flex flex-wrap gap-1.5">
                     <ActionButton
                       t={t}
@@ -872,6 +1135,17 @@ export default function BeadsPage() {
                       </ActionButton>
                     )}
                   </div>
+                  <ActionButton
+                    t={t}
+                    tone="secondary"
+                    onClick={() => void handleSheet()}
+                    disabled={busy || animating || total === 0}
+                  >
+                    下載圖紙（照著拼用）
+                  </ActionButton>
+                  <p className={`text-[11px] leading-5 ${t.muted}`}>
+                    圖紙每格寫色號、附每色顆數，可以照著用實體豆子拼。
+                  </p>
                 </div>
               )}
 
@@ -886,6 +1160,7 @@ export default function BeadsPage() {
                     setTool("pen");
                   }}
                   onClear={clearColor}
+                  onRecolor={recolor}
                 />
               )}
 

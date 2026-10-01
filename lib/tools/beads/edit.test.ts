@@ -1,10 +1,13 @@
 import {
   blankPattern,
+  fillMaterial,
   floodFill,
   lineBetween,
   mirrorIndices,
   paint,
+  paintMaterial,
   replaceColor,
+  stampMaterial,
 } from "./edit";
 import {
   fromSavedWork,
@@ -200,5 +203,69 @@ describe("album:匯入", () => {
     const merged = mergeAlbum([older, other], [newer]);
     expect(merged.map((work) => work.name)).toEqual(["新", good.name]);
     expect(mergeAlbum([newer], [older])[0].name).toBe("新");
+  });
+});
+
+describe("edit:材質", () => {
+  it("畫筆改了顏色的格子標上目前材質,擦掉的格子歸零", () => {
+    const base = { ...grid("12."), materials: [3, 3, 0] };
+    const next = [5, -1, 2]; // 第 0 格換色、第 1 格擦掉、第 2 格新放
+    expect(stampMaterial(base, next, 2)).toEqual([2, 0, 2]);
+  });
+
+  it("沒改到任何格子就回傳原本的材質陣列", () => {
+    const base = { ...grid("12"), materials: [1, 0] };
+    expect(stampMaterial(base, base.cells, 4)).toBe(base.materials);
+  });
+
+  it("原本全霧面、這次也是霧面,就不產生材質陣列", () => {
+    const base = grid("12");
+    expect(stampMaterial(base, [3, 2], 0)).toBeUndefined();
+  });
+
+  it("材質筆只改有豆子的格子,連同對稱位置", () => {
+    const pattern = grid("1..1");
+    expect(paintMaterial(pattern, [0], 2, "x")).toEqual([2, 0, 0, 2]);
+    expect(paintMaterial(pattern, [1], 2, "none")).toBeUndefined(); // 空格不給材質
+  });
+
+  it("材質筆塗到一樣的材質不算改變", () => {
+    const pattern = { ...grid("11"), materials: [4, 0] };
+    expect(paintMaterial(pattern, [0], 4, "none")).toBe(pattern.materials);
+  });
+
+  it("全部套用:空格維持 0,霧面直接拿掉陣列", () => {
+    expect(fillMaterial(grid("1.2"), 1)).toEqual([1, 0, 1]);
+    expect(fillMaterial(grid("1.2"), 0)).toBeUndefined();
+  });
+});
+
+describe("album:材質與分類", () => {
+  it("材質跟著存檔走,讀回來一樣;全霧面不存材質", () => {
+    const pattern = { ...grid("5.5"), materials: [2, 0, 4] };
+    const saved = toSavedWork(pattern, DEFAULT_PALETTE, "亮亮", undefined, undefined, "material");
+    expect(saved.kind).toBe("material");
+    expect(saved.materials).toEqual([2, 0, 4]);
+    expect(fromSavedWork(saved, DEFAULT_PALETTE)).toEqual(pattern);
+
+    const plain = toSavedWork({ ...grid("5"), materials: [0] }, DEFAULT_PALETTE, "素");
+    expect(plain.materials).toBeUndefined();
+    expect(plain.kind).toBe("work");
+  });
+
+  it("舊存檔沒有 kind 與材質,讀進來就是作品、全霧面", () => {
+    const old = { ...toSavedWork(grid("1"), DEFAULT_PALETTE, "舊的") } as Partial<SavedWork>;
+    delete old.kind;
+    const [work] = parseAlbum(JSON.stringify([old])).works;
+    expect(work.kind).toBe("work");
+    expect(work.materials).toBeUndefined();
+  });
+
+  it("材質格式不對就當作全霧面,作品本身照樣讀", () => {
+    const saved = toSavedWork(grid("11"), DEFAULT_PALETTE, "a");
+    const broken = { ...saved, materials: [1, 99] };
+    const [work] = parseAlbum(JSON.stringify([broken])).works;
+    expect(work.materials).toBeUndefined();
+    expect(work.cells).toEqual(saved.cells);
   });
 });

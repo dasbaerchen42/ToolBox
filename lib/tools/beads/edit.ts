@@ -132,3 +132,52 @@ export function replaceColor(cells: number[], from: number, to: number): number[
 export function blankPattern(cols: number, rows: number): BeadPattern {
   return { cols, rows, cells: Array(cols * rows).fill(-1) };
 }
+
+/**
+ * 畫筆/油漆桶改了顏色之後,把有變的格子標上目前的材質;
+ * 被擦掉的格子材質歸零。都是霧面時不產生材質陣列。
+ */
+export function stampMaterial(
+  base: BeadPattern,
+  nextCells: number[],
+  material: number
+): number[] | undefined {
+  if (nextCells === base.cells) return base.materials;
+  if (material === 0 && !base.materials) return undefined;
+
+  const materials = base.materials ? [...base.materials] : Array(base.cells.length).fill(0);
+  for (let i = 0; i < nextCells.length; i += 1) {
+    if (nextCells[i] !== base.cells[i]) materials[i] = nextCells[i] < 0 ? 0 : material;
+  }
+  return materials;
+}
+
+/** 材質筆:只改材質不改顏色;空格沒有豆子,不給材質 */
+export function paintMaterial(
+  pattern: BeadPattern,
+  indexes: number[],
+  material: number,
+  symmetry: Symmetry
+): number[] | undefined {
+  const { cols, rows, cells } = pattern;
+  let next: number[] | null = null;
+
+  for (const index of indexes) {
+    if (index < 0 || index >= cells.length) continue;
+    for (const target of mirrorIndices(index, cols, rows, symmetry)) {
+      if (cells[target] < 0) continue;
+      const current = (next ?? pattern.materials)?.[target] ?? 0;
+      if (current === material) continue;
+      next ??= pattern.materials ? [...pattern.materials] : Array(cells.length).fill(0);
+      next[target] = material;
+    }
+  }
+
+  return next ?? pattern.materials;
+}
+
+/** 整幅作品都改成同一種材質;霧面就直接拿掉材質陣列 */
+export function fillMaterial(pattern: BeadPattern, material: number): number[] | undefined {
+  if (material === 0) return undefined;
+  return pattern.cells.map((cell) => (cell < 0 ? 0 : material));
+}
