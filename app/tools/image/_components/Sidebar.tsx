@@ -5,7 +5,7 @@ import { formatBytes } from "@/lib/tools/image/format";
 import type { WorkImage } from "@/lib/tools/image/types";
 import type { ThemeClasses } from "@/lib/theme";
 
-export type ToolKey = "mask" | "slice" | "merge" | "frame" | "watermark" | "output";
+export type ToolKey = "mask" | "slice" | "merge" | "frame" | "watermark" | "print" | "output";
 
 export const TOOLS: { key: ToolKey; label: string; hint: string }[] = [
   { key: "mask", label: "遮罩塗佈區", hint: "蓋掉不想露出來的東西" },
@@ -13,6 +13,7 @@ export const TOOLS: { key: ToolKey; label: string; hint: string }[] = [
   { key: "merge", label: "圖片拼接台", hint: "照順序接成一張" },
   { key: "frame", label: "邊框比例區", hint: "描邊、補成指定長寬比" },
   { key: "watermark", label: "浮水印壓印台", hint: "文字或圖片浮水印、雜訊" },
+  { key: "print", label: "沖印所", hint: "網點、孔版、拍立得、郵票、海報" },
   { key: "output", label: "輸出下載區", hint: "格式、品質，然後帶走" },
 ];
 
