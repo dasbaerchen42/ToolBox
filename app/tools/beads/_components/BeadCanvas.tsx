@@ -75,6 +75,8 @@ function drawSymmetryGuides(
 export default function BeadCanvas({ pattern, palette, stage, cell, onSettled, editing }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokingRef = useRef(false);
+  // 空板子(柱子)只跟尺寸有關;編輯時每畫一格都要重畫,大板的柱子有一萬多根,先畫好存著
+  const boardCache = useRef<{ key: string; canvas: HTMLCanvasElement } | null>(null);
   const symmetry = editing?.symmetry ?? "none";
   // 動畫跑到一半時父層重繪不該讓它從頭開始,所以 onSettled 走 ref
   const settledRef = useRef(onSettled);
@@ -98,9 +100,21 @@ export default function BeadCanvas({ pattern, palette, stage, cell, onSettled, e
     const shades = beadShades(palette);
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+    const boardKey = `${cols}x${rows}@${cell}x${dpr}`;
+    if (boardCache.current?.key !== boardKey) {
+      const board = document.createElement("canvas");
+      board.width = canvas.width;
+      board.height = canvas.height;
+      const boardCtx = board.getContext("2d");
+      boardCtx?.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (boardCtx) drawBoard(boardCtx, cols, rows, cell);
+      boardCache.current = { key: boardKey, canvas: board };
+    }
+    const board = boardCache.current.canvas;
+
     const paintStatic = (melt: number | null) => {
       ctx.clearRect(0, 0, width, height);
-      drawBoard(ctx, cols, rows, cell);
+      ctx.drawImage(board, 0, 0, width, height);
       if (melt === null) drawFlat(ctx, pattern, palette, cell);
       else drawBeads(ctx, pattern, shades, cell, () => melt);
     };
@@ -139,7 +153,7 @@ export default function BeadCanvas({ pattern, palette, stage, cell, onSettled, e
       const layerCtx = layer.getContext("2d");
       if (!layerCtx) return;
       layerCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      drawBoard(layerCtx, cols, rows, cell);
+      layerCtx.drawImage(board, 0, 0, width, height);
 
       let landed = 0;
 
@@ -173,16 +187,62 @@ export default function BeadCanvas({ pattern, palette, stage, cell, onSettled, e
       const travel = width + ironLength;
       // 尖端經過之後約五格的距離才燙到定
       const meltSpan = cell * 5;
+      const meltAt = (tipX: number, col: number) =>
+        smoothstep((tipX - (col + 0.5) * cell) / meltSpan);
+
+      // 大板(116 格)一萬多顆豆子,每格全部重畫會掉到一秒幾格。
+      // 先把「板子」「還沒燙」「燙好」各畫一張,每格只重畫熨斗正在經過的那幾欄。
+      const layer = (paint: (layerCtx: CanvasRenderingContext2D) => void) => {
+        const off = document.createElement("canvas");
+        off.width = canvas.width;
+        off.height = canvas.height;
+        const offCtx = off.getContext("2d");
+        if (offCtx) {
+          offCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          paint(offCtx);
+        }
+        return off;
+      };
+      const boardLayer = board;
+      const rawLayer = layer((c) => {
+        c.drawImage(boardLayer, 0, 0, width, height);
+        drawBeads(c, pattern, shades, cell, () => 0);
+      });
+      const doneLayer = layer((c) => {
+        c.drawImage(boardLayer, 0, 0, width, height);
+        drawBeads(c, pattern, shades, cell, () => 1);
+      });
+
+      /** 把預畫好的那張,只貼 x0–x1 這一段(CSS 像素) */
+      const blit = (source: HTMLCanvasElement, x0: number, x1: number) => {
+        const w = Math.min(width, x1) - Math.max(0, x0);
+        if (w <= 0) return;
+        const x = Math.max(0, x0);
+        ctx.drawImage(source, x * dpr, 0, w * dpr, source.height, x, 0, w, height);
+      };
 
       const tick = (now: number) => {
         const t = Math.min(1, (now - start) / IRON_MS);
         const tipX = t * travel;
 
+        // 燙到一半的欄:左邊整片燙好、右邊還沒碰到,只有中間這段要逐顆畫
+        let bandStart = 0;
+        while (bandStart < cols && meltAt(tipX, bandStart) >= 1) bandStart += 1;
+        let bandEnd = bandStart;
+        while (bandEnd < cols && meltAt(tipX, bandEnd) > 0) bandEnd += 1;
+
         ctx.clearRect(0, 0, width, height);
-        drawBoard(ctx, cols, rows, cell);
-        drawBeads(ctx, pattern, shades, cell, (col) =>
-          smoothstep((tipX - (col + 0.5) * cell) / meltSpan)
-        );
+        blit(doneLayer, 0, bandStart * cell);
+        blit(rawLayer, bandEnd * cell, width);
+        blit(boardLayer, bandStart * cell, bandEnd * cell);
+
+        if (bandEnd > bandStart) {
+          const band: number[] = [];
+          for (let row = 0; row < rows; row += 1) {
+            for (let col = bandStart; col < bandEnd; col += 1) band.push(row * cols + col);
+          }
+          drawBeads(ctx, pattern, shades, cell, (col) => meltAt(tipX, col), band);
+        }
         if (t < 1) drawIron(ctx, tipX, height, cell);
 
         if (t >= 1) settledRef.current("ironed");

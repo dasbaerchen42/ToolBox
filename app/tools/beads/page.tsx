@@ -31,7 +31,10 @@ import {
   matchPalette,
   type BeadPattern,
   type CellSample,
+  boardSize,
+  type BoardShape,
   type FitMode,
+  type SampleMethod,
 } from "@/lib/tools/beads/pattern";
 import { decodePhoto, samplePhoto } from "@/lib/tools/beads/photo";
 import { ImageDecodeError } from "@/lib/tools/image/render";
@@ -53,7 +56,35 @@ import AlbumPanel from "./_components/AlbumPanel";
 const PALETTE = DEFAULT_PALETTE;
 const PALETTE_LAB = paletteLab(PALETTE);
 
-type BoardSize = "29" | "58";
+/** 板子寬度:29 是一塊小板,58 是一塊大板,87、116 是大板拼接 */
+type BoardSize = "29" | "58" | "87" | "116";
+
+const BOARD_WIDTHS: { value: BoardSize; label: string }[] = [
+  { value: "29", label: "29" },
+  { value: "58", label: "58" },
+  { value: "87", label: "87" },
+  { value: "116", label: "116" },
+];
+
+/** 照片轉換的所有參數 */
+type ConvertSettings = {
+  size: BoardSize;
+  shape: BoardShape;
+  fit: FitMode;
+  method: SampleMethod;
+  maxColors: number;
+  /** 用量少於這麼多顆的顏色併掉;0 = 不併 */
+  minCount: number;
+};
+
+const DEFAULT_SETTINGS: ConvertSettings = {
+  size: "58",
+  shape: "aspect",
+  fit: "cover",
+  method: "majority",
+  maxColors: 16,
+  minCount: 0,
+};
 
 /** 輸出 PNG 每格幾像素:29 格約 700px、58 格約 1400px,社群貼圖夠用 */
 const EXPORT_CELL = 24;
@@ -84,9 +115,8 @@ export default function BeadsPage() {
 
   // 照片轉換
   const [photo, setPhoto] = useState<Photo | null>(null);
-  const [size, setSize] = useState<BoardSize>("29");
-  const [fit, setFit] = useState<FitMode>("cover");
-  const [maxColors, setMaxColors] = useState(16);
+  const [settings, setSettings] = useState<ConvertSettings>(DEFAULT_SETTINGS);
+  const [blankSize, setBlankSize] = useState<BoardSize>("29");
   const samplesCache = useRef<{ key: string; samples: CellSample[] } | null>(null);
 
   // 板子與編輯
@@ -144,17 +174,24 @@ export default function BeadsPage() {
     [dirty]
   );
 
-  /** 照片 → 格子。取樣結果依尺寸與構圖快取,只調色數時不必重畫一次照片 */
+  /** 照片 → 格子。取樣結果依尺寸、構圖、取色方式快取,只調色數時不必重畫一次照片 */
   const convert = useCallback(
-    (target: Photo, nextSize: BoardSize, nextFit: FitMode, nextMax: number) => {
-      const cells = Number(nextSize);
-      const key = `${target.name}|${target.bitmap.width}x${target.bitmap.height}|${nextSize}|${nextFit}`;
+    (target: Photo, next: ConvertSettings) => {
+      const { width, height } = target.bitmap;
+      const { cols, rows } = boardSize(width, height, Number(next.size), next.shape);
+      // 依比例時板子跟照片一樣形狀,裁不裁都一樣;用 contain 免得四捨五入裁掉邊
+      const fit = next.shape === "square" ? next.fit : "contain";
+      const key = [target.name, width, height, cols, rows, fit, next.method].join("|");
+
       let samples = samplesCache.current?.key === key ? samplesCache.current.samples : null;
       if (!samples) {
-        samples = samplePhoto(target.bitmap, cells, cells, nextFit);
+        samples = samplePhoto(target.bitmap, cols, rows, fit, next.method, PALETTE_LAB);
         samplesCache.current = { key, samples };
       }
-      loadPattern({ cols: cells, rows: cells, cells: matchPalette(samples, PALETTE_LAB, nextMax) }, "photo");
+      loadPattern(
+        { cols, rows, cells: matchPalette(samples, PALETTE_LAB, next.maxColors, next.minCount) },
+        "photo"
+      );
       setDirty(true);
     },
     [loadPattern]
@@ -172,7 +209,7 @@ export default function BeadsPage() {
         setPhoto(next);
         setName(next.name);
         setSavedAs(null);
-        convert(next, size, fit, maxColors);
+        convert(next, settings);
         showNotice("轉好了。可以直接在板子上修，或先按「自動落豆」。");
       } catch (error) {
         showNotice(
@@ -183,35 +220,34 @@ export default function BeadsPage() {
         setBusy(false);
       }
     },
-    [confirmDiscard, convert, fit, maxColors, photo, showNotice, size]
+    [confirmDiscard, convert, photo, settings, showNotice]
   );
 
   /** 轉換參數改了:照片轉的板子會重新轉,手動改過的部分會被蓋掉 */
-  function changeConversion(next: { size?: BoardSize; fit?: FitMode; maxColors?: number }) {
-    const nextSize = next.size ?? size;
-    const nextFit = next.fit ?? fit;
-    const nextMax = next.maxColors ?? maxColors;
-
+  function changeConversion(change: Partial<ConvertSettings>) {
+    const next = { ...settings, ...change };
     if (source === "photo" && photo) {
       if (past.length > 0 && !window.confirm("重新轉換會蓋掉你在板子上手動改的部分。要繼續嗎？")) {
         return;
       }
-      convert(photo, nextSize, nextFit, nextMax);
-    } else if (source === "blank" && next.size && next.size !== size) {
-      if (past.length > 0 && !window.confirm("換板子尺寸會清空目前畫的內容。要繼續嗎？")) return;
-      const cells = Number(next.size);
-      loadPattern(blankPattern(cells, cells), "blank");
+      convert(photo, next);
     }
+    setSettings(next);
+  }
 
-    setSize(nextSize);
-    setFit(nextFit);
-    setMaxColors(nextMax);
+  /** 空板換尺寸:畫過的東西會清掉 */
+  function changeBlankSize(next: BoardSize) {
+    if (next === blankSize) return;
+    if (past.length > 0 && !window.confirm("換板子尺寸會清空目前畫的內容。要繼續嗎？")) return;
+    const cells = Number(next);
+    setBlankSize(next);
+    loadPattern(blankPattern(cells, cells), "blank");
   }
 
   function startBlank(nextSize: BoardSize) {
     if (!confirmDiscard("開新的空板")) return;
     const cells = Number(nextSize);
-    setSize(nextSize);
+    setBlankSize(nextSize);
     setName("");
     setSavedAs(null);
     setDirty(false);
@@ -389,7 +425,6 @@ export default function BeadsPage() {
     setSavedAs({ id: work.id, createdAt: work.createdAt });
     setName(work.name);
     setDirty(false);
-    if (next.cols === 29 || next.cols === 58) setSize(String(next.cols) as BoardSize);
     loadPattern(next, "album");
     showNotice(`打開了「${work.name}」。`);
   }
@@ -613,43 +648,98 @@ export default function BeadsPage() {
 
               {pattern && source === "photo" && (
                 <>
-                  <Field label="板子" t={t}>
+                  <Field
+                    label="取色方式"
+                    hint={
+                      settings.method === "majority"
+                        ? "每格取出現最多的顏色，線條和色塊比較乾淨，適合插畫"
+                        : "每格取平均色，漸層比較順，適合照片；細線容易糊成雜點"
+                    }
+                    t={t}
+                  >
                     <Segmented
-                      value={size}
-                      onChange={(value) => changeConversion({ size: value })}
+                      value={settings.method}
+                      onChange={(value) => changeConversion({ method: value })}
                       t={t}
-                      label="板子尺寸"
+                      label="取色方式"
                       options={[
-                        { value: "29", label: "小板 29×29" },
-                        { value: "58", label: "大板 58×58" },
+                        { value: "majority", label: "插畫（主色）" },
+                        { value: "average", label: "照片（平均）" },
                       ]}
                     />
                   </Field>
 
                   <Field
-                    label="構圖"
-                    hint={fit === "cover" ? "裁掉多出來的部分，把板子填滿" : "整張照片放進去，旁邊留空"}
+                    label={`板子寬 ${pattern.cols} 格・高 ${pattern.rows} 格`}
+                    hint="58 是一塊大板；87、116 等於大板拼接。格數越多細節越多，豆子也越多"
                     t={t}
                   >
                     <Segmented
-                      value={fit}
-                      onChange={(value) => changeConversion({ fit: value })}
+                      value={settings.size}
+                      onChange={(value) => changeConversion({ size: value })}
                       t={t}
-                      label="構圖"
+                      label="板子寬度"
+                      options={BOARD_WIDTHS}
+                    />
+                  </Field>
+
+                  <Field label="形狀" t={t}>
+                    <Segmented
+                      value={settings.shape}
+                      onChange={(value) => changeConversion({ shape: value })}
+                      t={t}
+                      label="板子形狀"
                       options={[
-                        { value: "cover", label: "裁滿" },
-                        { value: "contain", label: "完整放進" },
+                        { value: "aspect", label: "照照片比例" },
+                        { value: "square", label: "正方形" },
                       ]}
                     />
                   </Field>
 
+                  {settings.shape === "square" && (
+                    <Field
+                      label="構圖"
+                      hint={
+                        settings.fit === "cover"
+                          ? "裁掉多出來的部分，把板子填滿"
+                          : "整張照片放進去，旁邊留空"
+                      }
+                      t={t}
+                    >
+                      <Segmented
+                        value={settings.fit}
+                        onChange={(value) => changeConversion({ fit: value })}
+                        t={t}
+                        label="構圖"
+                        options={[
+                          { value: "cover", label: "裁滿" },
+                          { value: "contain", label: "完整放進" },
+                        ]}
+                      />
+                    </Field>
+                  )}
+
                   <RangeField
                     label="最多幾種顏色"
-                    display={`${maxColors} 色`}
-                    value={maxColors}
+                    display={`${settings.maxColors} 色`}
+                    value={settings.maxColors}
                     min={2}
                     max={PALETTE.length}
                     onChange={(value) => changeConversion({ maxColors: value })}
+                    t={t}
+                  />
+
+                  <RangeField
+                    label="每色至少幾顆"
+                    display={
+                      settings.minCount === 0
+                        ? "不合併"
+                        : `少於 ${settings.minCount} 顆就併進相近色`
+                    }
+                    value={settings.minCount}
+                    min={0}
+                    max={30}
+                    onChange={(value) => changeConversion({ minCount: value })}
                     t={t}
                   />
                 </>
@@ -658,14 +748,14 @@ export default function BeadsPage() {
               {pattern && source === "blank" && (
                 <Field label="板子" t={t}>
                   <Segmented
-                    value={size}
-                    onChange={(value) => changeConversion({ size: value })}
+                    value={blankSize}
+                    onChange={changeBlankSize}
                     t={t}
                     label="板子尺寸"
-                    options={[
-                      { value: "29", label: "小板 29×29" },
-                      { value: "58", label: "大板 58×58" },
-                    ]}
+                    options={BOARD_WIDTHS.map((item) => ({
+                      value: item.value,
+                      label: `${item.label}×${item.label}`,
+                    }))}
                   />
                 </Field>
               )}
