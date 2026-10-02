@@ -145,8 +145,15 @@ export default function EditorExportModal({
 
   // 預覽清單裡每一段長什麼樣子:對話框模式時標了邊的段落畫成泡泡
   const shownBlocks = useMemo(
-    () => (chat ? composeChatHtml(blocks.map((html, i) => ({ html, side: sides.get(i) })), names) : blocks),
-    [blocks, chat, sides, names]
+    () =>
+      chat
+        ? composeChatHtml(
+            blocks.map((html, i) => ({ html, side: sides.get(i) })),
+            names,
+            preferences.exportChatSplit
+          )
+        : blocks,
+    [blocks, chat, sides, names, preferences.exportChatSplit]
   );
 
   const selectedHtml = useMemo(
@@ -154,10 +161,11 @@ export default function EditorExportModal({
       chat
         ? composeChatHtml(
             selectedIndexes.map((index) => ({ html: blocks[index], side: sides.get(index) })),
-            names
+            names,
+            preferences.exportChatSplit
           ).join("")
         : selectedIndexes.map((index) => blocks[index]).join(""),
-    [blocks, selectedIndexes, chat, sides, names]
+    [blocks, selectedIndexes, chat, sides, names, preferences.exportChatSplit]
   );
 
   function cycleSide(index: number) {
@@ -473,6 +481,17 @@ export default function EditorExportModal({
               onChange={(e) => updatePreference({ exportChatRight: e.target.value })}
               className={`w-36 rounded-2xl border px-3 py-1 outline-none ${theme.border} ${theme.inputBg}`}
             />
+            <select
+              value={preferences.exportChatSplit}
+              onChange={(e) =>
+                updatePreference({ exportChatSplit: e.target.value as "line" | "paragraph" })
+              }
+              className={`rounded-2xl border px-3 py-1 outline-none ${theme.border} ${theme.inputBg}`}
+              aria-label="泡泡怎麼切"
+            >
+              <option value="paragraph">每段一顆（空一行換泡泡）</option>
+              <option value="line">每行一顆</option>
+            </select>
           </div>
         )}
 

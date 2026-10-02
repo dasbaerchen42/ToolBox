@@ -56,3 +56,13 @@ describe("chat-export:對話框", () => {
     expect(out[3]).toContain(">歌<");
   });
 });
+
+describe("chat-export:每段一顆", () => {
+  it("同一段的短句放進同一顆泡泡,照原本換行;空一行才換下一顆", () => {
+    const html = chatBlockHtml(quote, "left", "", false, "paragraph");
+    expect(html.match(/class="chat-bubble"/g)).toHaveLength(2);
+    expect(html).toContain("強制微波熱炒是什麼啦<br>妳是想把我放進微波爐裡轉嗎");
+    const out = composeChatHtml([{ html: quote, side: "right" }], { left: "", right: "" }, "paragraph");
+    expect(out[0].match(/class="chat-bubble"/g)).toHaveLength(2);
+  });
+});

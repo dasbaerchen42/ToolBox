@@ -5,6 +5,9 @@
 
 export type ChatSide = "left" | "right";
 
+/** 泡泡怎麼切:每一行一顆,或一段(空一行之間)一顆、段裡照原本換行 */
+export type ChatSplit = "line" | "paragraph";
+
 /** 開視窗時先猜一次:引用當成對方傳來的訊息(左邊),其他不標 */
 export function defaultChatSides(blocks: string[]): Map<number, ChatSide> {
   const sides = new Map<number, ChatSide>();
@@ -60,8 +63,16 @@ export function chatBubbles(blockHtml: string): string[][] {
  * 標了邊的區塊 → 對話框的 HTML。
  * name 給了而且不是接著同一邊的上一段(continued)才顯示名字。
  */
-export function chatBlockHtml(blockHtml: string, side: ChatSide, name: string, continued: boolean): string {
-  const groups = chatBubbles(blockHtml);
+export function chatBlockHtml(
+  blockHtml: string,
+  side: ChatSide,
+  name: string,
+  continued: boolean,
+  split: ChatSplit = "line"
+): string {
+  const lines = chatBubbles(blockHtml);
+  // 一段一顆:同一段的每一行用換行接起來,放進同一顆泡泡
+  const groups = split === "paragraph" ? lines.map((group) => [group.join("<br>")]) : lines;
   if (groups.length === 0) return "";
   const label = name.trim() && !continued ? `<div class="chat-name">${escapeHtml(name.trim())}</div>` : "";
   const body = groups
@@ -76,11 +87,12 @@ export function chatBlockHtml(blockHtml: string, side: ChatSide, name: string, c
  */
 export function composeChatHtml(
   items: { html: string; side?: ChatSide }[],
-  names: Record<ChatSide, string>
+  names: Record<ChatSide, string>,
+  split: ChatSplit = "line"
 ): string[] {
   let previous: ChatSide | undefined;
   return items.map(({ html, side }) => {
-    const out = side ? chatBlockHtml(html, side, names[side], previous === side) : html;
+    const out = side ? chatBlockHtml(html, side, names[side], previous === side, split) : html;
     previous = side;
     return out;
   });

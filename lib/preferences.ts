@@ -34,6 +34,8 @@ export type EditorPreferences = {
   /** 對話框左右兩邊的名字;空的就不顯示 */
   exportChatLeft: string;
   exportChatRight: string;
+  /** 對話框的泡泡:每行一顆或每段一顆 */
+  exportChatSplit: "line" | "paragraph";
 };
 
 export const PREFERENCES_KEY = "orange-writing-preferences";
@@ -53,4 +55,5 @@ export const defaultPreferences: EditorPreferences = {
   exportChat: false,
   exportChatLeft: "",
   exportChatRight: "",
+  exportChatSplit: "paragraph",
 };
