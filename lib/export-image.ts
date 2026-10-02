@@ -55,6 +55,11 @@ export type ExportImageOptions = {
   preferences: EditorPreferences;
 };
 
+/** 內容區要加的 class(例如斜體改淡色正體) */
+export function contentClassFor(preferences: Pick<EditorPreferences, "softItalic">): string {
+  return preferences.softItalic ? "md-preview md-soft-italic" : "md-preview";
+}
+
 function readThemeColor(name: string, fallback: string): string {
   if (typeof window === "undefined") return fallback;
   const value = getComputedStyle(document.documentElement)
@@ -80,21 +85,24 @@ function toBlob(canvas: HTMLCanvasElement): Promise<Blob> {
 async function loadFontsFor(page: HTMLElement, doc: Document = document): Promise<void> {
   if (!doc.fonts?.load) return;
   const view = doc.defaultView ?? window;
-  const { fontSize, fontFamily } = view.getComputedStyle(page);
-  const text = page.textContent ?? "";
-  if (!text.trim()) return;
-  // 粗體是另一組字檔,只替真的是粗體的那些字抓,不然整篇會多下載一倍
-  const textOf = (selector: string) =>
-    Array.from(page.querySelectorAll(selector), (el) => el.textContent ?? "").join("");
-  const boldText = textOf("strong, b, h1, h2, h3, h4, h5, h6, th, .md-preview-title");
-  // 斜體(*這樣*)在中文字體多半是用正體斜放模擬的,還是照斜體要一次,有斜體字檔的字體才會抓到
-  const italicText = textOf("em, i");
+  if (!(page.textContent ?? "").trim()) return;
+
+  // 每種「粗細＋斜不斜＋字體」各要一次,只帶真的用到那種樣式的字:
+  // 粗體、淡色正體的對白(600)是另一組字檔,不要整篇都多下載一倍,也不能漏掉
+  const variants = new Map<string, { font: string; text: string }>();
+  const walker = doc.createTreeWalker(page, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = node.textContent ?? "";
+    const parent = node.parentElement;
+    if (!parent || !text.trim()) continue;
+    const style = view.getComputedStyle(parent);
+    const font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+    const entry = variants.get(font);
+    if (entry) entry.text += text;
+    else variants.set(font, { font, text });
+  }
   try {
-    await Promise.all([
-      doc.fonts.load(`${fontSize} ${fontFamily}`, text),
-      boldText && doc.fonts.load(`bold ${fontSize} ${fontFamily}`, boldText),
-      italicText && doc.fonts.load(`italic ${fontSize} ${fontFamily}`, italicText),
-    ]);
+    await Promise.all(Array.from(variants.values(), ({ font, text }) => doc.fonts.load(font, text)));
     if (doc.fonts.ready) await doc.fonts.ready;
   } catch (error) {
     // 字載不到就用備援字體截,不要讓整張圖失敗
@@ -213,6 +221,9 @@ export async function exportContentToImages({
     `font-size: ${preferences.fontSize}px`,
     `line-height: ${preferences.lineHeight}`,
     `letter-spacing: ${preferences.letterSpacing}px`,
+    // 新版 Chrome 會把相鄰的全形標點(「。「」)擠成半格,html2canvas 量到的寬度變 0,
+    // 那個「就整個不見。轉圖時關掉擠壓,每個標點都是完整一格
+    "text-spacing-trim: space-all",
   ].join("; ");
 
   // 裁切視窗:單一區塊本身就超過一頁時,只能在它內部硬切
@@ -222,7 +233,7 @@ export async function exportContentToImages({
   const shift = document.createElement("div");
 
   const content = document.createElement("div");
-  content.className = "md-preview";
+  content.className = contentClassFor(preferences);
   content.style.position = "relative";
 
   // 標題與內文都直接放在 content 底下:分頁是照 content 的直接子元素切,
