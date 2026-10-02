@@ -4,6 +4,7 @@
 // 再由這裡決定每一格的顏色(平均或取主色)、換成最接近的豆子、最後壓到指定色數。
 
 import { labDistanceSq, linearToOklab, srgbToLinear, type Lab } from "./color";
+import type { BoardOutline } from "./outline";
 
 /** 一格取樣幾×幾個像素來平均;太少會被雜點帶偏,太多只是白算 */
 export const SAMPLES = 6;
@@ -20,8 +21,11 @@ export const MAJORITY_SAMPLES = 10;
  */
 export type SampleMethod = "average" | "majority";
 
-/** 板子形狀:依照片比例(寬固定、高跟著照片算)或正方形 */
-export type BoardShape = "aspect" | "square";
+/**
+ * 照片轉換時的板子:依照片比例(寬固定、高跟著照片算)、正方形,
+ * 或圓形/六角形/愛心形(都是正方形的板子,外形以外沒有柱子)
+ */
+export type BoardShape = "aspect" | "square" | "circle" | "hexagon" | "heart";
 
 /** 板子邊長的上限:116 = 2×2 塊大板 */
 export const MAX_BOARD_SIDE = 116;
@@ -36,6 +40,8 @@ export type BeadPattern = {
   cells: number[];
   /** 每一格的材質(見 finish.ts);沒有就是全部霧面 */
   materials?: number[];
+  /** 板子外形(見 outline.ts);沒有就是方形 */
+  outline?: BoardOutline;
 };
 
 export type FitMode = "cover" | "contain";
@@ -81,7 +87,7 @@ export function boardSize(
   width: number,
   shape: BoardShape
 ): { cols: number; rows: number } {
-  if (shape === "square" || photoWidth <= 0 || photoHeight <= 0) {
+  if (shape !== "aspect" || photoWidth <= 0 || photoHeight <= 0) {
     return { cols: width, rows: width };
   }
 

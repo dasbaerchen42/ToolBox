@@ -17,7 +17,7 @@ import {
   type AlbumKind,
   type SavedWork,
 } from "@/lib/tools/beads/album";
-import { renderPatternPng } from "@/lib/tools/beads/draw";
+import { HINT_MIN_CELL, renderPatternPng } from "@/lib/tools/beads/draw";
 import {
   blankPattern,
   fillMaterial,
@@ -39,6 +39,7 @@ import {
   type MeltLevel,
 } from "@/lib/tools/beads/finish";
 import { TEMPLATES, templatePattern, type BeadTemplate } from "@/lib/tools/beads/templates";
+import { boardMask, clipToOutline, isOutline, OUTLINES, type BoardOutline } from "@/lib/tools/beads/outline";
 import { DEFAULT_PALETTE, paletteLab } from "@/lib/tools/beads/palette";
 import {
   countColors,
@@ -144,6 +145,12 @@ const snapshotOf = (pattern: BeadPattern): Snapshot => ({
 const sameSnapshot = (a: Snapshot, b: Snapshot) =>
   a.cells === b.cells && a.materials === b.materials;
 
+/** 空板:迷你板一律方形(拼小零件),其他照選的外形 */
+function shapedBlank(cells: number, outline: BoardOutline): BeadPattern {
+  const blank = blankPattern(cells, cells);
+  return outline === "rect" || cells < 10 ? blank : { ...blank, outline };
+}
+
 /** 每燙一次換一個焦痕種子;畫面與下載的圖用同一個 */
 const newScorchSeed = () => 1 + Math.floor(Math.random() * 1_000_000);
 
@@ -156,6 +163,7 @@ export default function BeadsPage() {
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [settings, setSettings] = useState<ConvertSettings>(DEFAULT_SETTINGS);
   const [blankSize, setBlankSize] = useState<BoardSize>("29");
+  const [blankOutline, setBlankOutline] = useState<BoardOutline>("rect");
   const samplesCache = useRef<{ key: string; samples: CellSample[] } | null>(null);
 
   // 板子與編輯
@@ -167,6 +175,9 @@ export default function BeadsPage() {
   const [color, setColor] = useState(DEFAULT_COLOR);
   const [material, setMaterial] = useState(0);
   const [symmetry, setSymmetry] = useState<Symmetry>("none");
+  // 照著拼:每格顯示色號,可以只亮一色
+  const [hints, setHints] = useState(false);
+  const [hintOneColor, setHintOneColor] = useState(false);
   const patternRef = useRef<BeadPattern | null>(null);
   const stroke = useRef<{
     base: Snapshot;
@@ -235,7 +246,8 @@ export default function BeadsPage() {
       const { width, height } = target.bitmap;
       const { cols, rows } = boardSize(width, height, Number(next.size), next.shape);
       // 依比例時板子跟照片一樣形狀,裁不裁都一樣;用 contain 免得四捨五入裁掉邊
-      const fit = next.shape === "square" ? next.fit : "contain";
+      const fit = next.shape === "aspect" ? "contain" : next.fit;
+      const outline = isOutline(next.shape) ? next.shape : undefined;
       const key = [target.name, width, height, cols, rows, fit, next.method].join("|");
 
       let samples = samplesCache.current?.key === key ? samplesCache.current.samples : null;
@@ -243,8 +255,16 @@ export default function BeadsPage() {
         samples = samplePhoto(target.bitmap, cols, rows, fit, next.method, PALETTE_LAB);
         samplesCache.current = { key, samples };
       }
+      // 圓形、愛心這類板子:外形以外沒有柱子,那些格子不參與配色
+      const mask = boardMask(outline, cols, rows);
+      const usable = mask ? samples.map((sample, i) => (mask[i] ? sample : null)) : samples;
       loadPattern(
-        { cols, rows, cells: matchPalette(samples, PALETTE_LAB, next.maxColors, next.minCount) },
+        {
+          cols,
+          rows,
+          cells: matchPalette(usable, PALETTE_LAB, next.maxColors, next.minCount),
+          ...(outline ? { outline } : {}),
+        },
         "photo"
       );
       setDirty(true);
@@ -297,7 +317,21 @@ export default function BeadsPage() {
     if (past.length > 0 && !window.confirm("換板子尺寸會清空目前畫的內容。要繼續嗎？")) return;
     const cells = Number(next);
     setBlankSize(next);
-    loadPattern(blankPattern(cells, cells), "blank");
+    loadPattern(shapedBlank(cells, blankOutline), "blank");
+  }
+
+  /** 空板換外形:畫在外形以外的豆子會被清掉 */
+  function changeBlankOutline(next: BoardOutline) {
+    const current = patternRef.current;
+    if (next === blankOutline || !current) return;
+    setBlankOutline(next);
+    const outlined = { ...current, outline: next === "rect" ? undefined : next };
+    const clipped = clipToOutline(outlined, current.cells, current.materials);
+    const base = snapshotOf(current);
+    const updated = { ...outlined, ...clipped };
+    patternRef.current = updated;
+    setPattern(updated);
+    if (clipped.cells !== current.cells) commitEdit(base, snapshotOf(updated));
   }
 
   /** 迷你板拼的是小零件,收藏時預設放素材分頁 */
@@ -324,7 +358,7 @@ export default function BeadsPage() {
     setName("");
     setSavedAs(null);
     setDirty(false);
-    loadPattern(blankPattern(cells, cells), "blank");
+    loadPattern(shapedBlank(cells, blankOutline), "blank");
     showNotice("空板準備好了，選個顏色開始拼。");
   }
 
@@ -365,13 +399,16 @@ export default function BeadsPage() {
   }, []);
 
   /** 套用改動;patternRef 同步更新,拖曳時下一次 pointermove 才拿得到最新的 */
-  function editTo(current: BeadPattern, next: Snapshot) {
+  function editTo(current: BeadPattern, wanted: Snapshot) {
+    // 板子外形以外沒有柱子:畫出界、油漆桶倒出去的那些豆子不算
+    const next = clipToOutline(current, wanted.cells, wanted.materials);
     const updated = { ...current, cells: next.cells, materials: next.materials };
     patternRef.current = updated;
     setPattern((previous) => (previous && !sameSnapshot(previous, next) ? updated : previous));
   }
 
   const editing = stage === "pattern" && pattern !== null;
+  const showHints = hints && stage === "pattern";
 
   function strokeStart(index: number) {
     const current = patternRef.current;
@@ -768,12 +805,23 @@ export default function BeadsPage() {
             workspace={
               pattern ? (
                 <div className="rounded-2xl border border-(--border-light) bg-(--paper-bg-3) p-3">
-                  <div className="flex justify-center">
+                  <div
+                    className={
+                      showHints
+                        ? "max-h-[75vh] overflow-auto overscroll-contain"
+                        : "flex justify-center"
+                    }
+                  >
                     <BeadCanvas
                       pattern={pattern}
                       palette={PALETTE}
                       stage={stage}
-                      cell={displayCell(pattern.cols, pattern.rows)}
+                      cell={
+                        showHints
+                          ? Math.max(HINT_MIN_CELL, displayCell(pattern.cols, pattern.rows))
+                          : displayCell(pattern.cols, pattern.rows)
+                      }
+                      hints={showHints ? { focus: hintOneColor ? color : null } : undefined}
                       melt={meltOf(meltLevel)}
                       shape={beadShape}
                       glow={glow}
@@ -791,6 +839,30 @@ export default function BeadsPage() {
                       }
                     />
                   </div>
+                  {stage === "pattern" && (
+                    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                      <Toggle checked={hints} onChange={setHints} label="顯示色號（照著拼）" t={t} />
+                      {hints && (
+                        <Toggle
+                          checked={hintOneColor}
+                          onChange={(next) => {
+                            setHintOneColor(next);
+                            // 畫筆的顏色不在圖裡的話,先亮用最多的那一色
+                            if (next && counts.length > 0 && !counts.some((item) => item.index === color)) {
+                              setColor(counts[0].index);
+                            }
+                          }}
+                          label={`只亮「${PALETTE[color].name}」`}
+                          t={t}
+                        />
+                      )}
+                      {hints && (
+                        <span className={`text-[11px] leading-5 ${t.muted}`}>
+                          色號跟圖紙一樣；板子放大了可以捲動，點下面顏色清單的色名換一色。
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <EmptyWorkspace t={t}>
@@ -920,11 +992,14 @@ export default function BeadsPage() {
                         options={[
                           { value: "aspect", label: "照照片比例" },
                           { value: "square", label: "正方形" },
+                          { value: "circle", label: "圓形" },
+                          { value: "hexagon", label: "六角形" },
+                          { value: "heart", label: "愛心形" },
                         ]}
                       />
                     </Field>
 
-                    {settings.shape === "square" && (
+                    {settings.shape !== "aspect" && (
                       <Field
                         label="構圖"
                         hint={
@@ -974,18 +1049,31 @@ export default function BeadsPage() {
                 )}
 
                 {pattern && source === "blank" && (
-                  <Field label="板子" t={t}>
-                    <Segmented
-                      value={blankSize}
-                      onChange={changeBlankSize}
-                      t={t}
-                      label="板子尺寸"
-                      options={BLANK_SIZES.map((item) => ({
-                        value: item.value,
-                        label: item.value === "5" || item.value === "7" ? item.label : `${item.label}×${item.label}`,
-                      }))}
-                    />
-                  </Field>
+                  <>
+                    <Field label="板子" t={t}>
+                      <Segmented
+                        value={blankSize}
+                        onChange={changeBlankSize}
+                        t={t}
+                        label="板子尺寸"
+                        options={BLANK_SIZES.map((item) => ({
+                          value: item.value,
+                          label: item.value === "5" || item.value === "7" ? item.label : `${item.label}×${item.label}`,
+                        }))}
+                      />
+                    </Field>
+                    {Number(blankSize) >= 10 && (
+                      <Field label="板子外形" hint="外形以外沒有柱子，放不了豆子" t={t}>
+                        <Segmented
+                          value={blankOutline}
+                          onChange={changeBlankOutline}
+                          t={t}
+                          label="板子外形"
+                          options={OUTLINES}
+                        />
+                      </Field>
+                    )}
+                  </>
                 )}
 
                 {pattern && (

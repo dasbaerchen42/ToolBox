@@ -14,7 +14,9 @@ import {
   type BeadStyle,
 } from "./finish";
 import type { BeadColor } from "./palette";
+import { boardMask, outlinePath, type BoardOutline } from "./outline";
 import type { BeadPattern } from "./pattern";
+import { readableInk, sheetLabel } from "./export";
 
 /** 板子是實體塑膠板,不跟著網站主題換色 */
 const BOARD_COLOR = "#ecebe6";
@@ -67,17 +69,25 @@ export function drawBoard(
   ctx: CanvasRenderingContext2D,
   cols: number,
   rows: number,
-  cell: number
+  cell: number,
+  outline: BoardOutline = "rect"
 ): void {
   ctx.fillStyle = BOARD_COLOR;
-  ctx.fillRect(0, 0, cols * cell, rows * cell);
+  if (outline === "rect") ctx.fillRect(0, 0, cols * cell, rows * cell);
+  else {
+    // 外形剛好貼齊畫布;判斷柱子看格子中心,邊上那圈柱子的中心都在外形裡
+    outlinePath(ctx, outline, 0, 0, cols * cell, rows * cell);
+    ctx.fill();
+  }
 
   if (cell < TINY_CELL) return;
 
+  const mask = boardMask(outline, cols, rows);
   ctx.fillStyle = PEG_COLOR;
   ctx.beginPath();
   for (let row = 0; row < rows; row += 1) {
     for (let col = 0; col < cols; col += 1) {
+      if (mask && !mask[row * cols + col]) continue;
       const cx = (col + 0.5) * cell;
       const cy = (row + 0.5) * cell;
       ctx.moveTo(cx + cell * 0.14, cy);
@@ -119,6 +129,44 @@ export function drawFlat(
     ctx.fill();
     ctx.stroke();
   });
+  ctx.restore();
+}
+
+/** 色號提示最小要幾 CSS 像素一格,字才看得清楚 */
+export const HINT_MIN_CELL = 16;
+
+/**
+ * 照著拼的色號提示:每格寫上色號(去掉字母,跟圖紙一樣)。
+ * focus 給了就只亮那一色,其他格子蓋一層淡淡的板子色,一次只找一種顏色。
+ */
+export function drawCodeHints(
+  ctx: CanvasRenderingContext2D,
+  pattern: BeadPattern,
+  palette: BeadColor[],
+  cell: number,
+  focus: number | null
+): void {
+  ctx.save();
+  if (focus !== null) {
+    ctx.fillStyle = "rgba(236, 232, 224, 0.82)";
+    pattern.cells.forEach((index, i) => {
+      if (index < 0 || index === focus) return;
+      ctx.fillRect((i % pattern.cols) * cell, Math.floor(i / pattern.cols) * cell, cell, cell);
+    });
+  }
+  if (cell >= 11) {
+    ctx.font = `600 ${Math.max(7, cell * 0.42)}px ui-monospace, "SF Mono", Menlo, monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const labels = palette.map((color) => sheetLabel(color.code));
+    const inks = palette.map((color) => readableInk(color.hex));
+    pattern.cells.forEach((index, i) => {
+      if (index < 0 || (focus !== null && index !== focus)) return;
+      ctx.fillStyle = inks[index];
+      ctx.globalAlpha = 0.85;
+      ctx.fillText(labels[index], ((i % pattern.cols) + 0.5) * cell, (Math.floor(i / pattern.cols) + 0.5) * cell + 0.5);
+    });
+  }
   ctx.restore();
 }
 
@@ -522,7 +570,7 @@ export async function renderPatternPng(
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("無法建立繪圖環境");
 
-  if (board) drawBoard(ctx, pattern.cols, pattern.rows, cell);
+  if (board) drawBoard(ctx, pattern.cols, pattern.rows, cell, pattern.outline);
   drawBeads(ctx, pattern, beadShades(palette), cell, () => melt, style);
   drawScorch(ctx, pattern.cols, pattern.rows, cell, scorchSeed, melt);
 

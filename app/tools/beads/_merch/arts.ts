@@ -19,7 +19,7 @@ export type ArtEntry = {
 };
 
 /** 去背好的圖片素材 */
-export type Cutout = { id: string; label: string; canvas: HTMLCanvasElement };
+export type Cutout = { id: string; label: string; canvas: HTMLCanvasElement; blob: Blob };
 
 export const GROUP_LABELS: Record<ArtEntry["group"], string> = {
   template: "模板",

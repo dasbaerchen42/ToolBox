@@ -1,5 +1,6 @@
 import { clampPlacement, defaultDesigns, placeSticker } from "./design";
 import { acrylicImageQuad } from "./render";
+import { readStoredMerch, sanitizeDesigns } from "./persist";
 import { eraseCircle, eraseSelection, opaqueBounds, wandSelect, type Pixels } from "../image/wand";
 import {
   applyHomography,
@@ -224,5 +225,35 @@ describe("design:貼紙擺法與打卡棒的透視延伸", () => {
     expect(quad[3].y).toBeGreaterThan(430);
     // 透卡沒有握把:就是板子本身
     expect(acrylicImageQuad(defaultDesigns().acrylic, board)).toBe(board);
+  });
+});
+
+describe("persist:周邊存檔", () => {
+  it("壞掉或缺欄位的設計補回預設值", () => {
+    const base = defaultDesigns();
+    const designs = sanitizeDesigns({
+      card: { frame: "beads", laser: "yes", stickers: [{ id: "a", artId: "tpl:star-7", x: 0.5, y: 0.5, size: 0.3, rotation: 0 }, { id: 3 }] },
+      charm: { pieces: "nope" },
+      omamori: { front: "平安", bell: 5 },
+      acrylic: { corners: [{ x: 0, y: 0 }] },
+    });
+    expect(designs.card.frame).toBe("beads");
+    expect(designs.card.laser).toBe(base.card.laser);
+    expect(designs.card.stickers).toHaveLength(1);
+    expect(designs.card.mosaic).toEqual(base.card.mosaic);
+    expect(designs.charm.pieces.map((piece) => piece.artId)).toEqual(base.charm.pieces.map((piece) => piece.artId));
+    expect(designs.omamori.front).toBe("平安");
+    expect(designs.omamori.bell).toBeNull();
+    expect(designs.acrylic.corners).toEqual(base.acrylic.corners);
+  });
+
+  it("不是這個格式就當作沒有存檔", () => {
+    expect(readStoredMerch(null)).toBeNull();
+    expect(readStoredMerch({ version: 2 })).toBeNull();
+    const stored = readStoredMerch({ version: 1, kind: "omamori", designs: {}, photo: "x", cutouts: [{ id: 1 }] })!;
+    expect(stored.kind).toBe("omamori");
+    expect(stored.photo).toBeNull();
+    expect(stored.cutouts).toEqual([]);
+    expect(readStoredMerch({ version: 1, kind: "rocket" })!.kind).toBe("card");
   });
 });
