@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { idbGet, idbSet } from "@/lib/idb";
+import { MERCH_STORE_KEY, readStoredMerch, type StoredMerch } from "@/lib/tools/merch/persist";
 import type { ThemeClasses } from "@/lib/theme";
 import { downloadBlob, shareImages, type ExportedImage } from "@/lib/download";
 import { useCanShareImages } from "@/hooks/useCanShareImages";
@@ -73,7 +75,12 @@ export default function MerchWorkshop({
   const [kind, setKind] = useState<MerchKind>("card");
   const [designs, setDesigns] = useState<MerchDesigns>(defaultDesigns);
   const [photo, setPhoto] = useState<ImageBitmap | null>(null);
+  /** 照片的原始檔:存檔用(ImageBitmap 存不進去) */
+  const [photoBlob, setPhotoBlob] = useState<Blob | null>(null);
   const [cutouts, setCutouts] = useState<Cutout[]>([]);
+  /** 上次的進度讀回來之前不要存,免得把存檔蓋成預設值 */
+  const [restored, setRestored] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [wand, setWand] = useState<{ image: ImageBitmap; name: string } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [side, setSide] = useState<"front" | "back">("front");
@@ -89,6 +96,74 @@ export default function MerchWorkshop({
   const shake = useRef<Vec | null>(null);
 
   const { entries, getArt, artMap } = useArts(album, cutouts, palette);
+
+  // 讀回上次的進度:設計、正在做哪一種、你的照片、去背圖
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const stored = readStoredMerch(await idbGet<unknown>(MERCH_STORE_KEY));
+      if (stored && !cancelled) {
+        const restoredCutouts: Cutout[] = [];
+        for (const item of stored.cutouts) {
+          try {
+            const bitmap = await createImageBitmap(item.blob);
+            const canvas = document.createElement("canvas");
+            canvas.width = bitmap.width;
+            canvas.height = bitmap.height;
+            canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
+            bitmap.close();
+            restoredCutouts.push({ id: item.id, label: item.label, canvas, blob: item.blob });
+          } catch {
+            // 讀不出來的去背圖就略過,貼著它的貼紙會自動不畫
+          }
+        }
+        let restoredPhoto: ImageBitmap | null = null;
+        if (stored.photo) {
+          try {
+            restoredPhoto = await decodePhoto(stored.photo, "photo");
+          } catch {
+            restoredPhoto = null;
+          }
+        }
+        if (cancelled) return;
+        setDesigns(stored.designs);
+        setKind(stored.kind);
+        setCutouts(restoredCutouts);
+        setPhoto(restoredPhoto);
+        setPhotoBlob(restoredPhoto ? stored.photo : null);
+      }
+      if (!cancelled) setRestored(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 自動存檔:停下來 0.5 秒才寫,拖貼紙時不會每一格都存
+  useEffect(() => {
+    if (!restored) return;
+    const timer = setTimeout(() => {
+      const data: StoredMerch = {
+        version: 1,
+        kind,
+        designs,
+        photo: photoBlob,
+        cutouts: cutouts.map(({ id, label, blob }) => ({ id, label, blob })),
+      };
+      void idbSet(MERCH_STORE_KEY, data).then((ok) => setSaveFailed(!ok));
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [restored, kind, designs, photoBlob, cutouts]);
+
+  function resetAll() {
+    if (!window.confirm("四種周邊都回到預設的樣子，照片與去背圖也會拿掉。要繼續嗎？")) return;
+    setDesigns(defaultDesigns());
+    setPhoto(null);
+    setPhotoBlob(null);
+    setCutouts([]);
+    setSelected(null);
+    showNotice("全部回到預設了。");
+  }
 
   const update = useCallback(<K extends MerchKind>(key: K, value: MerchDesigns[K]) => {
     setDesigns((current) => ({ ...current, [key]: value }));
@@ -295,7 +370,14 @@ export default function MerchWorkshop({
                     {photo ? "換一張" : "選照片"}
                   </ActionButton>
                   {photo && (
-                    <ActionButton tone="secondary" t={t} onClick={() => setPhoto(null)}>
+                    <ActionButton
+                      tone="secondary"
+                      t={t}
+                      onClick={() => {
+                        setPhoto(null);
+                        setPhotoBlob(null);
+                      }}
+                    >
                       拿掉照片
                     </ActionButton>
                   )}
@@ -583,6 +665,14 @@ export default function MerchWorkshop({
                 </ActionButton>
               )}
             </div>
+            <p className={`text-[11px] leading-5 ${t.muted}`}>
+              {saveFailed
+                ? "這個瀏覽器存不了進度（可能是無痕模式），關掉頁面前記得先下載。"
+                : "設計、照片與去背圖會自動存在這台裝置的瀏覽器裡，下次打開還在。"}
+            </p>
+            <ActionButton tone="secondary" t={t} onClick={resetAll}>
+              全部重來
+            </ActionButton>
           </>
         }
       />
@@ -600,6 +690,7 @@ export default function MerchWorkshop({
           const image = await loadImage(file);
           if (!image) return;
           setPhoto(image);
+          setPhotoBlob(file);
           if (kind === "card") update("card", { ...card, background: "photo" });
           if (kind === "charm") update("charm", { ...charm, background: "photo" });
         }}
@@ -625,10 +716,12 @@ export default function MerchWorkshop({
           name={wand.name}
           t={t}
           onCancel={() => setWand(null)}
-          onDone={(canvas) => {
+          onDone={async (canvas) => {
             const id = newId("cut");
             const label = wand.name.replace(/\.[^.]+$/, "") || "去背圖";
-            setCutouts((list) => [...list, { id, label, canvas }]);
+            const blob = await canvasToPng(canvas);
+            // 去背圖最多留 20 張,太舊的拿掉,存檔才不會無限長大
+            setCutouts((list) => [...list, { id, label, canvas, blob }].slice(-20));
             setWand(null);
             addSticker(id);
             showNotice("去背好了，已經貼上去。");

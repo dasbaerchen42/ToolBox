@@ -3,6 +3,7 @@
 // 存檔不記色盤索引,而是記「這張圖用到哪些色號(連同色碼)」再用索引指過去——
 // 之後色盤增減或重排,舊作品照色號找回來;色號不見了就拿色碼找最接近的豆子。
 
+import { isOutline, type BoardOutline } from "./outline";
 import { hexToRgb, labDistanceSq, rgbToOklab } from "./color";
 import { allMatte, isMaterialId } from "./finish";
 import { paletteLab, type BeadColor } from "./palette";
@@ -31,6 +32,8 @@ export type SavedWork = {
   cells: number[];
   /** 每格的材質;全部霧面時不存 */
   materials?: number[];
+  /** 板子外形;方形時不存 */
+  outline?: BoardOutline;
 };
 
 function createId(): string {
@@ -74,6 +77,7 @@ export function toSavedWork(
     colors,
     cells,
     ...(allMatte(pattern.materials) ? {} : { materials: [...(pattern.materials as number[])] }),
+    ...(pattern.outline && pattern.outline !== "rect" ? { outline: pattern.outline } : {}),
   };
 }
 
@@ -103,6 +107,7 @@ export function fromSavedWork(work: SavedWork, palette: BeadColor[]): BeadPatter
     rows: work.rows,
     cells: work.cells.map((cell) => (cell < 0 ? -1 : mapping[cell])),
     ...(work.materials ? { materials: [...work.materials] } : {}),
+    ...(work.outline ? { outline: work.outline } : {}),
   };
 }
 
@@ -154,6 +159,7 @@ function readWork(value: unknown): SavedWork | null {
     colors,
     cells: raw.cells as number[],
     ...(materials ? { materials } : {}),
+    ...(isOutline(raw.outline) && raw.outline !== "rect" ? { outline: raw.outline } : {}),
   };
 }
 

@@ -5,6 +5,7 @@ import {
   beadShades,
   drawBeads,
   drawBoard,
+  drawCodeHints,
   drawFallingBead,
   drawFlat,
   drawIron,
@@ -48,6 +49,11 @@ type Props = {
   scorchSeed: number;
   /** 動畫播完(或被略過)時通知:dropping → placed、ironing → ironed */
   onSettled: (stage: "placed" | "ironed") => void;
+  /**
+   * 照著拼的色號提示(只有底圖階段):每格寫上色號;focus 給了就只亮那一色。
+   * 開著時板子照 cell 的實際大小畫,不縮到容器寬,外面要能捲動。
+   */
+  hints?: { focus: number | null };
   /** 給了就可以在板子上拖曳編輯(只有底圖階段) */
   editing?: {
     symmetry: Symmetry;
@@ -92,6 +98,7 @@ export default function BeadCanvas({
   glow,
   scorchSeed,
   onSettled,
+  hints,
   editing,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -99,6 +106,8 @@ export default function BeadCanvas({
   // 空板子(柱子)只跟尺寸有關;編輯時每畫一格都要重畫,大板的柱子有一萬多根,先畫好存著
   const boardCache = useRef<{ key: string; canvas: HTMLCanvasElement } | null>(null);
   const symmetry = editing?.symmetry ?? "none";
+  // undefined = 沒開提示;null = 開了、全部顏色都顯示
+  const hintFocus = hints ? hints.focus : undefined;
   // 動畫跑到一半時父層重繪不該讓它從頭開始,所以 onSettled 走 ref
   const settledRef = useRef(onSettled);
   useEffect(() => {
@@ -122,14 +131,14 @@ export default function BeadCanvas({
     const style = { shape, glow };
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    const boardKey = `${cols}x${rows}@${cell}x${dpr}`;
+    const boardKey = `${cols}x${rows}@${cell}x${dpr}:${pattern.outline ?? "rect"}`;
     if (boardCache.current?.key !== boardKey) {
       const board = document.createElement("canvas");
       board.width = canvas.width;
       board.height = canvas.height;
       const boardCtx = board.getContext("2d");
       boardCtx?.setTransform(dpr, 0, 0, dpr, 0, 0);
-      if (boardCtx) drawBoard(boardCtx, cols, rows, cell);
+      if (boardCtx) drawBoard(boardCtx, cols, rows, cell, pattern.outline);
       boardCache.current = { key: boardKey, canvas: board };
     }
     const board = boardCache.current.canvas;
@@ -147,6 +156,7 @@ export default function BeadCanvas({
 
     if (stage === "pattern") {
       paintStatic(null);
+      if (hintFocus !== undefined) drawCodeHints(ctx, pattern, palette, cell, hintFocus);
       drawSymmetryGuides(ctx, width, height, symmetry);
       return;
     }
@@ -287,7 +297,7 @@ export default function BeadCanvas({
     }
 
     return () => cancelAnimationFrame(frame);
-  }, [pattern, palette, stage, cell, symmetry, targetMelt, shape, glow, scorchSeed]);
+  }, [pattern, palette, stage, cell, symmetry, targetMelt, shape, glow, scorchSeed, hintFocus]);
 
   const cellAt = (event: PointerEvent<HTMLCanvasElement>): number | null => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -326,8 +336,12 @@ export default function BeadCanvas({
         editing.onStrokeEnd();
       }}
       // 編輯時關掉觸控捲動,手指在板子上拖才是畫畫而不是捲頁面
-      className={`block h-auto w-full rounded-xl ${editing ? "cursor-crosshair touch-none" : ""}`}
-      style={{ maxWidth: pattern.cols * cell, aspectRatio: `${pattern.cols} / ${pattern.rows}` }}
+      className={`block h-auto rounded-xl ${hints ? "mx-auto shrink-0" : "w-full"} ${editing ? "cursor-crosshair touch-none" : ""}`}
+      style={
+        hints
+          ? { width: pattern.cols * cell, aspectRatio: `${pattern.cols} / ${pattern.rows}` }
+          : { maxWidth: pattern.cols * cell, aspectRatio: `${pattern.cols} / ${pattern.rows}` }
+      }
       role="img"
       aria-label={
         stage === "pattern"
