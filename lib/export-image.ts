@@ -55,6 +55,11 @@ export type ExportImageOptions = {
   preferences: EditorPreferences;
 };
 
+/** 內容區要加的 class(例如斜體改淡色正體) */
+export function contentClassFor(preferences: Pick<EditorPreferences, "softItalic">): string {
+  return preferences.softItalic ? "md-preview md-soft-italic" : "md-preview";
+}
+
 function readThemeColor(name: string, fallback: string): string {
   if (typeof window === "undefined") return fallback;
   const value = getComputedStyle(document.documentElement)
@@ -77,21 +82,28 @@ function toBlob(canvas: HTMLCanvasElement): Promise<Blob> {
  * 剛選的字體、剛插進畫面外的節點,document.fonts.ready 可能在抓之前就 resolve 了,
  * 只等它會截到系統字。這裡直接要求載入「這段內容會用到的字」(一般與粗體各一次)。
  */
-async function loadFontsFor(page: HTMLElement): Promise<void> {
-  if (!document.fonts?.load) return;
-  const { fontSize, fontFamily } = getComputedStyle(page);
-  const text = page.textContent ?? "";
-  if (!text.trim()) return;
-  // 粗體是另一組字檔,只替真的是粗體的那些字抓,不然整篇會多下載一倍
-  const boldText = Array.from(
-    page.querySelectorAll("strong, b, h1, h2, h3, h4, h5, h6, th, .md-preview-title"),
-    (el) => el.textContent ?? ""
-  ).join("");
+async function loadFontsFor(page: HTMLElement, doc: Document = document): Promise<void> {
+  if (!doc.fonts?.load) return;
+  const view = doc.defaultView ?? window;
+  if (!(page.textContent ?? "").trim()) return;
+
+  // 每種「粗細＋斜不斜＋字體」各要一次,只帶真的用到那種樣式的字:
+  // 粗體、淡色正體的對白(600)是另一組字檔,不要整篇都多下載一倍,也不能漏掉
+  const variants = new Map<string, { font: string; text: string }>();
+  const walker = doc.createTreeWalker(page, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = node.textContent ?? "";
+    const parent = node.parentElement;
+    if (!parent || !text.trim()) continue;
+    const style = view.getComputedStyle(parent);
+    const font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+    const entry = variants.get(font);
+    if (entry) entry.text += text;
+    else variants.set(font, { font, text });
+  }
   try {
-    await Promise.all([
-      document.fonts.load(`${fontSize} ${fontFamily}`, text),
-      boldText && document.fonts.load(`bold ${fontSize} ${fontFamily}`, boldText),
-    ]);
+    await Promise.all(Array.from(variants.values(), ({ font, text }) => doc.fonts.load(font, text)));
+    if (doc.fonts.ready) await doc.fonts.ready;
   } catch (error) {
     // 字載不到就用備援字體截,不要讓整張圖失敗
     console.warn("字體載入失敗:", error);
@@ -198,6 +210,7 @@ export async function exportContentToImages({
   ].join("; ");
 
   const page = document.createElement("div");
+  page.dataset.exportPage = "";
   page.style.cssText = [
     `width: ${width}px`,
     `padding: ${padding}px`,
@@ -208,6 +221,9 @@ export async function exportContentToImages({
     `font-size: ${preferences.fontSize}px`,
     `line-height: ${preferences.lineHeight}`,
     `letter-spacing: ${preferences.letterSpacing}px`,
+    // 新版 Chrome 會把相鄰的全形標點(「。「」)擠成半格,html2canvas 量到的寬度變 0,
+    // 那個「就整個不見。轉圖時關掉擠壓,每個標點都是完整一格
+    "text-spacing-trim: space-all",
   ].join("; ");
 
   // 裁切視窗:單一區塊本身就超過一頁時,只能在它內部硬切
@@ -217,7 +233,7 @@ export async function exportContentToImages({
   const shift = document.createElement("div");
 
   const content = document.createElement("div");
-  content.className = "md-preview";
+  content.className = contentClassFor(preferences);
   content.style.position = "relative";
 
   // 標題與內文都直接放在 content 底下:分頁是照 content 的直接子元素切,
@@ -237,9 +253,14 @@ export async function exportContentToImages({
   stage.appendChild(page);
   document.body.appendChild(stage);
 
-  const capture = async (start: number, height: number) => {
-    viewport.style.height = `${height}px`;
-    shift.style.transform = `translateY(${-start}px)`;
+  /**
+   * 截一張。height 給了才是「在區塊內硬切」:只截 start 起的那一段。
+   * 一般的一頁不設高度,讓 html2canvas 照它複製出來那份文件實際排出來的高度截——
+   * 先量好高度再截的話,複製文件裡字型晚一步載入、換行多一行,最後幾行就會被切掉。
+   */
+  const capture = async (start: number, height: number | null) => {
+    viewport.style.height = height === null ? "" : `${height}px`;
+    shift.style.transform = start ? `translateY(${-start}px)` : "";
     const { default: html2canvas } = await import("html2canvas-pro");
     return html2canvas(page, {
       scale: EXPORT_IMAGE_SCALE,
@@ -247,7 +268,12 @@ export async function exportContentToImages({
       useCORS: true,
       logging: false,
       width,
-      height: height + padding * 2,
+      ...(height === null ? {} : { height: height + padding * 2 }),
+      // html2canvas 在另一份複製的文件裡排版,那邊的網路字型要自己再等一次
+      onclone: async (clonedDoc: Document) => {
+        const clonedPage = clonedDoc.body.querySelector<HTMLElement>("[data-export-page]");
+        if (clonedPage) await loadFontsFor(clonedPage, clonedDoc);
+      },
     });
   };
 
@@ -275,7 +301,7 @@ export async function exportContentToImages({
     }
 
     if (pages.length === 0) {
-      const canvas = await capture(0, totalHeight);
+      const canvas = await capture(0, null);
       return [{ name: `${sanitizeFileName(fileTitle)}.png`, blob: await toBlob(canvas) }];
     }
 
@@ -304,7 +330,7 @@ export async function exportContentToImages({
         continue;
       }
 
-      const canvas = await capture(0, height);
+      const canvas = await capture(0, null);
       images.push({ name: "", blob: await toBlob(canvas) });
     }
 

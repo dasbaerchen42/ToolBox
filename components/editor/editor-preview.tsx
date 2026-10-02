@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import type { EditorThemeConfig } from "@/lib/theme";
 import { type EditorPreferences } from "@/lib/preferences";
+import { contentClassFor } from "@/lib/export-image";
 import { getFontFamily } from "@/lib/editor-font";
 import { renderToSafeHtml, type RenderableMode } from "@/lib/markdown";
 
@@ -59,7 +60,7 @@ export default function EditorPreview({
           <div className={`h-[70vh] text-sm ${theme.mutedText}`}>{error}</div>
         ) : (
           <div
-            className="md-preview h-[70vh] overflow-auto"
+            className={`${contentClassFor(preferences)} h-[70vh] overflow-auto`}
             style={{
               fontSize: `${preferences.fontSize}px`,
               lineHeight: preferences.lineHeight,

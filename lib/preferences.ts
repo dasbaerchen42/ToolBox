@@ -27,6 +27,15 @@ export type EditorPreferences = {
   exportImageWidth: ExportImageWidth;
   exportImageTitle: boolean;
   exportPaginate: ExportPaginate;
+  /** 斜體改成淡色的正體(預覽與轉圖都適用) */
+  softItalic: boolean;
+  /** 轉圖用對話框樣式:標了左/右的段落變成聊天泡泡 */
+  exportChat: boolean;
+  /** 對話框左右兩邊的名字;空的就不顯示 */
+  exportChatLeft: string;
+  exportChatRight: string;
+  /** 對話框的泡泡:每行一顆或每段一顆 */
+  exportChatSplit: "line" | "paragraph";
 };
 
 export const PREFERENCES_KEY = "orange-writing-preferences";
@@ -42,4 +51,9 @@ export const defaultPreferences: EditorPreferences = {
   exportImageWidth: 1080,
   exportImageTitle: false,
   exportPaginate: "auto",
+  softItalic: false,
+  exportChat: false,
+  exportChatLeft: "",
+  exportChatRight: "",
+  exportChatSplit: "paragraph",
 };

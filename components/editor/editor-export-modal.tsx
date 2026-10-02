@@ -23,6 +23,13 @@ import {
   toPlainHtml,
 } from "@/lib/markdown";
 import {
+  composeChatHtml,
+  defaultChatSides,
+  nextChatSide,
+  type ChatSide,
+} from "@/lib/chat-export";
+import {
+  contentClassFor,
   downloadBlob,
   exportContentToImages,
   ExportPageTooLongError,
@@ -67,6 +74,8 @@ export default function EditorExportModal({
   const [blocks, setBlocks] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [cuts, setCuts] = useState<Set<number>>(new Set());
+  /** 對話框樣式:每一段標在左邊、右邊,或不標(照原樣排) */
+  const [sides, setSides] = useState<Map<number, ChatSide>>(new Map());
   const [images, setImages] = useState<ExportedImage[] | null>(null);
   const [pickedPages, setPickedPages] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -100,6 +109,7 @@ export default function EditorExportModal({
       setBlocks(next);
       setSelected(new Set(next.map((_, i) => i)));
       setCuts(new Set());
+      setSides(defaultChatSides(next));
       anchorRef.current = null;
     })().catch((error: unknown) => {
       console.error("渲染失敗：", error);
@@ -127,10 +137,47 @@ export default function EditorExportModal({
     [blocks, selected]
   );
 
-  const selectedHtml = useMemo(
-    () => selectedIndexes.map((index) => blocks[index]).join(""),
-    [blocks, selectedIndexes]
+  const chat = preferences.exportChat;
+  const names = useMemo(
+    () => ({ left: preferences.exportChatLeft, right: preferences.exportChatRight }),
+    [preferences.exportChatLeft, preferences.exportChatRight]
   );
+
+  // 預覽清單裡每一段長什麼樣子:對話框模式時標了邊的段落畫成泡泡
+  const shownBlocks = useMemo(
+    () =>
+      chat
+        ? composeChatHtml(
+            blocks.map((html, i) => ({ html, side: sides.get(i) })),
+            names,
+            preferences.exportChatSplit
+          )
+        : blocks,
+    [blocks, chat, sides, names, preferences.exportChatSplit]
+  );
+
+  const selectedHtml = useMemo(
+    () =>
+      chat
+        ? composeChatHtml(
+            selectedIndexes.map((index) => ({ html: blocks[index], side: sides.get(index) })),
+            names,
+            preferences.exportChatSplit
+          ).join("")
+        : selectedIndexes.map((index) => blocks[index]).join(""),
+    [blocks, selectedIndexes, chat, sides, names, preferences.exportChatSplit]
+  );
+
+  function cycleSide(index: number) {
+    dropImages();
+    setSides((prev) => {
+      const next = new Map(prev);
+      const side = nextChatSide(prev.get(index));
+      if (side) next.set(index, side);
+      else next.delete(index);
+      return next;
+    });
+  }
 
   // 畫面上的分頁點是「第幾個區塊」,匯出時的內容只有選取的區塊(而且含標題時
   // 標題會排在最前面),所以要換算成匯出內容裡的位置。最後一段之後切沒有意義。
@@ -376,6 +423,24 @@ export default function EditorExportModal({
             含標題
           </label>
 
+          <label className={`flex items-center gap-2 ${theme.mutedText}`}>
+            <input
+              type="checkbox"
+              checked={preferences.softItalic}
+              onChange={(e) => updatePreference({ softItalic: e.target.checked })}
+            />
+            斜體改淡色正體
+          </label>
+
+          <label className={`flex items-center gap-2 ${theme.mutedText}`}>
+            <input
+              type="checkbox"
+              checked={chat}
+              onChange={(e) => updatePreference({ exportChat: e.target.checked })}
+            />
+            對話框
+          </label>
+
           <span className={`ml-auto text-xs ${theme.subtleText}`}>
             已選 {selected.size} / {blocks.length} 段
           </span>
@@ -394,6 +459,41 @@ export default function EditorExportModal({
             全不選
           </button>
         </div>
+
+        {chat && (
+          <div className={`mb-2 flex flex-wrap items-center gap-2 text-xs ${theme.mutedText}`}>
+            <span>點每段前面的標記切換：不標 → ◀ 左 → 右 ▶。沒標的段落照原樣排。</span>
+            <input
+              type="text"
+              value={preferences.exportChatLeft}
+              maxLength={20}
+              placeholder="左邊的名字（可空）"
+              aria-label="左邊的名字"
+              onChange={(e) => updatePreference({ exportChatLeft: e.target.value })}
+              className={`w-36 rounded-2xl border px-3 py-1 outline-none ${theme.border} ${theme.inputBg}`}
+            />
+            <input
+              type="text"
+              value={preferences.exportChatRight}
+              maxLength={20}
+              placeholder="右邊的名字（可空）"
+              aria-label="右邊的名字"
+              onChange={(e) => updatePreference({ exportChatRight: e.target.value })}
+              className={`w-36 rounded-2xl border px-3 py-1 outline-none ${theme.border} ${theme.inputBg}`}
+            />
+            <select
+              value={preferences.exportChatSplit}
+              onChange={(e) =>
+                updatePreference({ exportChatSplit: e.target.value as "line" | "paragraph" })
+              }
+              className={`rounded-2xl border px-3 py-1 outline-none ${theme.border} ${theme.inputBg}`}
+              aria-label="泡泡怎麼切"
+            >
+              <option value="paragraph">每段一顆（空一行換泡泡）</option>
+              <option value="line">每行一顆</option>
+            </select>
+          </div>
+        )}
 
         {isManual && (
           <div className={`mb-2 flex flex-wrap items-center gap-2 text-xs ${theme.mutedText}`}>
@@ -421,7 +521,7 @@ export default function EditorExportModal({
             <p className={`text-sm ${theme.mutedText}`}>沒有內容可以轉圖。</p>
           ) : (
             <div
-              className="md-preview"
+              className={contentClassFor(preferences)}
               style={{ fontFamily: getFontFamily(preferences.fontFamily) }}
             >
               {blocks.map((block, index) => (
@@ -443,9 +543,28 @@ export default function EditorExportModal({
                       }}
                       aria-label={`第 ${index + 1} 段`}
                     />
+                    {chat && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation(); // 換邊不要順便切一刀
+                          cycleSide(index);
+                        }}
+                        aria-label={`第 ${index + 1} 段的對話方向：${
+                          sides.get(index) === "left" ? "左" : sides.get(index) === "right" ? "右" : "不標"
+                        }`}
+                        className={`mt-1 w-12 shrink-0 self-start rounded-xl border px-1 py-0.5 text-[11px] leading-5 ${
+                          sides.has(index)
+                            ? `${theme.primaryButton} ${theme.primaryButtonText}`
+                            : `${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`
+                        }`}
+                      >
+                        {sides.get(index) === "left" ? "◀ 左" : sides.get(index) === "right" ? "右 ▶" : "—"}
+                      </button>
+                    )}
                     <div
                       className="min-w-0 flex-1"
-                      dangerouslySetInnerHTML={{ __html: block }}
+                      dangerouslySetInnerHTML={{ __html: shownBlocks[index] ?? block }}
                     />
                   </div>
 
