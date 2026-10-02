@@ -9,6 +9,7 @@ const navItems = [
   { href: "/editor", label: "通用編輯器" },
   { href: "/tools", label: "社群轉換區" },
   { href: "/tools/knife", label: "文字切割刀" },
+  { href: "/tools/chat", label: "聊天室產生器" },
   { href: "/tools/fullwidth", label: "標點置換所" },
   { href: "/tools/image", label: "影像工作檯" },
   { href: "/tools/beads", label: "拼豆工坊" },
