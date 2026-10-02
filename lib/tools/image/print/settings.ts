@@ -5,6 +5,7 @@ import {
   type PlayerSettings,
   type SocialSettings,
   type StorySettings,
+  type UiLang,
   type VideoSettings,
 } from "./interface";
 
@@ -135,6 +136,7 @@ export type PrintSettings = {
     text: string;
     textStyle: PosterTextStyle;
   };
+  ui: { lang: UiLang };
   player: PlayerSettings;
   video: VideoSettings;
   social: SocialSettings;
@@ -196,7 +198,7 @@ export type Size = { width: number; height: number };
 export function printLayout(
   size: Size,
   kind: PrintKind,
-  settings?: Pick<PrintSettings, "player" | "video" | "social" | "story">
+  settings?: Pick<PrintSettings, "ui" | "player" | "video" | "social" | "story">
 ): {
   canvas: Size;
   /** 照片在輸出圖裡的位置 */

@@ -1,15 +1,33 @@
 // 沖印所的「介面」:把照片放進播放器、社群貼文這類常見的畫面裡。
-// 刻意做成通用的樣子——圖示用最基本的幾何畫,版面也不照任何一家的規格,
+// 刻意做成通用的樣子——圖示用最基本的幾何畫,版面也不照任何一家的規格:
+// 貼文的動作列是「圖示＋數字」、照片內縮成圓角,另有文字在前的版型,
 // 看得出是「播放器」「貼文」就好,不指向哪個網站或軟體。
 //
+// 介面文字有中文、English、日本語;預設是「紙感」配色(米白底、暖灰字、襯線標題)。
 // 尺寸都以畫布寬度的 1% 為單位(下面的 k),照片多大輸出就跟著多大。
 
 import type { Size } from "./settings";
 
-const FONT = `system-ui, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif`;
+const FONT = `system-ui, "Noto Sans TC", "Noto Sans JP", "PingFang TC", "Hiragino Sans", "Microsoft JhengHei", sans-serif`;
+const SERIF = `"Cormorant Garamond", "Noto Serif JP", "Noto Serif TC", "Hiragino Mincho ProN", "Yu Mincho", Georgia, "Times New Roman", serif`;
 
 export type InterfaceKind = "player" | "video" | "social" | "story";
-export type UiTheme = "light" | "dark";
+/** paper:米白紙感(文青);light、dark:一般的淺色深色 */
+export type UiTheme = "paper" | "light" | "dark";
+export type UiLang = "zh" | "en" | "ja";
+
+export const UI_LANGS: { value: UiLang; label: string }[] = [
+  { value: "en", label: "English" },
+  { value: "ja", label: "日本語" },
+  { value: "zh", label: "中文" },
+];
+
+/** 介面上固定的字(按鈕、標籤);使用者自己打的內容不在這裡 */
+const STRINGS: Record<UiLang, { nowPlaying: string; like: string; share: string; save: string }> = {
+  zh: { nowPlaying: "正在播放", like: "讚", share: "分享", save: "收藏" },
+  en: { nowPlaying: "Now Playing", like: "Like", share: "Share", save: "Save" },
+  ja: { nowPlaying: "再生中", like: "いいね", share: "シェア", save: "保存" },
+};
 
 export type PlayerSettings = {
   title: string;
@@ -35,11 +53,15 @@ export type VideoSettings = {
 };
 
 export type SocialSettings = {
+  /** photo:照片為主(照片在上、文字在下);text:文字為主(頭像在左欄,文字在上、照片在下) */
+  layout: "photo" | "text";
   name: string;
   place: string;
-  likes: string;
   caption: string;
   time: string;
+  likes: string;
+  comments: string;
+  reposts: string;
   liked: boolean;
   ratio: "1:1" | "4:5";
   theme: UiTheme;
@@ -50,48 +72,111 @@ export type StorySettings = {
   time: string;
   segments: number;
   current: number;
+  /** 底部放什麼:回覆框、一行大字、什麼都不放 */
+  bottom: "reply" | "caption" | "none";
   reply: string;
+  caption: string;
 };
 
 export type InterfaceSettings = {
+  ui: { lang: UiLang };
   player: PlayerSettings;
   video: VideoSettings;
   social: SocialSettings;
   story: StorySettings;
 };
 
-export function defaultInterfaceSettings(): InterfaceSettings {
+/** 跟語言有關的預設內容:切換語言時,還沒改過的欄位跟著換 */
+const LOCALIZED: Record<
+  UiLang,
+  {
+    player: Pick<PlayerSettings, "title">;
+    video: Pick<VideoSettings, "title" | "meta">;
+    social: Pick<SocialSettings, "caption" | "time">;
+    story: Pick<StorySettings, "time" | "reply" | "caption">;
+  }
+> = {
+  zh: {
+    player: { title: "午後的慢板" },
+    video: { title: "週末的散步紀錄", meta: "1.2 萬次觀看・3 天前" },
+    social: { caption: "光線很軟的下午，書翻得很慢。", time: "3 小時前" },
+    story: { time: "5 小時", reply: "回覆…", caption: "今天也好好過" },
+  },
+  en: {
+    player: { title: "slow afternoon" },
+    video: { title: "a quiet walk on sunday", meta: "12K views · 3 days ago" },
+    social: { caption: "soft light, slow pages.", time: "3h" },
+    story: { time: "5h", reply: "Reply…", caption: "little things, softly." },
+  },
+  ja: {
+    player: { title: "ひだまりの午後" },
+    video: { title: "日曜日のおさんぽ記録", meta: "1.2万回視聴・3日前" },
+    social: { caption: "やわらかい光と、ゆっくりめくるページ。", time: "3時間前" },
+    story: { time: "5時間", reply: "返信する…", caption: "きょうも、いい日。" },
+  },
+};
+
+export function defaultInterfaceSettings(lang: UiLang = "en"): InterfaceSettings {
+  const text = LOCALIZED[lang];
   return {
+    ui: { lang },
     player: {
-      title: "今天也好好過",
+      ...text.player,
       artist: "TOOLBOX",
       current: "1:24",
       total: "3:45",
       playing: true,
       liked: true,
-      theme: "blur",
+      theme: "paper",
     },
     video: {
-      title: "週末的散步紀錄",
-      meta: "1.2 萬次觀看・3 天前",
+      ...text.video,
       current: "2:08",
       total: "8:30",
       paused: false,
-      accent: "#4f8cff",
+      accent: "#c0573e",
       info: true,
-      theme: "dark",
+      theme: "paper",
     },
     social: {
+      ...text.social,
+      layout: "photo",
       name: "toolbox.daily",
       place: "",
-      likes: "128 個讚",
-      caption: "今天的天氣很好",
-      time: "3 小時前",
+      likes: "128",
+      comments: "12",
+      reposts: "3",
       liked: true,
-      ratio: "1:1",
-      theme: "light",
+      ratio: "4:5",
+      theme: "paper",
     },
-    story: { name: "toolbox", time: "5 小時", segments: 4, current: 2, reply: "傳送訊息" },
+    story: { ...text.story, name: "toolbox", segments: 4, current: 2, bottom: "caption" },
+  };
+}
+
+/**
+ * 換介面語言:還是某個語言預設內容的欄位,換成新語言的預設;使用者自己改過的不動。
+ */
+export function switchLanguage(settings: InterfaceSettings, lang: UiLang): InterfaceSettings {
+  const next = LOCALIZED[lang];
+  const isDefault = (group: keyof typeof next, field: string, value: string) =>
+    (Object.keys(LOCALIZED) as UiLang[]).some(
+      (l) => (LOCALIZED[l][group] as Record<string, string>)[field] === value
+    );
+  const swap = <G extends keyof typeof next>(group: G, current: InterfaceSettings[G]) => {
+    const out = { ...current } as Record<string, unknown>;
+    for (const [field, value] of Object.entries(next[group])) {
+      if (isDefault(group, field, String(out[field]))) out[field] = value;
+    }
+    return out as InterfaceSettings[G];
+  };
+  return {
+    ...settings,
+    ui: { lang },
+    player: swap("player", settings.player),
+    video: swap("video", settings.video),
+    social: swap("social", settings.social),
+    story: swap("story", settings.story),
   };
 }
 
@@ -110,7 +195,33 @@ export function clockProgress(current: string, total: string): number {
   return Math.min(1, Math.max(0, c / t));
 }
 
+/**
+ * 估計一段字要排幾行(版面要在畫之前就決定高度,這時還沒有 canvas 可以量)。
+ * 中日文一個字算一個字寬,英數算半個多一點。
+ */
+export function estimateLines(text: string, charsPerLine: number, maxLines: number): number {
+  let lines = 1;
+  let used = 0;
+  for (const char of text) {
+    if (char === "\n") {
+      lines += 1;
+      used = 0;
+      continue;
+    }
+    const w = /[\u0000-ɏ]/.test(char) ? 0.56 : 1;
+    if (used + w > charsPerLine) {
+      lines += 1;
+      used = 0;
+    }
+    used += w;
+  }
+  return Math.max(1, Math.min(maxLines, lines));
+}
+
 type Box = { x: number; y: number; width: number; height: number };
+
+/** 文字貼文的內文:字級與每行可放的字數,版面與畫圖共用 */
+const TEXT_POST = { size: 4.2, lineHeight: 6, left: 17, right: 5, maxLines: 5 };
 
 /**
  * 介面的版面:畫布多大、照片放在哪。
@@ -118,12 +229,13 @@ type Box = { x: number; y: number; width: number; height: number };
  */
 export function interfaceLayout(size: Size, kind: InterfaceKind, s: InterfaceSettings): { canvas: Size; photo: Box } {
   const base = Math.round(Math.min(size.width, size.height));
+  const k = base / 100;
   switch (kind) {
     case "player": {
-      const side = Math.round(base * 0.84);
+      const side = Math.round(base * 0.8);
       return {
         canvas: { width: base, height: Math.round(base * 1.8) },
-        photo: { x: Math.round(base * 0.08), y: Math.round(base * 0.2), width: side, height: side },
+        photo: { x: Math.round(base * 0.1), y: Math.round(base * 0.2), width: side, height: side },
       };
     }
     case "video": {
@@ -133,11 +245,27 @@ export function interfaceLayout(size: Size, kind: InterfaceKind, s: InterfaceSet
       return { canvas: { width, height: height + info }, photo: { x: 0, y: 0, width, height } };
     }
     case "social": {
-      const header = Math.round(base * 0.15);
-      const photoHeight = s.social.ratio === "4:5" ? Math.round(base * 1.25) : base;
+      const ratio = s.social.ratio === "4:5" ? 1.25 : 1;
+      if (s.social.layout === "text") {
+        const width = base - Math.round((TEXT_POST.left + TEXT_POST.right) * k);
+        const charsPerLine = (100 - TEXT_POST.left - TEXT_POST.right) / TEXT_POST.size;
+        const lines = estimateLines(s.social.caption, charsPerLine, TEXT_POST.maxLines);
+        const top = Math.round((13 + lines * TEXT_POST.lineHeight + 3) * k);
+        const height = Math.round(width * ratio);
+        return {
+          canvas: { width: base, height: top + height + Math.round(16 * k) },
+          photo: { x: Math.round(TEXT_POST.left * k), y: top, width, height },
+        };
+      }
+      const inset = Math.round(4 * k);
+      const width = base - inset * 2;
+      const height = Math.round(width * ratio);
+      const header = Math.round(15 * k);
+      const lines = estimateLines(s.social.caption, (100 - 8) / 3.8, 3);
+      const place = s.social.place.trim() ? 6 * k : 0;
       return {
-        canvas: { width: base, height: header + photoHeight + Math.round(base * 0.38) },
-        photo: { x: 0, y: header, width: base, height: photoHeight },
+        canvas: { width: base, height: Math.round(header + height + place + (8 + lines * 5.4 + 16) * k) },
+        photo: { x: inset, y: header, width, height },
       };
     }
     case "story": {
@@ -338,6 +466,34 @@ const Icons = {
     }
     ctx.stroke();
   },
+  repost(ctx: Ctx, s: number) {
+    const r = s * 0.42;
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.75, r * 0.15);
+    ctx.lineTo(-r * 0.75, -r * 0.55);
+    ctx.lineTo(r * 0.55, -r * 0.55);
+    ctx.moveTo(-r * 1.05, -r * 0.15);
+    ctx.lineTo(-r * 0.75, r * 0.15);
+    ctx.lineTo(-r * 0.45, -r * 0.15);
+    ctx.moveTo(r * 0.75, -r * 0.15);
+    ctx.lineTo(r * 0.75, r * 0.55);
+    ctx.lineTo(-r * 0.55, r * 0.55);
+    ctx.moveTo(r * 1.05, r * 0.15);
+    ctx.lineTo(r * 0.75, -r * 0.15);
+    ctx.lineTo(r * 0.45, r * 0.15);
+    ctx.stroke();
+  },
+  pin(ctx: Ctx, s: number) {
+    const r = s * 0.36;
+    ctx.beginPath();
+    ctx.arc(0, -r * 0.35, r * 0.62, Math.PI * 0.82, Math.PI * 2.18);
+    ctx.lineTo(0, r * 1.05);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, -r * 0.35, r * 0.2, 0, Math.PI * 2);
+    ctx.stroke();
+  },
   close(ctx: Ctx, s: number) {
     const r = s * 0.36;
     ctx.beginPath();
@@ -429,6 +585,8 @@ function fitText(ctx: Ctx, text: string, x: number, y: number, maxWidth: number)
   ctx.fillText(shown, x, y);
 }
 
+const NO_LINE_START = /[、。，．,.!?！？）」』】ーっゃゅょァィゥェォッャュョ…・:;：；]/;
+
 /**
  * 文字換行(一個字一個字斷),最多 maxLines 行;第一行可以比較短(前面接了名字)。
  * 超過的話最後一行尾巴換成「…」
@@ -443,7 +601,8 @@ function wrapText(ctx: Ctx, text: string, firstWidth: number, maxWidth: number, 
       continue;
     }
     const limit = lines.length === 0 ? firstWidth : maxWidth;
-    if (ctx.measureText(line + char).width > limit && line) {
+    // 避頭:句讀與長音不放在行首,寧可讓這一行稍微超出一點
+    if (ctx.measureText(line + char).width > limit && line && !NO_LINE_START.test(char)) {
       lines.push(line);
       line = char;
     } else line += char;
@@ -481,9 +640,9 @@ function avatar(ctx: Ctx, source: CanvasImageSource, from: Size, cx: number, cy:
   if (ring) {
     ctx.save();
     ctx.strokeStyle = ring;
-    ctx.lineWidth = r * 0.14;
+    ctx.lineWidth = Math.max(1, r * 0.07);
     ctx.beginPath();
-    ctx.arc(cx, cy, r * 1.16, 0, Math.PI * 2);
+    ctx.arc(cx, cy, r * 1.12, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }
@@ -499,94 +658,180 @@ function avatar(ctx: Ctx, source: CanvasImageSource, from: Size, cx: number, cy:
   ctx.restore();
 }
 
-const PALETTE = {
-  light: { bg: "#ffffff", ink: "#16161a", muted: "#71717a", line: "#e4e4e7" },
-  dark: { bg: "#121214", ink: "#f4f4f5", muted: "#a1a1aa", line: "#2a2a2e" },
+type Colors = { bg: string; ink: string; muted: string; line: string; card: string; accent: string };
+
+const PALETTE: Record<UiTheme, Colors> = {
+  // 米白紙、暖灰墨、磚紅點綴
+  paper: { bg: "#f3eee4", ink: "#3b352d", muted: "#958b7b", line: "#e0d7c7", card: "#fbf8f2", accent: "#c0573e" },
+  light: { bg: "#ffffff", ink: "#1c1c1f", muted: "#7a7a80", line: "#ececef", card: "#f5f5f6", accent: "#e5484d" },
+  dark: { bg: "#141416", ink: "#f2f2f3", muted: "#9a9aa2", line: "#2b2b30", card: "#1e1e22", accent: "#ff6b6b" },
 };
+
+/** 紙感用襯線字當標題,另外兩種用無襯線 */
+const titleFont = (theme: UiTheme | "blur") => (theme === "paper" ? SERIF : FONT);
+
+/** 紙感的細微紙紋:很淡的斑點,只在紙感底色上加 */
+function paperTexture(ctx: Ctx, canvas: Size) {
+  const k = canvas.width / 100;
+  let seed = 7;
+  const random = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  ctx.save();
+  const count = Math.round((canvas.width * canvas.height) / (k * k * 6));
+  for (let i = 0; i < count; i += 1) {
+    ctx.fillStyle = random() < 0.5 ? "rgba(120, 100, 70, 0.05)" : "rgba(255, 255, 255, 0.35)";
+    ctx.fillRect(random() * canvas.width, random() * canvas.height, k * 0.25, k * 0.25);
+  }
+  ctx.restore();
+}
+
+function fillBackground(ctx: Ctx, canvas: Size, theme: UiTheme) {
+  ctx.fillStyle = PALETTE[theme].bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (theme === "paper") paperTexture(ctx, canvas);
+}
+
+/** 照片外面一圈白紙邊,像貼在本子上的相片 */
+function matted(ctx: Ctx, source: CanvasImageSource, from: Size, box: Box, k: number, colors: Colors) {
+  const mat = 1.6 * k;
+  ctx.save();
+  ctx.shadowColor = "rgba(60, 45, 30, 0.22)";
+  ctx.shadowBlur = 3 * k;
+  ctx.shadowOffsetY = 1 * k;
+  ctx.fillStyle = colors.card;
+  ctx.fillRect(box.x - mat, box.y - mat, box.width + mat * 2, box.height + mat * 2);
+  ctx.restore();
+  cover(ctx, source, from, box);
+}
 
 // ---- 四種介面 ----
 
-function drawPlayer(ctx: Ctx, source: CanvasImageSource, from: Size, canvas: Size, photo: Box, s: PlayerSettings) {
+function drawPlayer(
+  ctx: Ctx,
+  source: CanvasImageSource,
+  from: Size,
+  canvas: Size,
+  photo: Box,
+  s: PlayerSettings,
+  lang: UiLang
+) {
   const W = canvas.width;
   const k = W / 100;
-  const colors =
+  const paper = s.theme === "paper";
+  const colors: Colors =
     s.theme === "blur"
-      ? { bg: "", ink: "#ffffff", muted: "rgba(255, 255, 255, 0.68)", line: "rgba(255, 255, 255, 0.28)" }
+      ? { bg: "", ink: "#ffffff", muted: "rgba(255, 255, 255, 0.7)", line: "rgba(255, 255, 255, 0.28)", card: "#fff", accent: "#ffb4a2" }
       : PALETTE[s.theme];
   if (s.theme === "blur") blurredBackdrop(ctx, source, from, canvas);
-  else {
-    ctx.fillStyle = colors.bg;
-    ctx.fillRect(0, 0, W, canvas.height);
-  }
+  else fillBackground(ctx, canvas, s.theme);
 
-  // 上方列
+  // 上方列:紙感時是「— Now Playing —」的斜體小字
   const top = 9 * k;
   icon(ctx, 10 * k, top, 6 * k, colors.ink, Icons.chevronDown);
   icon(ctx, W - 10 * k, top, 6 * k, colors.ink, (c, sz) => Icons.dots(c, sz));
   ctx.fillStyle = colors.muted;
-  ctx.font = `600 ${3.4 * k}px ${FONT}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("正在播放", W / 2, top);
+  const label = STRINGS[lang].nowPlaying;
+  if (paper) {
+    ctx.font = `italic 500 ${4 * k}px ${SERIF}`;
+    ctx.fillText(label, W / 2, top);
+    const half = ctx.measureText(label).width / 2 + 2.5 * k;
+    ctx.strokeStyle = colors.line;
+    ctx.lineWidth = Math.max(1, 0.25 * k);
+    ctx.beginPath();
+    ctx.moveTo(W / 2 - half - 6 * k, top);
+    ctx.lineTo(W / 2 - half, top);
+    ctx.moveTo(W / 2 + half, top);
+    ctx.lineTo(W / 2 + half + 6 * k, top);
+    ctx.stroke();
+  } else {
+    ctx.font = `600 ${3.4 * k}px ${FONT}`;
+    ctx.fillText(label, W / 2, top);
+  }
 
-  // 封面
-  ctx.save();
-  ctx.shadowColor = "rgba(0, 0, 0, 0.35)";
-  ctx.shadowBlur = 5 * k;
-  ctx.shadowOffsetY = 2 * k;
-  ctx.fillStyle = "#000";
-  ctx.beginPath();
-  ctx.roundRect(photo.x, photo.y, photo.width, photo.height, 3 * k);
-  ctx.fill();
-  ctx.restore();
-  cover(ctx, source, from, photo, 3 * k);
+  // 封面:紙感是加白邊的相片,其他是圓角
+  if (paper) matted(ctx, source, from, photo, k, colors);
+  else {
+    ctx.save();
+    ctx.shadowColor = "rgba(0, 0, 0, 0.35)";
+    ctx.shadowBlur = 5 * k;
+    ctx.shadowOffsetY = 2 * k;
+    ctx.fillStyle = "#000";
+    ctx.beginPath();
+    ctx.roundRect(photo.x, photo.y, photo.width, photo.height, 3 * k);
+    ctx.fill();
+    ctx.restore();
+    cover(ctx, source, from, photo, 3 * k);
+  }
 
   // 歌名、歌手、愛心
-  let y = photo.y + photo.height + 11 * k;
+  const left = photo.x;
+  const right = photo.x + photo.width;
+  let y = photo.y + photo.height + 12 * k;
   ctx.textAlign = "left";
   ctx.fillStyle = colors.ink;
-  ctx.font = `700 ${6 * k}px ${FONT}`;
-  fitText(ctx, s.title, 8 * k, y, W - 26 * k);
+  ctx.font = `${paper ? "600" : "700"} ${(paper ? 6.6 : 6) * k}px ${titleFont(s.theme)}`;
+  fitText(ctx, s.title, left, y, right - left - 12 * k);
   ctx.fillStyle = colors.muted;
-  ctx.font = `500 ${4.2 * k}px ${FONT}`;
-  fitText(ctx, s.artist, 8 * k, y + 7 * k, W - 26 * k);
-  icon(ctx, W - 11 * k, y + 3 * k, 7 * k, s.liked ? "#ff4d6d" : colors.ink, (c, sz) => Icons.heart(c, sz, s.liked));
+  ctx.font = `500 ${3.6 * k}px ${FONT}`;
+  if (paper) ctx.letterSpacing = `${0.5 * k}px`;
+  fitText(ctx, s.artist, left, y + 7 * k, right - left - 12 * k);
+  ctx.letterSpacing = "0px";
+  icon(ctx, right - 3 * k, y + 3 * k, 6.5 * k, s.liked ? colors.accent : colors.muted, (c, sz) => Icons.heart(c, sz, s.liked));
 
-  // 進度
-  y += 19 * k;
+  // 進度:紙感用細線
+  y += 18 * k;
   const progress = clockProgress(s.current, s.total);
-  progressBar(ctx, 8 * k, y, W - 16 * k, progress, k, colors.line, colors.ink, 1.6 * k);
+  progressBar(ctx, left, y, right - left, progress, paper ? k * 0.5 : k, colors.line, colors.ink, paper ? 1.1 * k : 1.6 * k);
   ctx.fillStyle = colors.muted;
-  ctx.font = `500 ${3.2 * k}px ${FONT}`;
-  ctx.fillText(s.current, 8 * k, y + 5.5 * k);
+  ctx.font = `500 ${3.1 * k}px ${FONT}`;
+  ctx.fillText(s.current, left, y + 5.5 * k);
   ctx.textAlign = "right";
-  ctx.fillText(s.total, W - 8 * k, y + 5.5 * k);
+  ctx.fillText(s.total, right, y + 5.5 * k);
 
-  // 控制鍵
+  // 控制鍵:紙感的播放鍵是細圈,不是實心
   y += 20 * k;
-  icon(ctx, 12 * k, y, 6 * k, colors.muted, Icons.shuffle);
-  icon(ctx, 31 * k, y, 8 * k, colors.ink, (c, sz) => Icons.skip(c, sz, true));
-  ctx.fillStyle = colors.ink;
-  ctx.beginPath();
-  ctx.arc(W / 2, y, 9.5 * k, 0, Math.PI * 2);
-  ctx.fill();
-  const inner = s.theme === "light" ? "#ffffff" : s.theme === "dark" ? "#121214" : "#1b1b1f";
-  icon(ctx, W / 2 + (s.playing ? 0 : 0.8 * k), y, 8 * k, inner, s.playing ? Icons.pause : Icons.play);
-  icon(ctx, W - 31 * k, y, 8 * k, colors.ink, (c, sz) => Icons.skip(c, sz));
-  icon(ctx, W - 12 * k, y, 6 * k, colors.muted, Icons.repeat);
+  icon(ctx, left + 3 * k, y, 5.5 * k, colors.muted, Icons.shuffle);
+  icon(ctx, W / 2 - 21 * k, y, 7 * k, colors.ink, (c, sz) => Icons.skip(c, sz, true));
+  if (paper) {
+    ctx.strokeStyle = colors.ink;
+    ctx.lineWidth = Math.max(1, 0.45 * k);
+    ctx.beginPath();
+    ctx.arc(W / 2, y, 9 * k, 0, Math.PI * 2);
+    ctx.stroke();
+    icon(ctx, W / 2 + (s.playing ? 0 : 0.8 * k), y, 7 * k, colors.ink, s.playing ? Icons.pause : Icons.play);
+  } else {
+    ctx.fillStyle = colors.ink;
+    ctx.beginPath();
+    ctx.arc(W / 2, y, 9.5 * k, 0, Math.PI * 2);
+    ctx.fill();
+    const inner = s.theme === "light" ? "#ffffff" : s.theme === "dark" ? "#141416" : "#1b1b1f";
+    icon(ctx, W / 2 + (s.playing ? 0 : 0.8 * k), y, 8 * k, inner, s.playing ? Icons.pause : Icons.play);
+  }
+  icon(ctx, W / 2 + 21 * k, y, 7 * k, colors.ink, (c, sz) => Icons.skip(c, sz));
+  icon(ctx, right - 3 * k, y, 5.5 * k, colors.muted, Icons.repeat);
 
-  // 最下面兩顆小圖示
   y += 17 * k;
-  icon(ctx, 12 * k, y, 5 * k, colors.muted, Icons.share);
-  icon(ctx, W - 12 * k, y, 5 * k, colors.muted, Icons.list);
+  icon(ctx, left + 3 * k, y, 4.6 * k, colors.muted, Icons.share);
+  icon(ctx, right - 3 * k, y, 4.6 * k, colors.muted, Icons.list);
 }
 
-function drawVideo(ctx: Ctx, source: CanvasImageSource, from: Size, canvas: Size, photo: Box, s: VideoSettings) {
+function drawVideo(
+  ctx: Ctx,
+  source: CanvasImageSource,
+  from: Size,
+  canvas: Size,
+  photo: Box,
+  s: VideoSettings,
+  lang: UiLang
+) {
   const W = canvas.width;
   const k = W / 100;
   const colors = PALETTE[s.theme];
-  ctx.fillStyle = colors.bg;
-  ctx.fillRect(0, 0, W, canvas.height);
+  fillBackground(ctx, canvas, s.theme);
   ctx.fillStyle = "#000";
   ctx.fillRect(photo.x, photo.y, photo.width, photo.height);
   cover(ctx, source, from, photo);
@@ -595,12 +840,12 @@ function drawVideo(ctx: Ctx, source: CanvasImageSource, from: Size, canvas: Size
   const bottom = photo.y + photo.height;
   const g = ctx.createLinearGradient(0, bottom - 12 * k, 0, bottom);
   g.addColorStop(0, "rgba(0, 0, 0, 0)");
-  g.addColorStop(1, "rgba(0, 0, 0, 0.7)");
+  g.addColorStop(1, "rgba(0, 0, 0, 0.65)");
   ctx.fillStyle = g;
   ctx.fillRect(0, bottom - 12 * k, W, 12 * k);
 
   const barY = bottom - 7 * k;
-  progressBar(ctx, 3 * k, barY, W - 6 * k, clockProgress(s.current, s.total), k * 0.6, "rgba(255, 255, 255, 0.35)", s.accent, 1.1 * k);
+  progressBar(ctx, 3 * k, barY, W - 6 * k, clockProgress(s.current, s.total), k * 0.5, "rgba(255, 255, 255, 0.35)", s.accent, 1 * k);
 
   const rowY = bottom - 3.2 * k;
   const sz = 3 * k;
@@ -615,9 +860,8 @@ function drawVideo(ctx: Ctx, source: CanvasImageSource, from: Size, canvas: Size
   icon(ctx, W - 10 * k, rowY, sz, "#fff", Icons.gear);
   icon(ctx, W - 4.5 * k, rowY, sz, "#fff", Icons.fullscreen);
 
-  // 暫停中:中間一顆大播放鍵
   if (s.paused) {
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
     ctx.beginPath();
     ctx.arc(W / 2, photo.y + photo.height / 2, 6 * k, 0, Math.PI * 2);
     ctx.fill();
@@ -625,33 +869,41 @@ function drawVideo(ctx: Ctx, source: CanvasImageSource, from: Size, canvas: Size
   }
 
   if (!s.info) return;
-  // 標題資訊區
-  const top = bottom + 2.4 * k;
+  const top = bottom + 2.6 * k;
   ctx.textBaseline = "top";
   ctx.fillStyle = colors.ink;
-  ctx.font = `700 ${3.1 * k}px ${FONT}`;
-  fitText(ctx, s.title, 3 * k, top, W - 6 * k);
+  ctx.font = `${s.theme === "paper" ? "600" : "700"} ${3.2 * k}px ${titleFont(s.theme)}`;
+  fitText(ctx, s.title, 3 * k, top, W * 0.6);
   ctx.fillStyle = colors.muted;
-  ctx.font = `500 ${2.2 * k}px ${FONT}`;
-  fitText(ctx, s.meta, 3 * k, top + 4.6 * k, W * 0.5);
+  ctx.font = `500 ${2.1 * k}px ${FONT}`;
+  fitText(ctx, s.meta, 3 * k, top + 5 * k, W * 0.5);
 
   // 右邊幾顆膠囊按鈕:讚、分享、收藏
+  const t = STRINGS[lang];
   const pills: { label: string; draw: (c: Ctx, z: number) => void }[] = [
-    { label: "收藏", draw: Icons.bookmark },
-    { label: "分享", draw: Icons.share },
-    { label: "讚", draw: Icons.thumb },
+    { label: t.save, draw: Icons.bookmark },
+    { label: t.share, draw: Icons.share },
+    { label: t.like, draw: Icons.thumb },
   ];
   let x = W - 3 * k;
-  const py = top + 5.4 * k;
-  ctx.font = `600 ${2.1 * k}px ${FONT}`;
+  const py = top + 5.6 * k;
+  ctx.font = `600 ${2 * k}px ${FONT}`;
   for (const pill of pills) {
     const w = ctx.measureText(pill.label).width + 7.5 * k;
     x -= w;
-    ctx.fillStyle = colors.line;
-    ctx.beginPath();
-    ctx.roundRect(x, py - 2.4 * k, w, 4.8 * k, 2.4 * k);
-    ctx.fill();
-    icon(ctx, x + 2.8 * k, py, 2.6 * k, colors.ink, pill.draw);
+    if (s.theme === "paper") {
+      ctx.strokeStyle = colors.line;
+      ctx.lineWidth = Math.max(1, 0.25 * k);
+      ctx.beginPath();
+      ctx.roundRect(x, py - 2.4 * k, w, 4.8 * k, 2.4 * k);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = colors.line;
+      ctx.beginPath();
+      ctx.roundRect(x, py - 2.4 * k, w, 4.8 * k, 2.4 * k);
+      ctx.fill();
+    }
+    icon(ctx, x + 2.8 * k, py, 2.5 * k, colors.ink, pill.draw);
     ctx.fillStyle = colors.ink;
     ctx.textBaseline = "middle";
     ctx.fillText(pill.label, x + 5 * k, py);
@@ -659,57 +911,114 @@ function drawVideo(ctx: Ctx, source: CanvasImageSource, from: Size, canvas: Size
   }
 }
 
+/** 動作列:愛心、留言、轉發各帶數字,分享靠右 */
+function actionRow(ctx: Ctx, x: number, right: number, y: number, k: number, s: SocialSettings, colors: Colors) {
+  const sz = 5.4 * k;
+  const items: { draw: (c: Ctx, z: number) => void; count: string; color: string }[] = [
+    { draw: (c, z) => Icons.heart(c, z, s.liked), count: s.likes, color: s.liked ? colors.accent : colors.ink },
+    { draw: Icons.bubble, count: s.comments, color: colors.ink },
+    { draw: Icons.repost, count: s.reposts, color: colors.ink },
+  ];
+  ctx.font = `500 ${3.2 * k}px ${FONT}`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  let cx = x + sz / 2;
+  for (const item of items) {
+    icon(ctx, cx, y, sz, item.color, item.draw);
+    let next = cx + sz / 2 + 4 * k;
+    if (item.count.trim()) {
+      ctx.fillStyle = colors.muted;
+      ctx.fillText(item.count, cx + sz / 2 + 1.6 * k, y);
+      next = cx + sz / 2 + 1.6 * k + ctx.measureText(item.count).width + 5 * k;
+    }
+    cx = next + sz / 2;
+  }
+  icon(ctx, right - sz / 2, y, sz * 0.92, colors.ink, Icons.share);
+}
+
+/** 名字＋「・時間」 */
+function nameLine(ctx: Ctx, s: SocialSettings, x: number, y: number, maxWidth: number, k: number, colors: Colors) {
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = colors.ink;
+  ctx.font = `700 ${3.7 * k}px ${FONT}`;
+  const name = s.name.trim() || " ";
+  fitText(ctx, name, x, y, maxWidth * 0.7);
+  const used = Math.min(maxWidth * 0.7, ctx.measureText(name).width);
+  if (s.time.trim()) {
+    ctx.fillStyle = colors.muted;
+    ctx.font = `400 ${3.2 * k}px ${FONT}`;
+    fitText(ctx, `・${s.time}`, x + used + 0.6 * k, y, maxWidth - used);
+  }
+}
+
 function drawSocial(ctx: Ctx, source: CanvasImageSource, from: Size, canvas: Size, photo: Box, s: SocialSettings) {
   const W = canvas.width;
   const k = W / 100;
   const colors = PALETTE[s.theme];
-  ctx.fillStyle = colors.bg;
-  ctx.fillRect(0, 0, W, canvas.height);
+  const paper = s.theme === "paper";
+  fillBackground(ctx, canvas, s.theme);
+  const bodyFont = paper ? SERIF : FONT;
 
-  // 頂部:頭像、名字、地點、更多
+  if (s.layout === "text") {
+    // 頭像在左欄,名字與內文在右邊,照片接在內文下面
+    avatar(ctx, source, from, 9 * k, 8.5 * k, 4.6 * k, colors.line);
+    nameLine(ctx, s, TEXT_POST.left * k, 6.5 * k, W - (TEXT_POST.left + 12) * k, k, colors);
+    icon(ctx, W - 7 * k, 6.5 * k, 5.4 * k, colors.muted, (c, sz) => Icons.dots(c, sz));
+    ctx.fillStyle = colors.ink;
+    ctx.font = `400 ${TEXT_POST.size * k}px ${bodyFont}`;
+    ctx.textBaseline = "middle";
+    const width = W - (TEXT_POST.left + TEXT_POST.right) * k;
+    const maxLines = Math.max(1, Math.round((photo.y / k - 16) / TEXT_POST.lineHeight));
+    wrapText(ctx, s.caption, width, width, maxLines).forEach((line, i) =>
+      ctx.fillText(line, TEXT_POST.left * k, (13.5 + TEXT_POST.lineHeight * (i + 0.5)) * k)
+    );
+    // 左欄一條細線,把頭像跟這則串起來
+    ctx.strokeStyle = colors.line;
+    ctx.lineWidth = Math.max(1, 0.3 * k);
+    ctx.beginPath();
+    ctx.moveTo(9 * k, 15 * k);
+    ctx.lineTo(9 * k, photo.y + photo.height);
+    ctx.stroke();
+    if (paper) matted(ctx, source, from, photo, k * 0.7, colors);
+    else cover(ctx, source, from, photo, 2.4 * k);
+    actionRow(ctx, photo.x, photo.x + photo.width, photo.y + photo.height + 8 * k, k, s, colors);
+    return;
+  }
+
+  // 照片為主:頭像、名字・時間、更多;照片內縮成圓角(紙感是白邊相片)
   const head = photo.y / 2;
-  avatar(ctx, source, from, 9 * k, head, 4.6 * k, "#f2a65a");
+  avatar(ctx, source, from, 9 * k, head, 4.4 * k, colors.line);
+  nameLine(ctx, s, 16 * k, head, W - 30 * k, k, colors);
+  icon(ctx, W - 7 * k, head, 5.4 * k, colors.muted, (c, sz) => Icons.dots(c, sz));
+  if (paper) matted(ctx, source, from, photo, k * 0.7, colors);
+  else cover(ctx, source, from, photo, 2.4 * k);
+
+  let y = photo.y + photo.height + 6 * k;
+  if (s.place.trim()) {
+    icon(ctx, photo.x + 1.6 * k, y, 3.6 * k, colors.muted, Icons.pin);
+    ctx.fillStyle = colors.muted;
+    ctx.font = `${paper ? "italic " : ""}400 ${3 * k}px ${bodyFont}`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    fitText(ctx, s.place, photo.x + 4.6 * k, y, photo.width - 6 * k);
+    y += 6 * k;
+  }
+  ctx.fillStyle = colors.ink;
+  ctx.font = `400 ${3.8 * k}px ${bodyFont}`;
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillStyle = colors.ink;
-  ctx.font = `700 ${3.8 * k}px ${FONT}`;
-  const hasPlace = s.place.trim().length > 0;
-  fitText(ctx, s.name, 17 * k, hasPlace ? head - 2.2 * k : head, W - 32 * k);
-  if (hasPlace) {
-    ctx.fillStyle = colors.muted;
-    ctx.font = `500 ${3 * k}px ${FONT}`;
-    fitText(ctx, s.place, 17 * k, head + 2.6 * k, W - 32 * k);
-  }
-  icon(ctx, W - 7 * k, head, 6 * k, colors.ink, (c, sz) => Icons.dots(c, sz));
-
-  cover(ctx, source, from, photo);
-
-  // 動作列
-  let y = photo.y + photo.height + 7 * k;
-  const sz = 6.6 * k;
-  icon(ctx, 7 * k, y, sz, s.liked ? "#ff3b5c" : colors.ink, (c, z) => Icons.heart(c, z, s.liked));
-  icon(ctx, 17 * k, y, sz, colors.ink, Icons.bubble);
-  icon(ctx, 27 * k, y, sz, colors.ink, Icons.plane);
-  icon(ctx, W - 7 * k, y, sz, colors.ink, Icons.bookmark);
-
-  // 讚數、內文、時間
-  y += 7.5 * k;
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = colors.ink;
-  ctx.font = `700 ${3.6 * k}px ${FONT}`;
-  fitText(ctx, s.likes, 4 * k, y, W - 8 * k);
-  y += 6 * k;
-  ctx.font = `700 ${3.6 * k}px ${FONT}`;
-  const nameWidth = ctx.measureText(`${s.name} `).width;
-  ctx.fillText(s.name, 4 * k, y);
-  ctx.font = `400 ${3.6 * k}px ${FONT}`;
-  const lines = wrapText(ctx, s.caption, W - 8 * k - nameWidth, W - 8 * k, 3);
-  lines.forEach((line, i) => ctx.fillText(line, i === 0 ? 4 * k + nameWidth : 4 * k, y + i * 5 * k));
-  y += Math.max(0, lines.length - 1) * 5 * k;
-  y += 6 * k;
-  ctx.fillStyle = colors.muted;
-  ctx.font = `500 ${2.8 * k}px ${FONT}`;
-  fitText(ctx, s.time, 4 * k, y, W - 8 * k);
+  const lines = wrapText(ctx, s.caption, photo.width, photo.width, 3);
+  lines.forEach((line, i) => ctx.fillText(line, photo.x, y + i * 5.4 * k));
+  y += Math.max(1, lines.length) * 5.4 * k + 6 * k;
+  // 一條細分隔線,動作列在下面
+  ctx.strokeStyle = colors.line;
+  ctx.lineWidth = Math.max(1, 0.25 * k);
+  ctx.beginPath();
+  ctx.moveTo(photo.x, y - 2 * k);
+  ctx.lineTo(photo.x + photo.width, y - 2 * k);
+  ctx.stroke();
+  actionRow(ctx, photo.x, photo.x + photo.width, y + 4.5 * k, k, s, colors);
 }
 
 function drawStory(ctx: Ctx, source: CanvasImageSource, from: Size, canvas: Size, s: StorySettings) {
@@ -722,15 +1031,17 @@ function drawStory(ctx: Ctx, source: CanvasImageSource, from: Size, canvas: Size
 
   // 上下壓暗,白字才看得清楚
   const top = ctx.createLinearGradient(0, 0, 0, 22 * k);
-  top.addColorStop(0, "rgba(0, 0, 0, 0.45)");
+  top.addColorStop(0, "rgba(0, 0, 0, 0.4)");
   top.addColorStop(1, "rgba(0, 0, 0, 0)");
   ctx.fillStyle = top;
   ctx.fillRect(0, 0, W, 22 * k);
-  const bottom = ctx.createLinearGradient(0, H - 26 * k, 0, H);
-  bottom.addColorStop(0, "rgba(0, 0, 0, 0)");
-  bottom.addColorStop(1, "rgba(0, 0, 0, 0.45)");
-  ctx.fillStyle = bottom;
-  ctx.fillRect(0, H - 26 * k, W, 26 * k);
+  if (s.bottom !== "none") {
+    const bottom = ctx.createLinearGradient(0, H - 34 * k, 0, H);
+    bottom.addColorStop(0, "rgba(0, 0, 0, 0)");
+    bottom.addColorStop(1, "rgba(0, 0, 0, 0.42)");
+    ctx.fillStyle = bottom;
+    ctx.fillRect(0, H - 34 * k, W, 34 * k);
+  }
 
   // 分段進度條
   const count = Math.max(1, Math.min(12, Math.round(s.segments)));
@@ -740,37 +1051,48 @@ function drawStory(ctx: Ctx, source: CanvasImageSource, from: Size, canvas: Size
   for (let i = 0; i < count; i += 1) {
     const x = 2 * k + i * (segW + gap);
     const fill = i < current - 1 ? 1 : i === current - 1 ? 0.55 : 0;
-    progressBar(ctx, x, 3 * k, segW, fill, k * 0.85, "rgba(255, 255, 255, 0.38)", "#ffffff", 0);
+    progressBar(ctx, x, 3 * k, segW, fill, k * 0.7, "rgba(255, 255, 255, 0.38)", "#ffffff", 0);
   }
 
-  // 頭像、名字、時間、關閉
+  // 頭像、名字、時間、更多、關閉
   const head = 10.5 * k;
-  avatar(ctx, source, from, 7.5 * k, head, 4.2 * k, null);
+  avatar(ctx, source, from, 7.5 * k, head, 4 * k, "rgba(255, 255, 255, 0.8)");
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#fff";
-  ctx.font = `700 ${3.8 * k}px ${FONT}`;
+  ctx.font = `700 ${3.7 * k}px ${FONT}`;
   const name = s.name.trim() || " ";
   fitText(ctx, name, 14 * k, head, W * 0.5);
   const nameW = Math.min(W * 0.5, ctx.measureText(name).width);
   ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
-  ctx.font = `500 ${3.4 * k}px ${FONT}`;
+  ctx.font = `400 ${3.3 * k}px ${FONT}`;
   ctx.fillText(s.time, 14 * k + nameW + 2.4 * k, head);
   icon(ctx, W - 14 * k, head, 6 * k, "#fff", (c, sz) => Icons.dots(c, sz));
   icon(ctx, W - 6 * k, head, 6 * k, "#fff", Icons.close);
 
-  // 底部回覆框 + 愛心 + 傳送
-  const y = H - 9 * k;
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
-  ctx.lineWidth = Math.max(1, 0.35 * k);
-  ctx.beginPath();
-  ctx.roundRect(4 * k, y - 5.5 * k, W - 28 * k, 11 * k, 5.5 * k);
-  ctx.stroke();
-  ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-  ctx.font = `500 ${3.6 * k}px ${FONT}`;
-  fitText(ctx, s.reply, 9 * k, y, W - 40 * k);
-  icon(ctx, W - 17 * k, y, 6.6 * k, "#fff", (c, sz) => Icons.heart(c, sz));
-  icon(ctx, W - 7 * k, y, 6.6 * k, "#fff", Icons.plane);
+  if (s.bottom === "caption" && s.caption.trim()) {
+    // 一行(最多兩行)襯線大字,置中,淡淡的影子
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#ffffff";
+    ctx.shadowColor = "rgba(0, 0, 0, 0.35)";
+    ctx.shadowBlur = 2 * k;
+    ctx.font = `italic 500 ${7 * k}px ${SERIF}`;
+    const lines = wrapText(ctx, s.caption, W - 16 * k, W - 16 * k, 2);
+    lines.forEach((line, i) => ctx.fillText(line, W / 2, H - (12 + (lines.length - 1 - i) * 9) * k));
+    ctx.restore();
+  } else if (s.bottom === "reply") {
+    const y = H - 9 * k;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+    ctx.lineWidth = Math.max(1, 0.3 * k);
+    ctx.beginPath();
+    ctx.roundRect(4 * k, y - 5.5 * k, W - 20 * k, 11 * k, 5.5 * k);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.font = `400 ${3.6 * k}px ${FONT}`;
+    fitText(ctx, s.reply, 9 * k, y, W - 32 * k);
+    icon(ctx, W - 8 * k, y, 6.4 * k, "#fff", (c, sz) => Icons.heart(c, sz));
+  }
 }
 
 export function drawInterface(
@@ -781,11 +1103,12 @@ export function drawInterface(
   layout: { canvas: Size; photo: Box },
   s: InterfaceSettings
 ) {
+  const lang = s.ui?.lang ?? "en";
   switch (kind) {
     case "player":
-      return drawPlayer(ctx, source, from, layout.canvas, layout.photo, s.player);
+      return drawPlayer(ctx, source, from, layout.canvas, layout.photo, s.player, lang);
     case "video":
-      return drawVideo(ctx, source, from, layout.canvas, layout.photo, s.video);
+      return drawVideo(ctx, source, from, layout.canvas, layout.photo, s.video, lang);
     case "social":
       return drawSocial(ctx, source, from, layout.canvas, layout.photo, s.social);
     case "story":

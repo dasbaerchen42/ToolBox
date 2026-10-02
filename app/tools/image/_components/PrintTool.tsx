@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { loadBitmap } from "@/lib/tools/image/render";
 import { drawPrint } from "@/lib/tools/image/print/compose";
+import { switchLanguage, UI_LANGS } from "@/lib/tools/image/print/interface";
 import {
   defaultPrintSettings,
   printLayout,
   POSTER_TEXT_STYLES,
+  isInterfaceKind,
   PRINT_GROUPS,
   THEME_COLORS,
   type PrintKind,
@@ -63,6 +65,7 @@ function readStored(): PrintSettings | null {
       ticket: { ...base.ticket, ...parsed.ticket },
       film: { ...base.film, ...parsed.film },
       poster: { ...base.poster, ...parsed.poster },
+      ui: { ...base.ui, ...parsed.ui },
       player: { ...base.player, ...parsed.player },
       video: { ...base.video, ...parsed.video },
       social: { ...base.social, ...parsed.social },
@@ -648,6 +651,17 @@ export default function PrintTool({ images, busy, t, onApply }: Props) {
               </>
             )}
 
+            {isInterfaceKind(s.kind) && (
+              <Field label="介面文字" hint="按鈕與標籤的語言；還沒改過的範例內容也會跟著換" t={t}>
+                <Segmented
+                  value={s.ui.lang}
+                  onChange={(lang) => setSettings((prev) => ({ ...prev, ...switchLanguage(prev, lang) }))}
+                  t={t}
+                  options={UI_LANGS}
+                />
+              </Field>
+            )}
+
             {s.kind === "player" && (
               <>
                 <Field label="歌名" t={t}>
@@ -668,6 +682,7 @@ export default function PrintTool({ images, busy, t, onApply }: Props) {
                     onChange={(theme) => updateIn("player", { theme })}
                     t={t}
                     options={[
+                      { value: "paper", label: "紙感" },
                       { value: "blur", label: "照片暈色" },
                       { value: "light", label: "淺色" },
                       { value: "dark", label: "深色" },
@@ -706,8 +721,9 @@ export default function PrintTool({ images, busy, t, onApply }: Props) {
                         onChange={(theme) => updateIn("video", { theme })}
                         t={t}
                         options={[
-                          { value: "dark", label: "深色" },
+                          { value: "paper", label: "紙感" },
                           { value: "light", label: "淺色" },
+                          { value: "dark", label: "深色" },
                         ]}
                       />
                     </Field>
@@ -718,14 +734,29 @@ export default function PrintTool({ images, busy, t, onApply }: Props) {
 
             {s.kind === "social" && (
               <>
+                <Field label="版型" t={t}>
+                  <Segmented
+                    value={s.social.layout}
+                    onChange={(layout) => updateIn("social", { layout })}
+                    t={t}
+                    options={[
+                      { value: "photo", label: "照片為主" },
+                      { value: "text", label: "文字為主" },
+                    ]}
+                  />
+                </Field>
                 <Field label="名字" t={t}>
                   <TextField label="帳號名字" value={s.social.name} onChange={(name) => updateIn("social", { name })} t={t} />
                 </Field>
-                <Field label="地點" hint="留空就不顯示" t={t}>
+                <Field label="地點" hint="照片為主時顯示在照片下面；留空就不顯示" t={t}>
                   <TextField label="地點" value={s.social.place} onChange={(place) => updateIn("social", { place })} t={t} />
                 </Field>
-                <Field label="讚數" t={t}>
-                  <TextField label="讚數" value={s.social.likes} onChange={(likes) => updateIn("social", { likes })} t={t} />
+                <Field label="愛心／留言／轉發數" hint="留空就只顯示圖示" t={t}>
+                  <div className="grid grid-cols-3 gap-2">
+                    <TextField label="愛心數" value={s.social.likes} onChange={(likes) => updateIn("social", { likes })} t={t} />
+                    <TextField label="留言數" value={s.social.comments} onChange={(comments) => updateIn("social", { comments })} t={t} />
+                    <TextField label="轉發數" value={s.social.reposts} onChange={(reposts) => updateIn("social", { reposts })} t={t} />
+                  </div>
                 </Field>
                 <Field label="內文" t={t}>
                   <textarea
@@ -757,12 +788,13 @@ export default function PrintTool({ images, busy, t, onApply }: Props) {
                     onChange={(theme) => updateIn("social", { theme })}
                     t={t}
                     options={[
+                      { value: "paper", label: "紙感" },
                       { value: "light", label: "淺色" },
                       { value: "dark", label: "深色" },
                     ]}
                   />
                 </Field>
-                <Toggle checked={s.social.liked} onChange={(liked) => updateIn("social", { liked })} label="已按讚（紅色愛心）" t={t} />
+                <Toggle checked={s.social.liked} onChange={(liked) => updateIn("social", { liked })} label="已按愛心（實心）" t={t} />
               </>
             )}
 
@@ -794,9 +826,28 @@ export default function PrintTool({ images, busy, t, onApply }: Props) {
                   onChange={(current) => updateIn("story", { current })}
                   t={t}
                 />
-                <Field label="回覆框文字" t={t}>
-                  <TextField label="回覆框文字" value={s.story.reply} onChange={(reply) => updateIn("story", { reply })} t={t} />
+                <Field label="底部" t={t}>
+                  <Segmented
+                    value={s.story.bottom}
+                    onChange={(bottom) => updateIn("story", { bottom })}
+                    t={t}
+                    options={[
+                      { value: "caption", label: "一行大字" },
+                      { value: "reply", label: "回覆框" },
+                      { value: "none", label: "不放" },
+                    ]}
+                  />
                 </Field>
+                {s.story.bottom === "caption" && (
+                  <Field label="大字" t={t}>
+                    <TextField label="限時動態大字" value={s.story.caption} onChange={(caption) => updateIn("story", { caption })} t={t} />
+                  </Field>
+                )}
+                {s.story.bottom === "reply" && (
+                  <Field label="回覆框文字" t={t}>
+                    <TextField label="回覆框文字" value={s.story.reply} onChange={(reply) => updateIn("story", { reply })} t={t} />
+                  </Field>
+                )}
               </>
             )}
 

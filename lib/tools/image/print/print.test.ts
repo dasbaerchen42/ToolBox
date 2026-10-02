@@ -13,7 +13,9 @@ import {
   riso,
   type Pixels,
 } from "./pixels";
-import { clockProgress, defaultInterfaceSettings, parseClock } from "./interface";
+import { clockProgress, defaultInterfaceSettings, estimateLines, parseClock, switchLanguage } from "./interface";
+
+const square = (size: { width: number; height: number }) => Math.min(size.width, size.height);
 import { defaultPrintSettings, digicamDate, postmarkDate, printLayout, PRINT_GROUPS } from "./settings";
 
 function solid(width: number, height: number, rgb: [number, number, number], alpha = 255): Pixels {
@@ -235,15 +237,44 @@ describe("print:介面", () => {
     expect(printLayout(size, "story", ui).canvas.height).toBe(Math.round((600 * 16) / 9));
   });
 
-  it("貼文換成 4:5 時照片變高;影片是 16:9,關掉資訊區就只剩畫面", () => {
-    const square = printLayout(size, "social", ui).photo;
+  it("貼文:方形比 4:5 矮;照片內縮,不貼齊左右邊", () => {
+    const square = printLayout(size, "social", { ...ui, social: { ...ui.social, ratio: "1:1" } }).photo;
     const tall = printLayout(size, "social", { ...ui, social: { ...ui.social, ratio: "4:5" } }).photo;
     expect(tall.height / tall.width).toBeCloseTo(1.25, 2);
     expect(square.height).toBe(square.width);
+    expect(square.x).toBeGreaterThan(0);
+  });
 
+  it("文字為主的貼文:照片在內文下面,內文越長照片越往下", () => {
+    const short = printLayout(size, "social", { ...ui, social: { ...ui.social, layout: "text", caption: "hi" } });
+    const long = printLayout(size, "social", {
+      ...ui,
+      social: { ...ui.social, layout: "text", caption: "很長的一段內文".repeat(8) },
+    });
+    expect(short.photo.x).toBeGreaterThan(square(size) * 0.1);
+    expect(long.photo.y).toBeGreaterThan(short.photo.y);
+    expect(long.canvas.height).toBeGreaterThan(short.canvas.height);
+  });
+
+  it("影片是 16:9,關掉資訊區就只剩畫面", () => {
     const video = printLayout(size, "video", { ...ui, video: { ...ui.video, info: false } });
     expect(video.canvas).toEqual({ width: 800, height: 450 });
     expect(printLayout(size, "video", ui).canvas.height).toBeGreaterThan(450);
+  });
+
+  it("換語言:還是預設的內容跟著換,自己改過的不動", () => {
+    const edited = { ...ui, player: { ...ui.player, title: "my song" } };
+    const ja = switchLanguage(edited, "ja");
+    expect(ja.ui.lang).toBe("ja");
+    expect(ja.player.title).toBe("my song");
+    expect(ja.social.time).toBe("3時間前");
+    expect(switchLanguage(ja, "zh").story.reply).toBe("回覆…");
+  });
+
+  it("估計行數:英文比中文一行塞得多,有上限", () => {
+    expect(estimateLines("abcdefghij", 10, 5)).toBe(1);
+    expect(estimateLines("一二三四五六七八九十", 5, 5)).toBe(2);
+    expect(estimateLines("字".repeat(100), 5, 4)).toBe(4);
   });
 });
 
