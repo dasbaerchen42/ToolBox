@@ -68,6 +68,7 @@ import EditPanel, { type EditTool } from "./_components/EditPanel";
 import ColorList from "./_components/ColorList";
 import AlbumPanel from "./_components/AlbumPanel";
 import { useDarkBackground } from "./_components/useDarkBackground";
+import MerchWorkshop from "./_merch/MerchWorkshop";
 
 const PALETTE = DEFAULT_PALETTE;
 const PALETTE_LAB = paletteLab(PALETTE);
@@ -193,6 +194,9 @@ export default function BeadsPage() {
   const [withBoard, setWithBoard] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
+  // 上面的「拼豆／周邊」分頁。周邊第一次打開才掛上去,之後切來切去兩邊的進度都留著
+  const [view, setView] = useState<"beads" | "merch">("beads");
+  const [merchOpened, setMerchOpened] = useState(false);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingShare = useRef<{ key: string; file: ExportedImage } | null>(null);
 
@@ -330,6 +334,7 @@ export default function BeadsPage() {
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName?.toLowerCase();
       if (tag === "input" || tag === "textarea" || target?.isContentEditable) return;
+      if (view !== "beads") return;
 
       const [file] = readPasteImages(event);
       if (!file) return;
@@ -339,7 +344,7 @@ export default function BeadsPage() {
 
     window.addEventListener("paste", handle);
     return () => window.removeEventListener("paste", handle);
-  }, [loadFile]);
+  }, [loadFile, view]);
 
   // 還沒收藏的作品、或燙好了還沒帶走,離開前攔一下
   useEffect(() => {
@@ -708,6 +713,7 @@ export default function BeadsPage() {
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault();
+        if (view !== "beads") return;
         const file = Array.from(event.dataTransfer.files).find((item) =>
           item.type.startsWith("image/")
         );
@@ -717,474 +723,502 @@ export default function BeadsPage() {
       <section className="mx-auto w-full max-w-[1600px] p-4 md:p-6">
         <header className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <div>
-            <h1 className="text-xl font-semibold tracking-[0.08em]">拼豆工坊</h1>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-xl font-semibold tracking-[0.08em]">拼豆工坊</h1>
+              <Segmented
+                label="拼豆或周邊"
+                value={view}
+                onChange={(next) => {
+                  setView(next);
+                  if (next === "merch") setMerchOpened(true);
+                }}
+                options={[
+                  { value: "beads", label: "拼豆" },
+                  { value: "merch", label: "周邊" },
+                ]}
+                t={t}
+              />
+            </div>
             <p className={`mt-0.5 text-xs tracking-[0.04em] ${t.muted}`}>
-              照片轉成拼豆或在空板上自己拼，看豆子落進板子再燙成一片・全部在你的瀏覽器裡完成，照片不會離開這台電腦
+              {view === "beads"
+                ? "照片轉成拼豆或在空板上自己拼，看豆子落進板子再燙成一片"
+                : "把拼豆作品與照片做成小卡套、搖搖吊飾、御守、透卡"}
+              ・全部在你的瀏覽器裡完成，照片不會離開這台電腦
             </p>
           </div>
 
-          <p
-            aria-live="polite"
-            className={`text-xs leading-6 tracking-[0.04em] ${notice?.kind === "error" ? "" : t.muted}`}
-          >
-            {busy ? "處理中……" : (notice?.text ?? "")}
-          </p>
+          {view === "beads" && (
+            <p
+              aria-live="polite"
+              className={`text-xs leading-6 tracking-[0.04em] ${notice?.kind === "error" ? "" : t.muted}`}
+            >
+              {busy ? "處理中……" : (notice?.text ?? "")}
+            </p>
+          )}
         </header>
 
-        <ToolPane
-          workspace={
-            pattern ? (
-              <div className="rounded-2xl border border-(--border-light) bg-(--paper-bg-3) p-3">
-                <div className="flex justify-center">
-                  <BeadCanvas
-                    pattern={pattern}
-                    palette={PALETTE}
-                    stage={stage}
-                    cell={displayCell(pattern.cols, pattern.rows)}
-                    melt={meltOf(meltLevel)}
-                    shape={beadShape}
-                    glow={glow}
-                    scorchSeed={scorchSeed}
-                    onSettled={handleSettled}
-                    editing={
-                      editing
-                        ? {
-                            symmetry,
-                            onStrokeStart: strokeStart,
-                            onStrokeMove: strokeMove,
-                            onStrokeEnd: strokeEnd,
-                          }
-                        : undefined
-                    }
-                  />
+        {merchOpened && (
+          <div hidden={view !== "merch"}>
+            <MerchWorkshop album={album} palette={PALETTE} active={view === "merch"} t={t} />
+          </div>
+        )}
+
+        <div hidden={view !== "beads"}>
+          <ToolPane
+            workspace={
+              pattern ? (
+                <div className="rounded-2xl border border-(--border-light) bg-(--paper-bg-3) p-3">
+                  <div className="flex justify-center">
+                    <BeadCanvas
+                      pattern={pattern}
+                      palette={PALETTE}
+                      stage={stage}
+                      cell={displayCell(pattern.cols, pattern.rows)}
+                      melt={meltOf(meltLevel)}
+                      shape={beadShape}
+                      glow={glow}
+                      scorchSeed={scorchSeed}
+                      onSettled={handleSettled}
+                      editing={
+                        editing
+                          ? {
+                              symmetry,
+                              onStrokeStart: strokeStart,
+                              onStrokeMove: strokeMove,
+                              onStrokeEnd: strokeEnd,
+                            }
+                          : undefined
+                      }
+                    />
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <EmptyWorkspace t={t}>
-                選一張照片（或直接拖進來、按 Ctrl / ⌘ + V 貼上），
-                <br />
-                或開一塊空板自己拼。
-              </EmptyWorkspace>
-            )
-          }
-          controls={
-            <>
-              <div className="space-y-2">
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => fileInput.current?.click()}
-                    disabled={busy || animating}
-                    className={`rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40 ${t.primary}`}
-                  >
-                    {photo ? "換一張照片" : "選擇照片"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleReadClipboard()}
-                    disabled={busy || animating}
-                    className={`rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40 ${t.secondary}`}
-                  >
-                    讀剪貼簿
-                  </button>
-                  <input
-                    ref={fileInput}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) void loadFile(file);
-                      event.target.value = "";
-                    }}
-                  />
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => startBlank("29")}
-                    disabled={busy || animating}
-                    className={`rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40 ${t.secondary}`}
-                  >
-                    空白小板
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => startBlank("58")}
-                    disabled={busy || animating}
-                    className={`rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40 ${t.secondary}`}
-                  >
-                    空白大板
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => startBlank("7")}
-                    disabled={busy || animating}
-                    className={`rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40 ${t.secondary}`}
-                  >
-                    迷你板
-                  </button>
-                </div>
-                <div role="group" aria-label="模板" className="flex flex-wrap items-center gap-1.5">
-                  <span className={`text-[11px] tracking-[0.08em] ${t.muted}`}>模板</span>
-                  {TEMPLATES.map((template) => (
+              ) : (
+                <EmptyWorkspace t={t}>
+                  選一張照片（或直接拖進來、按 Ctrl / ⌘ + V 貼上），
+                  <br />
+                  或開一塊空板自己拼。
+                </EmptyWorkspace>
+              )
+            }
+            controls={
+              <>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-1.5">
                     <button
-                      key={template.id}
                       type="button"
-                      onClick={() => startTemplate(template)}
+                      onClick={() => fileInput.current?.click()}
                       disabled={busy || animating}
-                      className={`rounded-xl border px-2.5 py-1 text-xs transition disabled:opacity-40 ${t.unselected}`}
+                      className={`rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40 ${t.primary}`}
                     >
-                      {template.name}
+                      {photo ? "換一張照片" : "選擇照片"}
                     </button>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={() => void handleReadClipboard()}
+                      disabled={busy || animating}
+                      className={`rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40 ${t.secondary}`}
+                    >
+                      讀剪貼簿
+                    </button>
+                    <input
+                      ref={fileInput}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void loadFile(file);
+                        event.target.value = "";
+                      }}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => startBlank("29")}
+                      disabled={busy || animating}
+                      className={`rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40 ${t.secondary}`}
+                    >
+                      空白小板
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => startBlank("58")}
+                      disabled={busy || animating}
+                      className={`rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40 ${t.secondary}`}
+                    >
+                      空白大板
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => startBlank("7")}
+                      disabled={busy || animating}
+                      className={`rounded-xl border px-3 py-1.5 text-xs transition disabled:opacity-40 ${t.secondary}`}
+                    >
+                      迷你板
+                    </button>
+                  </div>
+                  <div role="group" aria-label="模板" className="flex flex-wrap items-center gap-1.5">
+                    <span className={`text-[11px] tracking-[0.08em] ${t.muted}`}>模板</span>
+                    {TEMPLATES.map((template) => (
+                      <button
+                        key={template.id}
+                        type="button"
+                        onClick={() => startTemplate(template)}
+                        disabled={busy || animating}
+                        className={`rounded-xl border px-2.5 py-1 text-xs transition disabled:opacity-40 ${t.unselected}`}
+                      >
+                        {template.name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {pattern && source === "photo" && (
-                <>
-                  <Field
-                    label="取色方式"
-                    hint={
-                      settings.method === "majority"
-                        ? "每格取出現最多的顏色，線條和色塊比較乾淨，適合插畫"
-                        : "每格取平均色，漸層比較順，適合照片；細線容易糊成雜點"
-                    }
-                    t={t}
-                  >
-                    <Segmented
-                      value={settings.method}
-                      onChange={(value) => changeConversion({ method: value })}
-                      t={t}
-                      label="取色方式"
-                      options={[
-                        { value: "majority", label: "插畫（主色）" },
-                        { value: "average", label: "照片（平均）" },
-                      ]}
-                    />
-                  </Field>
-
-                  <Field
-                    label={`板子寬 ${pattern.cols} 格・高 ${pattern.rows} 格`}
-                    hint="58 是一塊大板；87、116 等於大板拼接。格數越多細節越多，豆子也越多"
-                    t={t}
-                  >
-                    <Segmented
-                      value={settings.size}
-                      onChange={(value) => changeConversion({ size: value })}
-                      t={t}
-                      label="板子寬度"
-                      options={BOARD_WIDTHS}
-                    />
-                  </Field>
-
-                  <Field label="形狀" t={t}>
-                    <Segmented
-                      value={settings.shape}
-                      onChange={(value) => changeConversion({ shape: value })}
-                      t={t}
-                      label="板子形狀"
-                      options={[
-                        { value: "aspect", label: "照照片比例" },
-                        { value: "square", label: "正方形" },
-                      ]}
-                    />
-                  </Field>
-
-                  {settings.shape === "square" && (
+                {pattern && source === "photo" && (
+                  <>
                     <Field
-                      label="構圖"
+                      label="取色方式"
                       hint={
-                        settings.fit === "cover"
-                          ? "裁掉多出來的部分，把板子填滿"
-                          : "整張照片放進去，旁邊留空"
+                        settings.method === "majority"
+                          ? "每格取出現最多的顏色，線條和色塊比較乾淨，適合插畫"
+                          : "每格取平均色，漸層比較順，適合照片；細線容易糊成雜點"
                       }
                       t={t}
                     >
                       <Segmented
-                        value={settings.fit}
-                        onChange={(value) => changeConversion({ fit: value })}
+                        value={settings.method}
+                        onChange={(value) => changeConversion({ method: value })}
                         t={t}
-                        label="構圖"
+                        label="取色方式"
                         options={[
-                          { value: "cover", label: "裁滿" },
-                          { value: "contain", label: "完整放進" },
+                          { value: "majority", label: "插畫（主色）" },
+                          { value: "average", label: "照片（平均）" },
                         ]}
                       />
                     </Field>
-                  )}
 
-                  <RangeField
-                    label="最多幾種顏色"
-                    display={`${settings.maxColors} 色`}
-                    value={settings.maxColors}
-                    min={2}
-                    max={PALETTE.length}
-                    onChange={(value) => changeConversion({ maxColors: value })}
-                    t={t}
-                  />
-
-                  <RangeField
-                    label="每色至少幾顆"
-                    display={
-                      settings.minCount === 0
-                        ? "不合併"
-                        : `少於 ${settings.minCount} 顆就併進相近色`
-                    }
-                    value={settings.minCount}
-                    min={0}
-                    max={30}
-                    onChange={(value) => changeConversion({ minCount: value })}
-                    t={t}
-                  />
-                </>
-              )}
-
-              {pattern && source === "blank" && (
-                <Field label="板子" t={t}>
-                  <Segmented
-                    value={blankSize}
-                    onChange={changeBlankSize}
-                    t={t}
-                    label="板子尺寸"
-                    options={BLANK_SIZES.map((item) => ({
-                      value: item.value,
-                      label: item.value === "5" || item.value === "7" ? item.label : `${item.label}×${item.label}`,
-                    }))}
-                  />
-                </Field>
-              )}
-
-              {pattern && (
-                <div className="space-y-2">
-                  {stage === "pattern" && (
-                    <ActionButton t={t} onClick={() => setStage("dropping")} disabled={total === 0}>
-                      自動落豆
-                    </ActionButton>
-                  )}
-                  {stage === "dropping" && (
-                    <ActionButton tone="secondary" t={t} onClick={() => setStage("placed")}>
-                      略過，直接放好
-                    </ActionButton>
-                  )}
-                  {stage === "placed" && (
-                    <ActionButton t={t} onClick={startIroning}>
-                      熨燙
-                    </ActionButton>
-                  )}
-                  {stage === "ironing" && (
-                    <ActionButton tone="secondary" t={t} onClick={() => setStage("ironed")}>
-                      略過，直接燙好
-                    </ActionButton>
-                  )}
-                  {placed && (
-                    <ActionButton tone="secondary" t={t} onClick={() => setStage("pattern")}>
-                      回到編輯
-                    </ActionButton>
-                  )}
-                </div>
-              )}
-
-              {pattern && (
-                <div className={`space-y-3 border-t pt-4 ${t.divider}`}>
-                  <Field
-                    label="燙的程度"
-                    hint={MELT_LEVELS.find((item) => item.value === meltLevel)?.hint}
-                    t={t}
-                  >
-                    <Segmented
-                      value={meltLevel}
-                      onChange={setMeltLevel}
+                    <Field
+                      label={`板子寬 ${pattern.cols} 格・高 ${pattern.rows} 格`}
+                      hint="58 是一塊大板；87、116 等於大板拼接。格數越多細節越多，豆子也越多"
                       t={t}
-                      label="燙的程度"
-                      options={MELT_LEVELS.map(({ value, label }) => ({ value, label }))}
+                    >
+                      <Segmented
+                        value={settings.size}
+                        onChange={(value) => changeConversion({ size: value })}
+                        t={t}
+                        label="板子寬度"
+                        options={BOARD_WIDTHS}
+                      />
+                    </Field>
+
+                    <Field label="形狀" t={t}>
+                      <Segmented
+                        value={settings.shape}
+                        onChange={(value) => changeConversion({ shape: value })}
+                        t={t}
+                        label="板子形狀"
+                        options={[
+                          { value: "aspect", label: "照照片比例" },
+                          { value: "square", label: "正方形" },
+                        ]}
+                      />
+                    </Field>
+
+                    {settings.shape === "square" && (
+                      <Field
+                        label="構圖"
+                        hint={
+                          settings.fit === "cover"
+                            ? "裁掉多出來的部分，把板子填滿"
+                            : "整張照片放進去，旁邊留空"
+                        }
+                        t={t}
+                      >
+                        <Segmented
+                          value={settings.fit}
+                          onChange={(value) => changeConversion({ fit: value })}
+                          t={t}
+                          label="構圖"
+                          options={[
+                            { value: "cover", label: "裁滿" },
+                            { value: "contain", label: "完整放進" },
+                          ]}
+                        />
+                      </Field>
+                    )}
+
+                    <RangeField
+                      label="最多幾種顏色"
+                      display={`${settings.maxColors} 色`}
+                      value={settings.maxColors}
+                      min={2}
+                      max={PALETTE.length}
+                      onChange={(value) => changeConversion({ maxColors: value })}
+                      t={t}
+                    />
+
+                    <RangeField
+                      label="每色至少幾顆"
+                      display={
+                        settings.minCount === 0
+                          ? "不合併"
+                          : `少於 ${settings.minCount} 顆就併進相近色`
+                      }
+                      value={settings.minCount}
+                      min={0}
+                      max={30}
+                      onChange={(value) => changeConversion({ minCount: value })}
+                      t={t}
+                    />
+                  </>
+                )}
+
+                {pattern && source === "blank" && (
+                  <Field label="板子" t={t}>
+                    <Segmented
+                      value={blankSize}
+                      onChange={changeBlankSize}
+                      t={t}
+                      label="板子尺寸"
+                      options={BLANK_SIZES.map((item) => ({
+                        value: item.value,
+                        label: item.value === "5" || item.value === "7" ? item.label : `${item.label}×${item.label}`,
+                      }))}
                     />
                   </Field>
-                  <Field
-                    label="豆子形狀"
-                    hint={beadShape === "square" ? "方形磁磚，做出馬賽克的質感" : "一般的圓豆"}
-                    t={t}
-                  >
-                    <Segmented
-                      value={beadShape}
-                      onChange={setBeadShape}
-                      t={t}
-                      label="豆子形狀"
-                      options={[
-                        { value: "round", label: "圓豆" },
-                        { value: "square", label: "方形磁磚" },
-                      ]}
-                    />
-                  </Field>
-                  <Toggle
-                    checked={scorch}
-                    onChange={(on) => {
-                      setScorch(on);
-                      // 已經燙好的話馬上看得到差別;再燙一次會換一批焦痕
-                      setScorchSeed(on ? newScorchSeed() : 0);
-                    }}
-                    label="燙出一點焦痕（位置與深淺隨機）"
-                    t={t}
-                  />
-                </div>
-              )}
+                )}
 
-              {pattern && editing && (
-                <EditPanel
-                  palette={PALETTE}
-                  tool={tool}
-                  color={color}
-                  material={material}
-                  symmetry={symmetry}
-                  canUndo={past.length > 0}
-                  canRedo={future.length > 0}
-                  t={t}
-                  onTool={setTool}
-                  onColor={(index) => {
-                    setColor(index);
-                    if (tool === "eraser" || tool === "picker") setTool("pen");
-                  }}
-                  onMaterial={(id) => {
-                    setMaterial(id);
-                    if (tool === "eraser" || tool === "picker") setTool("material");
-                  }}
-                  onMaterialAll={() => applyMaterialToAll(material)}
-                  onSymmetry={setSymmetry}
-                  onUndo={undo}
-                  onRedo={redo}
-                />
-              )}
-
-              {pattern && placed && (
-                <div className={`space-y-3 border-t pt-4 ${t.divider}`}>
-                  <Toggle
-                    checked={withBoard}
-                    onChange={setWithBoard}
-                    label="連板子一起輸出（不勾就是透明背景）"
-                    t={t}
-                  />
+                {pattern && (
                   <div className="space-y-2">
-                    <ActionButton t={t} onClick={() => void handleDownload()} disabled={busy}>
-                      下載 PNG
-                    </ActionButton>
-                    {canShare && (
-                      <ActionButton tone="secondary" t={t} onClick={() => void handleShare()} disabled={busy}>
-                        存到相簿／分享
+                    {stage === "pattern" && (
+                      <ActionButton t={t} onClick={() => setStage("dropping")} disabled={total === 0}>
+                        自動落豆
                       </ActionButton>
                     )}
-                    <ActionButton tone="secondary" t={t} onClick={() => void handleSvg()} disabled={busy}>
-                      下載 SVG（向量，可印貼紙）
-                    </ActionButton>
+                    {stage === "dropping" && (
+                      <ActionButton tone="secondary" t={t} onClick={() => setStage("placed")}>
+                        略過，直接放好
+                      </ActionButton>
+                    )}
+                    {stage === "placed" && (
+                      <ActionButton t={t} onClick={startIroning}>
+                        熨燙
+                      </ActionButton>
+                    )}
+                    {stage === "ironing" && (
+                      <ActionButton tone="secondary" t={t} onClick={() => setStage("ironed")}>
+                        略過，直接燙好
+                      </ActionButton>
+                    )}
+                    {placed && (
+                      <ActionButton tone="secondary" t={t} onClick={() => setStage("pattern")}>
+                        回到編輯
+                      </ActionButton>
+                    )}
                   </div>
-                  {stage === "placed" && (
-                    <p className={`text-[11px] leading-5 ${t.muted}`}>
-                      現在下載的是還沒燙的樣子，想要燙好的就先按「熨燙」。
-                    </p>
-                  )}
-                </div>
-              )}
+                )}
 
-              {pattern && (
-                <div className={`space-y-2 border-t pt-4 ${t.divider}`}>
-                  <label className="flex flex-col gap-1.5">
-                    <span className="text-xs tracking-[0.08em]">作品名稱</span>
-                    <input
-                      type="text"
-                      value={name}
-                      maxLength={60}
-                      placeholder="未命名作品"
-                      onChange={(event) => {
-                        setName(event.target.value);
-                        setDirty(true);
-                      }}
-                      className={`w-full rounded-xl border px-3 py-2 text-sm ${t.input}`}
-                    />
-                  </label>
-                  <Field label="收在哪一頁" t={t}>
-                    <Segmented
-                      value={saveKind}
-                      onChange={(value) => {
-                        setSaveKind(value);
-                        setDirty(true);
-                      }}
+                {pattern && (
+                  <div className={`space-y-3 border-t pt-4 ${t.divider}`}>
+                    <Field
+                      label="燙的程度"
+                      hint={MELT_LEVELS.find((item) => item.value === meltLevel)?.hint}
                       t={t}
-                      label="收藏分頁"
-                      options={[
-                        { value: "work", label: "作品" },
-                        { value: "material", label: "素材（小零件）" },
-                      ]}
-                    />
-                  </Field>
-                  <div className="flex flex-wrap gap-1.5">
-                    <ActionButton
-                      t={t}
-                      tone={dirty ? "primary" : "secondary"}
-                      onClick={() => saveWork(false)}
-                      disabled={busy || animating}
                     >
-                      {savedAs ? "更新收藏" : "收進收藏冊"}
-                    </ActionButton>
-                    {savedAs && (
+                      <Segmented
+                        value={meltLevel}
+                        onChange={setMeltLevel}
+                        t={t}
+                        label="燙的程度"
+                        options={MELT_LEVELS.map(({ value, label }) => ({ value, label }))}
+                      />
+                    </Field>
+                    <Field
+                      label="豆子形狀"
+                      hint={beadShape === "square" ? "方形磁磚，做出馬賽克的質感" : "一般的圓豆"}
+                      t={t}
+                    >
+                      <Segmented
+                        value={beadShape}
+                        onChange={setBeadShape}
+                        t={t}
+                        label="豆子形狀"
+                        options={[
+                          { value: "round", label: "圓豆" },
+                          { value: "square", label: "方形磁磚" },
+                        ]}
+                      />
+                    </Field>
+                    <Toggle
+                      checked={scorch}
+                      onChange={(on) => {
+                        setScorch(on);
+                        // 已經燙好的話馬上看得到差別;再燙一次會換一批焦痕
+                        setScorchSeed(on ? newScorchSeed() : 0);
+                      }}
+                      label="燙出一點焦痕（位置與深淺隨機）"
+                      t={t}
+                    />
+                  </div>
+                )}
+
+                {pattern && editing && (
+                  <EditPanel
+                    palette={PALETTE}
+                    tool={tool}
+                    color={color}
+                    material={material}
+                    symmetry={symmetry}
+                    canUndo={past.length > 0}
+                    canRedo={future.length > 0}
+                    t={t}
+                    onTool={setTool}
+                    onColor={(index) => {
+                      setColor(index);
+                      if (tool === "eraser" || tool === "picker") setTool("pen");
+                    }}
+                    onMaterial={(id) => {
+                      setMaterial(id);
+                      if (tool === "eraser" || tool === "picker") setTool("material");
+                    }}
+                    onMaterialAll={() => applyMaterialToAll(material)}
+                    onSymmetry={setSymmetry}
+                    onUndo={undo}
+                    onRedo={redo}
+                  />
+                )}
+
+                {pattern && placed && (
+                  <div className={`space-y-3 border-t pt-4 ${t.divider}`}>
+                    <Toggle
+                      checked={withBoard}
+                      onChange={setWithBoard}
+                      label="連板子一起輸出（不勾就是透明背景）"
+                      t={t}
+                    />
+                    <div className="space-y-2">
+                      <ActionButton t={t} onClick={() => void handleDownload()} disabled={busy}>
+                        下載 PNG
+                      </ActionButton>
+                      {canShare && (
+                        <ActionButton tone="secondary" t={t} onClick={() => void handleShare()} disabled={busy}>
+                          存到相簿／分享
+                        </ActionButton>
+                      )}
+                      <ActionButton tone="secondary" t={t} onClick={() => void handleSvg()} disabled={busy}>
+                        下載 SVG（向量，可印貼紙）
+                      </ActionButton>
+                    </div>
+                    {stage === "placed" && (
+                      <p className={`text-[11px] leading-5 ${t.muted}`}>
+                        現在下載的是還沒燙的樣子，想要燙好的就先按「熨燙」。
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {pattern && (
+                  <div className={`space-y-2 border-t pt-4 ${t.divider}`}>
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-xs tracking-[0.08em]">作品名稱</span>
+                      <input
+                        type="text"
+                        value={name}
+                        maxLength={60}
+                        placeholder="未命名作品"
+                        onChange={(event) => {
+                          setName(event.target.value);
+                          setDirty(true);
+                        }}
+                        className={`w-full rounded-xl border px-3 py-2 text-sm ${t.input}`}
+                      />
+                    </label>
+                    <Field label="收在哪一頁" t={t}>
+                      <Segmented
+                        value={saveKind}
+                        onChange={(value) => {
+                          setSaveKind(value);
+                          setDirty(true);
+                        }}
+                        t={t}
+                        label="收藏分頁"
+                        options={[
+                          { value: "work", label: "作品" },
+                          { value: "material", label: "素材（小零件）" },
+                        ]}
+                      />
+                    </Field>
+                    <div className="flex flex-wrap gap-1.5">
                       <ActionButton
                         t={t}
-                        tone="secondary"
-                        onClick={() => saveWork(true)}
+                        tone={dirty ? "primary" : "secondary"}
+                        onClick={() => saveWork(false)}
                         disabled={busy || animating}
                       >
-                        另存一份
+                        {savedAs ? "更新收藏" : "收進收藏冊"}
                       </ActionButton>
-                    )}
+                      {savedAs && (
+                        <ActionButton
+                          t={t}
+                          tone="secondary"
+                          onClick={() => saveWork(true)}
+                          disabled={busy || animating}
+                        >
+                          另存一份
+                        </ActionButton>
+                      )}
+                    </div>
+                    <ActionButton
+                      t={t}
+                      tone="secondary"
+                      onClick={() => void handleSheet()}
+                      disabled={busy || animating || total === 0}
+                    >
+                      下載圖紙（照著拼用）
+                    </ActionButton>
+                    <p className={`text-[11px] leading-5 ${t.muted}`}>
+                      圖紙每格寫色號、附每色顆數，可以照著用實體豆子拼。
+                    </p>
                   </div>
-                  <ActionButton
+                )}
+
+                {pattern && (
+                  <ColorList
+                    palette={PALETTE}
+                    counts={counts}
+                    canEdit={editing}
                     t={t}
-                    tone="secondary"
-                    onClick={() => void handleSheet()}
-                    disabled={busy || animating || total === 0}
-                  >
-                    下載圖紙（照著拼用）
-                  </ActionButton>
-                  <p className={`text-[11px] leading-5 ${t.muted}`}>
-                    圖紙每格寫色號、附每色顆數，可以照著用實體豆子拼。
-                  </p>
-                </div>
-              )}
+                    onPick={(index) => {
+                      setColor(index);
+                      setTool("pen");
+                    }}
+                    onClear={clearColor}
+                    onRecolor={recolor}
+                  />
+                )}
 
-              {pattern && (
-                <ColorList
+                {!pattern && (
+                  <StationHint t={t}>
+                    照片會依板子大小切成格子，每格換成最接近的豆子顏色，轉好之後還能用畫筆修。
+                    色數越少越有拼豆的味道。
+                  </StationHint>
+                )}
+
+                <AlbumPanel
+                  works={album}
                   palette={PALETTE}
-                  counts={counts}
-                  canEdit={editing}
+                  activeId={savedAs?.id ?? null}
+                  busy={busy || animating}
                   t={t}
-                  onPick={(index) => {
-                    setColor(index);
-                    setTool("pen");
-                  }}
-                  onClear={clearColor}
-                  onRecolor={recolor}
+                  onOpen={openWork}
+                  onDelete={deleteWork}
+                  onExport={exportAlbum}
+                  onImport={(file) => void importAlbum(file)}
                 />
-              )}
-
-              {!pattern && (
-                <StationHint t={t}>
-                  照片會依板子大小切成格子，每格換成最接近的豆子顏色，轉好之後還能用畫筆修。
-                  色數越少越有拼豆的味道。
-                </StationHint>
-              )}
-
-              <AlbumPanel
-                works={album}
-                palette={PALETTE}
-                activeId={savedAs?.id ?? null}
-                busy={busy || animating}
-                t={t}
-                onOpen={openWork}
-                onDelete={deleteWork}
-                onExport={exportAlbum}
-                onImport={(file) => void importAlbum(file)}
-              />
-            </>
-          }
-        />
+              </>
+            }
+          />
+        </div>
       </section>
     </main>
   );
