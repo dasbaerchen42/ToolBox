@@ -13,6 +13,7 @@ import {
   riso,
   type Pixels,
 } from "./pixels";
+import { coverRect, DEFAULT_FRAMING, dragFraming, isCropped, MAX_ZOOM } from "./framing";
 import { clockProgress, defaultInterfaceSettings, estimateLines, parseClock, switchLanguage } from "./interface";
 
 const square = (size: { width: number; height: number }) => Math.min(size.width, size.height);
@@ -330,5 +331,39 @@ describe("print:分階前的平滑", () => {
     const out = smoothLuminance(px, 1);
     expect(out[4 * 9 + 4]).toBeGreaterThan(0.5);
     expect(out[0]).toBeCloseTo(luminance(200, 200, 200) / 255, 5);
+  });
+});
+
+describe("print:構圖", () => {
+  // 橫的 200×100 照片放進 100×100 的方框:左右多出 100
+  const from = { width: 200, height: 100 };
+  const box = { x: 10, y: 20, width: 100, height: 100 };
+
+  it("預設置中;x = 0 貼齊左邊、1 貼齊右邊", () => {
+    expect(coverRect(from, box)).toEqual({ x: -40, y: 20, width: 200, height: 100 });
+    expect(coverRect(from, box, { x: 0, y: 0.5, zoom: 1 }).x).toBe(10);
+    expect(coverRect(from, box, { x: 1, y: 0.5, zoom: 1 }).x).toBe(-90);
+  });
+
+  it("放大兩倍:上下也有多的,而且還是填滿框", () => {
+    const rect = coverRect(from, box, { x: 0.5, y: 0.5, zoom: 2 });
+    expect(rect.width).toBe(400);
+    expect(rect.height).toBe(200);
+    expect(rect.y).toBe(20 - 50);
+    expect(isCropped(from, box, { x: 0.5, y: 0.5, zoom: 1 })).toBe(true);
+    expect(isCropped({ width: 100, height: 100 }, box)).toBe(false);
+  });
+
+  it("往右拖 = 看到更左邊;沒有多出來的方向拖了也不動;拖過頭會停在邊上", () => {
+    const moved = dragFraming(DEFAULT_FRAMING, from, box, 25, 30);
+    expect(moved.x).toBeCloseTo(0.25);
+    expect(moved.y).toBe(0.5);
+    expect(dragFraming(DEFAULT_FRAMING, from, box, 999, 0).x).toBe(0);
+  });
+
+  it("縮放有上下限,壞掉的數字當成預設", () => {
+    expect(coverRect(from, box, { x: 0.5, y: 0.5, zoom: 0.2 }).width).toBe(200);
+    expect(coverRect(from, box, { x: 0.5, y: 0.5, zoom: 99 }).height).toBe(100 * MAX_ZOOM);
+    expect(coverRect(from, box, { x: Number.NaN, y: 0.5, zoom: Number.NaN }).x).toBe(-40);
   });
 });

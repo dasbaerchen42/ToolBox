@@ -16,6 +16,7 @@ import {
   riso,
   type Pixels,
 } from "./pixels";
+import { coverRect, type Framing } from "./framing";
 import { drawInterface } from "./interface";
 import { isInterfaceKind, printLayout, type PosterTextStyle, type PrintSettings, type Size } from "./settings";
 
@@ -54,21 +55,20 @@ function pixelsToCanvas(px: Pixels, data: Uint8ClampedArray): HTMLCanvasElement 
   return canvas;
 }
 
-/** 照片裁滿到指定區域(邊框類用) */
+/** 照片裁滿到指定區域(邊框類用),取景照使用者調的構圖 */
 function drawCover(
   ctx: CanvasRenderingContext2D,
   source: CanvasImageSource,
   from: Size,
-  box: { x: number; y: number; width: number; height: number }
+  box: { x: number; y: number; width: number; height: number },
+  framing: Framing
 ) {
-  const scale = Math.max(box.width / from.width, box.height / from.height);
-  const dw = from.width * scale;
-  const dh = from.height * scale;
+  const rect = coverRect(from, box, framing);
   ctx.save();
   ctx.beginPath();
   ctx.rect(box.x, box.y, box.width, box.height);
   ctx.clip();
-  ctx.drawImage(source, box.x + (box.width - dw) / 2, box.y + (box.height - dh) / 2, dw, dh);
+  ctx.drawImage(source, rect.x, rect.y, rect.width, rect.height);
   ctx.restore();
 }
 
@@ -397,7 +397,10 @@ export function drawPrint(
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   if (isInterfaceKind(settings.kind)) {
-    drawInterface(ctx, settings.kind, source, size, layout, settings);
+    drawInterface(ctx, settings.kind, source, size, layout, settings, {
+      photo: settings.framing,
+      avatar: settings.avatarFraming,
+    });
   } else switch (settings.kind) {
     case "halftone": {
       const px = pixelsOf(source, size, w, h);
@@ -476,7 +479,7 @@ export function drawPrint(
     case "stamp": {
       ctx.fillStyle = "#fffdf8";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      drawCover(ctx, source, size, photo);
+      drawCover(ctx, source, size, photo, settings.framing);
       ctx.strokeStyle = "rgba(0, 0, 0, 0.12)";
       ctx.lineWidth = Math.max(1, 0.25 * u);
       ctx.strokeRect(photo.x, photo.y, w, h);
@@ -517,7 +520,7 @@ export function drawPrint(
       const H = canvas.height;
       ctx.fillStyle = "#faf6ec";
       ctx.fillRect(0, 0, W, H);
-      drawCover(ctx, source, size, photo);
+      drawCover(ctx, source, size, photo, settings.framing);
 
       ctx.strokeStyle = "#8a8174";
       ctx.fillStyle = "#6d6559";
@@ -565,7 +568,7 @@ export function drawPrint(
       const tear = size.width;
       ctx.fillStyle = settings.ticket.color;
       ctx.fillRect(0, 0, W, H);
-      drawCover(ctx, source, size, photo);
+      drawCover(ctx, source, size, photo, settings.framing);
 
       // 內框
       ctx.strokeStyle = "rgba(60, 40, 20, 0.35)";
@@ -605,7 +608,7 @@ export function drawPrint(
       const H = canvas.height;
       ctx.fillStyle = "#16130f";
       ctx.fillRect(0, 0, W, H);
-      drawCover(ctx, source, size, photo);
+      drawCover(ctx, source, size, photo, settings.framing);
 
       // 齒孔
       const band = photo.y;

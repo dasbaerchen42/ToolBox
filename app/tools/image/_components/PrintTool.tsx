@@ -5,9 +5,18 @@ import { loadBitmap } from "@/lib/tools/image/render";
 import { drawPrint } from "@/lib/tools/image/print/compose";
 import { switchLanguage, UI_LANGS } from "@/lib/tools/image/print/interface";
 import {
+  DEFAULT_AVATAR_FRAMING,
+  DEFAULT_FRAMING,
+  dragFraming,
+  isCropped,
+  MAX_ZOOM,
+  type Framing,
+} from "@/lib/tools/image/print/framing";
+import {
   defaultPrintSettings,
   printLayout,
   POSTER_TEXT_STYLES,
+  FRAMED_KINDS,
   isInterfaceKind,
   PRINT_GROUPS,
   THEME_COLORS,
@@ -65,6 +74,8 @@ function readStored(): PrintSettings | null {
       ticket: { ...base.ticket, ...parsed.ticket },
       film: { ...base.film, ...parsed.film },
       poster: { ...base.poster, ...parsed.poster },
+      framing: { ...base.framing, ...parsed.framing },
+      avatarFraming: { ...base.avatarFraming, ...parsed.avatarFraming },
       ui: { ...base.ui, ...parsed.ui },
       player: { ...base.player, ...parsed.player },
       video: { ...base.video, ...parsed.video },
@@ -122,6 +133,86 @@ function ClockFields({
   );
 }
 
+/** 預覽用的縮小尺寸 */
+function previewScale(sample: { width: number; height: number }) {
+  const scale = Math.min(1, PREVIEW_MAX / Math.max(sample.width, sample.height));
+  return {
+    scale,
+    size: {
+      width: Math.max(1, Math.round(sample.width * scale)),
+      height: Math.max(1, Math.round(sample.height * scale)),
+    },
+  };
+}
+
+function paintPreview(
+  canvas: HTMLCanvasElement,
+  source: ImageBitmap,
+  sample: { width: number; height: number },
+  settings: PrintSettings
+) {
+  const { scale, size } = previewScale(sample);
+  const { canvas: out } = printLayout(size, settings.kind, settings);
+  if (canvas.width !== out.width) canvas.width = out.width;
+  if (canvas.height !== out.height) canvas.height = out.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  drawPrint(ctx, size, source, settings, { scale });
+}
+
+/** 構圖的拉桿:左右、上下、縮放 */
+function FramingFields({
+  value,
+  onChange,
+  onReset,
+  label,
+  t,
+}: {
+  value: Framing;
+  onChange: (patch: Partial<Framing>) => void;
+  onReset: () => void;
+  label: string;
+  t: ThemeClasses;
+}) {
+  return (
+    <>
+      <RangeField
+        label={`${label}縮放`}
+        display={`${value.zoom.toFixed(2)}×`}
+        value={value.zoom}
+        min={1}
+        max={MAX_ZOOM}
+        step={0.05}
+        onChange={(zoom) => onChange({ zoom })}
+        t={t}
+      />
+      <RangeField
+        label={`${label}左右`}
+        display={`${Math.round(value.x * 100)}%`}
+        value={value.x}
+        min={0}
+        max={1}
+        step={0.01}
+        onChange={(x) => onChange({ x })}
+        t={t}
+      />
+      <RangeField
+        label={`${label}上下`}
+        display={`${Math.round(value.y * 100)}%`}
+        value={value.y}
+        min={0}
+        max={1}
+        step={0.01}
+        onChange={(y) => onChange({ y })}
+        t={t}
+      />
+      <ActionButton tone="secondary" t={t} onClick={onReset}>
+        {label}回到預設
+      </ActionButton>
+    </>
+  );
+}
+
 /** 沖印所:把照片印成某種質感或裝進某種殼,批次套用到選取的圖 */
 export default function PrintTool({ images, busy, t, onApply }: Props) {
   const [settings, setSettings] = useState<PrintSettings>(defaultPrintSettings);
@@ -131,6 +222,10 @@ export default function PrintTool({ images, busy, t, onApply }: Props) {
   const renderedRef = useRef<HTMLCanvasElement | null>(null);
   const bitmapRef = useRef<{ id: string; bitmap: ImageBitmap } | null>(null);
   const developFrame = useRef(0);
+  // 拖曳構圖:拖動中直接重畫(不等預覽的延遲),放開後再走一般的預覽流程
+  const dragRef = useRef<{ x: number; y: number } | null>(null);
+  const latest = useRef(settings);
+  const dragFrame = useRef(0);
 
   const sample = images[0];
 
@@ -168,17 +263,7 @@ export default function PrintTool({ images, busy, t, onApply }: Props) {
         const source = bitmapRef.current?.bitmap;
         if (cancelled || !canvas || !source) return;
 
-        const scale = Math.min(1, PREVIEW_MAX / Math.max(sample.width, sample.height));
-        const size = {
-          width: Math.max(1, Math.round(sample.width * scale)),
-          height: Math.max(1, Math.round(sample.height * scale)),
-        };
-        const { canvas: out } = printLayout(size, settings.kind, settings);
-        canvas.width = out.width;
-        canvas.height = out.height;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        drawPrint(ctx, size, source, settings, { scale });
+        paintPreview(canvas, source, sample, settings);
 
         // 留一份畫好的,拍立得顯影動畫要在上面疊白
         const copy = document.createElement("canvas");
@@ -235,6 +320,46 @@ export default function PrintTool({ images, busy, t, onApply }: Props) {
     developFrame.current = requestAnimationFrame(tick);
   }
 
+  useEffect(() => {
+    latest.current = settings;
+  }, [settings]);
+  const framed = FRAMED_KINDS.includes(settings.kind);
+
+  /** 新構圖:存進設定,並在下一格直接重畫預覽 */
+  const applyFraming = (framing: Framing) => {
+    const next = { ...latest.current, framing };
+    latest.current = next;
+    setSettings(next);
+    cancelAnimationFrame(dragFrame.current);
+    dragFrame.current = requestAnimationFrame(() => {
+      const canvas = canvasRef.current;
+      const source = bitmapRef.current?.bitmap;
+      if (canvas && source && sample) paintPreview(canvas, source, sample, latest.current);
+    });
+  };
+
+  /** 照片在預覽畫布上的框與來源大小(拖曳換算用) */
+  const previewGeometry = (current: PrintSettings) => {
+    if (!sample) return null;
+    const { size } = previewScale(sample);
+    const { photo } = printLayout(size, current.kind, current);
+    return { size, photo };
+  };
+
+  // 滾輪縮放:要能 preventDefault,只好自己掛非 passive 的監聽
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !framed) return;
+    const handle = (event: WheelEvent) => {
+      event.preventDefault();
+      const current = latest.current.framing;
+      const zoom = Math.min(MAX_ZOOM, Math.max(1, current.zoom * Math.exp(-event.deltaY * 0.0015)));
+      applyFraming({ ...current, zoom });
+    };
+    canvas.addEventListener("wheel", handle, { passive: false });
+    return () => canvas.removeEventListener("wheel", handle);
+  });
+
   const update = <K extends keyof PrintSettings>(key: K, value: PrintSettings[K]) =>
     setSettings((prev) => ({ ...prev, [key]: value }));
   const updateIn = <K extends keyof PrintSettings>(key: K, patch: Partial<PrintSettings[K]>) =>
@@ -260,6 +385,8 @@ export default function PrintTool({ images, busy, t, onApply }: Props) {
   ).canvas;
   const aspect = previewSize.width / previewSize.height;
   const s = settings;
+  const geometry = previewGeometry(settings);
+  const photoCropped = geometry ? isCropped(geometry.size, geometry.photo, s.framing) : false;
 
   return (
     <ToolPane
@@ -269,6 +396,29 @@ export default function PrintTool({ images, busy, t, onApply }: Props) {
             <canvas
               ref={canvasRef}
               aria-label="沖印所預覽"
+              className={framed ? "cursor-grab touch-none active:cursor-grabbing" : undefined}
+              onPointerDown={(event) => {
+                if (!framed) return;
+                event.currentTarget.setPointerCapture(event.pointerId);
+                dragRef.current = { x: event.clientX, y: event.clientY };
+              }}
+              onPointerMove={(event) => {
+                const last = dragRef.current;
+                const geometry = previewGeometry(latest.current);
+                if (!last || !geometry) return;
+                const rect = event.currentTarget.getBoundingClientRect();
+                const ratio = event.currentTarget.width / Math.max(1, rect.width);
+                const dx = (event.clientX - last.x) * ratio;
+                const dy = (event.clientY - last.y) * ratio;
+                dragRef.current = { x: event.clientX, y: event.clientY };
+                applyFraming(dragFraming(latest.current.framing, geometry.size, geometry.photo, dx, dy));
+              }}
+              onPointerUp={() => {
+                dragRef.current = null;
+              }}
+              onPointerCancel={() => {
+                dragRef.current = null;
+              }}
               style={{
                 aspectRatio: `${previewSize.width} / ${previewSize.height}`,
                 width: "100%",
@@ -281,6 +431,9 @@ export default function PrintTool({ images, busy, t, onApply }: Props) {
             以「{sample.name}」為例・輸出 {outSize.width} × {outSize.height}
             {rendering ? "・預覽計算中……" : ""}
           </p>
+          {framed && (
+            <p className={`text-center text-xs ${t.muted}`}>在預覽上拖曳移動照片，滾輪或「縮放」拉桿放大。</p>
+          )}
         </div>
       }
       controls={
@@ -315,6 +468,32 @@ export default function PrintTool({ images, busy, t, onApply }: Props) {
             </Field>
           )}
           <p className={`text-[11px] leading-5 ${t.muted}`}>{item.hint}</p>
+
+          {framed && (
+            <div className={`space-y-3 rounded-xl border p-3 ${t.subPanel}`}>
+              <p className={`text-[11px] leading-5 ${t.muted}`}>
+                {photoCropped
+                  ? "照片比例跟框不一樣，可以拖曳預覽或用拉桿決定要留哪一塊。批次的每一張都套同一組位置。"
+                  : "照片剛好放得下；放大之後就能拖曳挑要留的部分。"}
+              </p>
+              <FramingFields
+                label="照片"
+                value={s.framing}
+                onChange={(patch) => applyFraming({ ...s.framing, ...patch })}
+                onReset={() => applyFraming({ ...DEFAULT_FRAMING })}
+                t={t}
+              />
+              {(s.kind === "social" || s.kind === "story") && (
+                <FramingFields
+                  label="頭像"
+                  value={s.avatarFraming}
+                  onChange={(patch) => updateIn("avatarFraming", patch)}
+                  onReset={() => update("avatarFraming", { ...DEFAULT_AVATAR_FRAMING })}
+                  t={t}
+                />
+              )}
+            </div>
+          )}
 
           <div className={`space-y-3 rounded-xl border p-3 ${t.subPanel}`}>
             {s.kind === "halftone" && (

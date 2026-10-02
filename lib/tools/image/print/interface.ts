@@ -6,7 +6,11 @@
 // 介面文字有中文、English、日本語;預設是「紙感」配色(米白底、暖灰字、襯線標題)。
 // 尺寸都以畫布寬度的 1% 為單位(下面的 k),照片多大輸出就跟著多大。
 
+import { coverRect, DEFAULT_AVATAR_FRAMING, DEFAULT_FRAMING, type Framing } from "./framing";
 import type { Size } from "./settings";
+
+/** 照片與頭像的取景 */
+type Frames = { photo: Framing; avatar: Framing };
 
 const FONT = `system-ui, "Noto Sans TC", "Noto Sans JP", "PingFang TC", "Hiragino Sans", "Microsoft JhengHei", sans-serif`;
 const SERIF = `"Cormorant Garamond", "Noto Serif JP", "Noto Serif TC", "Hiragino Mincho ProN", "Yu Mincho", Georgia, "Times New Roman", serif`;
@@ -546,15 +550,13 @@ const Icons = {
 
 // ---- 共用的小零件 ----
 
-function cover(ctx: Ctx, source: CanvasImageSource, from: Size, box: Box, radius = 0) {
-  const scale = Math.max(box.width / from.width, box.height / from.height);
-  const dw = from.width * scale;
-  const dh = from.height * scale;
+function cover(ctx: Ctx, source: CanvasImageSource, from: Size, box: Box, radius = 0, framing: Framing = DEFAULT_FRAMING) {
+  const rect = coverRect(from, box, framing);
   ctx.save();
   ctx.beginPath();
   ctx.roundRect(box.x, box.y, box.width, box.height, radius);
   ctx.clip();
-  ctx.drawImage(source, box.x + (box.width - dw) / 2, box.y + (box.height - dh) / 2, dw, dh);
+  ctx.drawImage(source, rect.x, rect.y, rect.width, rect.height);
   ctx.restore();
 }
 
@@ -636,7 +638,16 @@ function progressBar(ctx: Ctx, x: number, y: number, width: number, t: number, k
 }
 
 /** 頭像:照片中間裁一個圓,外面一圈細環 */
-function avatar(ctx: Ctx, source: CanvasImageSource, from: Size, cx: number, cy: number, r: number, ring: string | null) {
+function avatar(
+  ctx: Ctx,
+  source: CanvasImageSource,
+  from: Size,
+  cx: number,
+  cy: number,
+  r: number,
+  ring: string | null,
+  framing: Framing = DEFAULT_AVATAR_FRAMING
+) {
   if (ring) {
     ctx.save();
     ctx.strokeStyle = ring;
@@ -650,11 +661,8 @@ function avatar(ctx: Ctx, source: CanvasImageSource, from: Size, cx: number, cy:
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.clip();
-  // 取中間偏上的一塊,人像通常臉在上半
-  const side = Math.min(from.width, from.height) * 0.6;
-  const sx = (from.width - side) / 2;
-  const sy = Math.max(0, (from.height - side) * 0.35);
-  ctx.drawImage(source, sx, sy, side, side, cx - r, cy - r, r * 2, r * 2);
+  const rect = coverRect(from, { x: cx - r, y: cy - r, width: r * 2, height: r * 2 }, framing);
+  ctx.drawImage(source, rect.x, rect.y, rect.width, rect.height);
   ctx.restore();
 }
 
@@ -694,7 +702,7 @@ function fillBackground(ctx: Ctx, canvas: Size, theme: UiTheme) {
 }
 
 /** 照片外面一圈白紙邊,像貼在本子上的相片 */
-function matted(ctx: Ctx, source: CanvasImageSource, from: Size, box: Box, k: number, colors: Colors) {
+function matted(ctx: Ctx, source: CanvasImageSource, from: Size, box: Box, k: number, colors: Colors, framing: Framing) {
   const mat = 1.6 * k;
   ctx.save();
   ctx.shadowColor = "rgba(60, 45, 30, 0.22)";
@@ -703,7 +711,7 @@ function matted(ctx: Ctx, source: CanvasImageSource, from: Size, box: Box, k: nu
   ctx.fillStyle = colors.card;
   ctx.fillRect(box.x - mat, box.y - mat, box.width + mat * 2, box.height + mat * 2);
   ctx.restore();
-  cover(ctx, source, from, box);
+  cover(ctx, source, from, box, 0, framing);
 }
 
 // ---- 四種介面 ----
@@ -715,7 +723,8 @@ function drawPlayer(
   canvas: Size,
   photo: Box,
   s: PlayerSettings,
-  lang: UiLang
+  lang: UiLang,
+  f: Frames
 ) {
   const W = canvas.width;
   const k = W / 100;
@@ -753,7 +762,7 @@ function drawPlayer(
   }
 
   // 封面:紙感是加白邊的相片,其他是圓角
-  if (paper) matted(ctx, source, from, photo, k, colors);
+  if (paper) matted(ctx, source, from, photo, k, colors, f.photo);
   else {
     ctx.save();
     ctx.shadowColor = "rgba(0, 0, 0, 0.35)";
@@ -764,7 +773,7 @@ function drawPlayer(
     ctx.roundRect(photo.x, photo.y, photo.width, photo.height, 3 * k);
     ctx.fill();
     ctx.restore();
-    cover(ctx, source, from, photo, 3 * k);
+    cover(ctx, source, from, photo, 3 * k, f.photo);
   }
 
   // 歌名、歌手、愛心
@@ -826,7 +835,8 @@ function drawVideo(
   canvas: Size,
   photo: Box,
   s: VideoSettings,
-  lang: UiLang
+  lang: UiLang,
+  f: Frames
 ) {
   const W = canvas.width;
   const k = W / 100;
@@ -834,7 +844,7 @@ function drawVideo(
   fillBackground(ctx, canvas, s.theme);
   ctx.fillStyle = "#000";
   ctx.fillRect(photo.x, photo.y, photo.width, photo.height);
-  cover(ctx, source, from, photo);
+  cover(ctx, source, from, photo, 0, f.photo);
 
   // 下方漸層,控制列壓在上面
   const bottom = photo.y + photo.height;
@@ -952,7 +962,7 @@ function nameLine(ctx: Ctx, s: SocialSettings, x: number, y: number, maxWidth: n
   }
 }
 
-function drawSocial(ctx: Ctx, source: CanvasImageSource, from: Size, canvas: Size, photo: Box, s: SocialSettings) {
+function drawSocial(ctx: Ctx, source: CanvasImageSource, from: Size, canvas: Size, photo: Box, s: SocialSettings, f: Frames) {
   const W = canvas.width;
   const k = W / 100;
   const colors = PALETTE[s.theme];
@@ -962,7 +972,7 @@ function drawSocial(ctx: Ctx, source: CanvasImageSource, from: Size, canvas: Siz
 
   if (s.layout === "text") {
     // 頭像在左欄,名字與內文在右邊,照片接在內文下面
-    avatar(ctx, source, from, 9 * k, 8.5 * k, 4.6 * k, colors.line);
+    avatar(ctx, source, from, 9 * k, 8.5 * k, 4.6 * k, colors.line, f.avatar);
     nameLine(ctx, s, TEXT_POST.left * k, 6.5 * k, W - (TEXT_POST.left + 12) * k, k, colors);
     icon(ctx, W - 7 * k, 6.5 * k, 5.4 * k, colors.muted, (c, sz) => Icons.dots(c, sz));
     ctx.fillStyle = colors.ink;
@@ -980,19 +990,19 @@ function drawSocial(ctx: Ctx, source: CanvasImageSource, from: Size, canvas: Siz
     ctx.moveTo(9 * k, 15 * k);
     ctx.lineTo(9 * k, photo.y + photo.height);
     ctx.stroke();
-    if (paper) matted(ctx, source, from, photo, k * 0.7, colors);
-    else cover(ctx, source, from, photo, 2.4 * k);
+    if (paper) matted(ctx, source, from, photo, k * 0.7, colors, f.photo);
+    else cover(ctx, source, from, photo, 2.4 * k, f.photo);
     actionRow(ctx, photo.x, photo.x + photo.width, photo.y + photo.height + 8 * k, k, s, colors);
     return;
   }
 
   // 照片為主:頭像、名字・時間、更多;照片內縮成圓角(紙感是白邊相片)
   const head = photo.y / 2;
-  avatar(ctx, source, from, 9 * k, head, 4.4 * k, colors.line);
+  avatar(ctx, source, from, 9 * k, head, 4.4 * k, colors.line, f.avatar);
   nameLine(ctx, s, 16 * k, head, W - 30 * k, k, colors);
   icon(ctx, W - 7 * k, head, 5.4 * k, colors.muted, (c, sz) => Icons.dots(c, sz));
-  if (paper) matted(ctx, source, from, photo, k * 0.7, colors);
-  else cover(ctx, source, from, photo, 2.4 * k);
+  if (paper) matted(ctx, source, from, photo, k * 0.7, colors, f.photo);
+  else cover(ctx, source, from, photo, 2.4 * k, f.photo);
 
   let y = photo.y + photo.height + 6 * k;
   if (s.place.trim()) {
@@ -1021,13 +1031,13 @@ function drawSocial(ctx: Ctx, source: CanvasImageSource, from: Size, canvas: Siz
   actionRow(ctx, photo.x, photo.x + photo.width, y + 4.5 * k, k, s, colors);
 }
 
-function drawStory(ctx: Ctx, source: CanvasImageSource, from: Size, canvas: Size, s: StorySettings) {
+function drawStory(ctx: Ctx, source: CanvasImageSource, from: Size, canvas: Size, s: StorySettings, f: Frames) {
   const W = canvas.width;
   const H = canvas.height;
   const k = W / 100;
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, W, H);
-  cover(ctx, source, from, { x: 0, y: 0, width: W, height: H });
+  cover(ctx, source, from, { x: 0, y: 0, width: W, height: H }, 0, f.photo);
 
   // 上下壓暗,白字才看得清楚
   const top = ctx.createLinearGradient(0, 0, 0, 22 * k);
@@ -1056,7 +1066,7 @@ function drawStory(ctx: Ctx, source: CanvasImageSource, from: Size, canvas: Size
 
   // 頭像、名字、時間、更多、關閉
   const head = 10.5 * k;
-  avatar(ctx, source, from, 7.5 * k, head, 4 * k, "rgba(255, 255, 255, 0.8)");
+  avatar(ctx, source, from, 7.5 * k, head, 4 * k, "rgba(255, 255, 255, 0.8)", f.avatar);
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#fff";
@@ -1101,17 +1111,18 @@ export function drawInterface(
   source: CanvasImageSource,
   from: Size,
   layout: { canvas: Size; photo: Box },
-  s: InterfaceSettings
+  s: InterfaceSettings,
+  f: Frames = { photo: DEFAULT_FRAMING, avatar: DEFAULT_AVATAR_FRAMING }
 ) {
   const lang = s.ui?.lang ?? "en";
   switch (kind) {
     case "player":
-      return drawPlayer(ctx, source, from, layout.canvas, layout.photo, s.player, lang);
+      return drawPlayer(ctx, source, from, layout.canvas, layout.photo, s.player, lang, f);
     case "video":
-      return drawVideo(ctx, source, from, layout.canvas, layout.photo, s.video, lang);
+      return drawVideo(ctx, source, from, layout.canvas, layout.photo, s.video, lang, f);
     case "social":
-      return drawSocial(ctx, source, from, layout.canvas, layout.photo, s.social);
+      return drawSocial(ctx, source, from, layout.canvas, layout.photo, s.social, f);
     case "story":
-      return drawStory(ctx, source, from, layout.canvas, s.story);
+      return drawStory(ctx, source, from, layout.canvas, s.story, f);
   }
 }
