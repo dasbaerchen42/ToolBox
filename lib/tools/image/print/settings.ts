@@ -1,3 +1,14 @@
+import {
+  defaultInterfaceSettings,
+  interfaceLayout,
+  type InterfaceKind,
+  type PlayerSettings,
+  type SocialSettings,
+  type StorySettings,
+  type UiLang,
+  type VideoSettings,
+} from "./interface";
+
 // 沖印所的設定:把照片「印」成某種質感,或裝進某種殼。
 // 尺寸類的參數都以「短邊的 1%」為單位(下面註解寫的 u),
 // 大圖小圖、預覽與輸出看起來才一樣。
@@ -12,7 +23,14 @@ export type PrintKind =
   | "postcard"
   | "ticket"
   | "film"
-  | "poster";
+  | "poster"
+  | InterfaceKind;
+
+export const INTERFACE_KINDS: readonly PrintKind[] = ["player", "video", "social", "story"];
+
+export function isInterfaceKind(kind: PrintKind): kind is InterfaceKind {
+  return INTERFACE_KINDS.includes(kind);
+}
 
 export const PRINT_GROUPS: {
   key: string;
@@ -53,8 +71,18 @@ export const PRINT_GROUPS: {
       {
         kind: "poster",
         label: "單色高反差海報",
-        hint: "主題色＋黑白、斜切版面、剪貼字；換主題色時色塊、網點、剪貼字底色一起換",
+        hint: "主題色＋黑白、斜切版面、標語字；換主題色時色塊、網點、字的底色一起換",
       },
+    ],
+  },
+  {
+    key: "ui",
+    label: "介面",
+    kinds: [
+      { kind: "player", label: "音樂播放器", hint: "照片當封面，歌名、歌手、進度條與播放鍵都能改；底色可以用照片暈開的顏色" },
+      { kind: "video", label: "影片播放器", hint: "16:9 畫面加控制列與進度條，可以接標題資訊區、切換暫停中" },
+      { kind: "social", label: "社群貼文", hint: "頭像、名字、照片、愛心留言列、讚數與內文；方形或 4:5 直式" },
+      { kind: "story", label: "限時動態", hint: "9:16 全螢幕，上面分段進度條與名字，下面回覆框" },
     ],
   },
 ];
@@ -65,6 +93,19 @@ export const THEME_COLORS = [
   { label: "藍", hex: "#1f5fbf" },
   { label: "黃", hex: "#f2c230" },
   { label: "綠", hex: "#2e9e5b" },
+];
+
+/** 海報的照片怎麼上色:平塗最清楚,網點、線條比較有印刷味 */
+export type PosterTexture = "solid" | "dots" | "lines";
+/** 海報的標語字樣式 */
+export type PosterTextStyle = "tiles" | "ribbon" | "circles" | "badge" | "label";
+
+export const POSTER_TEXT_STYLES: { value: PosterTextStyle; label: string; hint: string }[] = [
+  { value: "tiles", label: "方格剪貼", hint: "每個字一塊自己的底色、大小與角度，像從報紙剪下來拼的" },
+  { value: "ribbon", label: "彩帶", hint: "一條斜斜的長彩帶，兩端剪成燕尾" },
+  { value: "circles", label: "圓點字", hint: "每個字一顆圓，顏色輪流換" },
+  { value: "badge", label: "圓章", hint: "一顆大圓章，字排在中間，外圈虛線" },
+  { value: "label", label: "標籤條", hint: "黑底白字的長方標籤，一行一條，交錯疊著" },
 ];
 
 export type PrintSettings = {
@@ -84,13 +125,22 @@ export type PrintSettings = {
   film: { label: string; number: number };
   poster: {
     color: string;
-    levels: 2 | 3;
-    dots: boolean;
+    /** 2:主題色＋黑;3:白＋主題色＋黑;4:再多一階淡主題色,人像的臉比較清楚 */
+    levels: 2 | 3 | 4;
+    texture: PosterTexture;
+    /** 網點、線條的粗細(u) */
+    dotSize: number;
     balance: number;
     background: "rays" | "stripes" | "plain";
     tilt: number;
     text: string;
+    textStyle: PosterTextStyle;
   };
+  ui: { lang: UiLang };
+  player: PlayerSettings;
+  video: VideoSettings;
+  social: SocialSettings;
+  story: StorySettings;
 };
 
 function today(): { y: number; m: number; d: number } {
@@ -126,13 +176,16 @@ export function defaultPrintSettings(): PrintSettings {
     film: { label: "TOOLBOX 400", number: 12 },
     poster: {
       color: THEME_COLORS[0].hex,
-      levels: 3,
-      dots: true,
+      levels: 4,
+      texture: "solid",
+      dotSize: 1.2,
       balance: 0.5,
       background: "rays",
       tilt: -6,
       text: "今天也好好過",
+      textStyle: "tiles",
     },
+    ...defaultInterfaceSettings(),
   };
 }
 
@@ -142,7 +195,11 @@ export type Size = { width: number; height: number };
  * 輸出圖的尺寸。印刷質感、相機、海報跟原圖一樣大;邊框類會在外面加一圈。
  * 每種邊框的比例集中在這裡,畫的時候照這個切版面。
  */
-export function printLayout(size: Size, kind: PrintKind): {
+export function printLayout(
+  size: Size,
+  kind: PrintKind,
+  settings?: Pick<PrintSettings, "ui" | "player" | "video" | "social" | "story">
+): {
   canvas: Size;
   /** 照片在輸出圖裡的位置 */
   photo: { x: number; y: number; width: number; height: number };
@@ -150,6 +207,7 @@ export function printLayout(size: Size, kind: PrintKind): {
   const { width: w, height: h } = size;
   const u = Math.min(w, h) / 100;
   const same = { canvas: { width: w, height: h }, photo: { x: 0, y: 0, width: w, height: h } };
+  if (isInterfaceKind(kind)) return interfaceLayout(size, kind, settings ?? defaultInterfaceSettings());
 
   switch (kind) {
     case "polaroid": {

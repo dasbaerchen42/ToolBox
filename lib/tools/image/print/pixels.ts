@@ -377,42 +377,105 @@ export function flash(src: Pixels, strength: number): Uint8ClampedArray {
 }
 
 /**
+ * 明暗(0–1)先做一次小範圍的方框模糊:分階前把照片雜訊與髮絲的細碎抹平,
+ * 不然切點附近會冒出一堆黑白小斑點,人像的臉就花了。分兩趟(橫、直)做,大圖也快。
+ */
+export function smoothLuminance(src: Pixels, radius: number): Float32Array {
+  const { width, height, data } = src;
+  const lum = new Float32Array(width * height);
+  for (let i = 0; i < lum.length; i += 1) lum[i] = luminance(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]) / 255;
+  if (radius <= 0) return lum;
+  const pass = (from: Float32Array, horizontal: boolean) => {
+    const to = new Float32Array(from.length);
+    const lines = horizontal ? height : width;
+    const length = horizontal ? width : height;
+    for (let line = 0; line < lines; line += 1) {
+      const at = (k: number) => (horizontal ? line * width + k : k * width + line);
+      let sum = 0;
+      let count = 0;
+      for (let k = 0; k < Math.min(radius, length); k += 1) {
+        sum += from[at(k)];
+        count += 1;
+      }
+      for (let k = 0; k < length; k += 1) {
+        const add = k + radius;
+        if (add < length) {
+          sum += from[at(add)];
+          count += 1;
+        }
+        const drop = k - radius - 1;
+        if (drop >= 0) {
+          sum -= from[at(drop)];
+          count -= 1;
+        }
+        to[at(k)] = sum / count;
+      }
+    }
+    return to;
+  };
+  return pass(pass(lum, true), false);
+}
+
+/**
  * 單色高反差:照片轉明暗後分階——亮部白、暗部黑、中間是主題色。
- * levels 2 = 只有黑與主題色;3 = 白、主題色、黑。dots 給了就讓主題色那一階變成網點。
+ * levels 2 = 只有黑與主題色;3 = 白、主題色、黑;4 = 再多一階淡主題色(人像的臉不會糊成一片)。
+ * pattern > 0 時主題色那一階改成網點或斜線(texture),pattern 是格子大小(像素)。
  */
 export function posterTone(
   src: Pixels,
   color: Rgb,
-  levels: 2 | 3,
-  dots: number,
-  balance = 0.5
+  levels: 2 | 3 | 4,
+  pattern: number,
+  balance = 0.5,
+  texture: "dots" | "lines" = "dots"
 ): Uint8ClampedArray {
   const out = blank(src);
   const { width, height } = src;
-  // 兩個切點:balance 往上移,整張圖變暗
-  const low = 0.18 + balance * 0.3;
-  const high = low + 0.3;
-  const cell = Math.max(2, dots);
+  const paper: Rgb = { r: 250, g: 248, b: 242 };
+  const ink: Rgb = { r: 20, g: 18, b: 18 };
+  // 淡主題色:主題色與紙白各半
+  const tint: Rgb = {
+    r: Math.round((color.r + paper.r) / 2),
+    g: Math.round((color.g + paper.g) / 2),
+    b: Math.round((color.b + paper.b) / 2),
+  };
+  // 切點:balance 往上移,整張圖變暗;四階時每一階窄一點
+  const low = (levels === 4 ? 0.14 : 0.18) + balance * 0.3;
+  const step = levels === 4 ? 0.2 : 0.3;
+  const mid = low + step;
+  const high = levels === 4 ? mid + step : mid;
+  const cell = Math.max(2, pattern);
   const cos = Math.cos(Math.PI / 4);
   const sin = Math.sin(Math.PI / 4);
+  const light = smoothLuminance(src, Math.max(1, Math.round(Math.min(width, height) / 400)));
 
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const i = (y * width + x) * 4;
-      const l = luminance(src.data[i], src.data[i + 1], src.data[i + 2]) / 255;
+      const l = light[y * width + x];
       let rgb: Rgb;
 
-      if (l < low) rgb = { r: 20, g: 18, b: 18 };
-      else if (levels === 3 && l >= high) rgb = { r: 250, g: 248, b: 242 };
-      else if (dots > 0) {
-        // 主題色網點:越暗點越大
-        const t = levels === 3 ? (high - l) / (high - low) : 1 - (l - low) / (1 - low);
+      if (l < low) rgb = ink;
+      else if (levels !== 2 && l >= high) rgb = paper;
+      else if (levels === 4 && l >= mid) rgb = tint;
+      else if (pattern > 0) {
+        // 主題色那一階:越暗網點越大、線越粗,空的地方露出下一階的顏色
+        const top = levels === 2 ? 1 : mid;
+        const t = (top - l) / (top - low);
+        const back = levels === 4 ? tint : paper;
         const u = x * cos + y * sin;
         const v = -x * sin + y * cos;
-        const du = u - (Math.floor(u / cell) + 0.5) * cell;
-        const dv = v - (Math.floor(v / cell) + 0.5) * cell;
-        const radius = cell * Math.sqrt(Math.max(0.05, Math.min(1, t)) / Math.PI) * 1.1;
-        rgb = Math.hypot(du, dv) < radius ? color : { r: 250, g: 248, b: 242 };
+        const amount = Math.max(0.05, Math.min(1, t));
+        let inside: boolean;
+        if (texture === "lines") {
+          const frac = v / cell - Math.floor(v / cell);
+          inside = Math.abs(frac - 0.5) * 2 < amount;
+        } else {
+          const du = u - (Math.floor(u / cell) + 0.5) * cell;
+          const dv = v - (Math.floor(v / cell) + 0.5) * cell;
+          inside = Math.hypot(du, dv) < cell * Math.sqrt(amount / Math.PI) * 1.1;
+        }
+        rgb = inside ? color : back;
       } else rgb = color;
 
       out[i] = rgb.r;

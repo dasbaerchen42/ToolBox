@@ -9,10 +9,14 @@ import {
   photocopy,
   posterTone,
   rgbToCmyk,
+  smoothLuminance,
   riso,
   type Pixels,
 } from "./pixels";
-import { digicamDate, postmarkDate, printLayout, PRINT_GROUPS } from "./settings";
+import { clockProgress, defaultInterfaceSettings, estimateLines, parseClock, switchLanguage } from "./interface";
+
+const square = (size: { width: number; height: number }) => Math.min(size.width, size.height);
+import { defaultPrintSettings, digicamDate, postmarkDate, printLayout, PRINT_GROUPS } from "./settings";
 
 function solid(width: number, height: number, rgb: [number, number, number], alpha = 255): Pixels {
   const data = new Uint8ClampedArray(width * height * 4);
@@ -177,6 +181,103 @@ describe("print:單色高反差", () => {
   });
 });
 
+describe("print:海報的四階與質感", () => {
+  const red = { r: 215, g: 38, b: 46 };
+  const rgbOf = (out: Uint8ClampedArray) => [out[0], out[1], out[2]];
+
+  it("四階:比主題色亮一點的地方是淡主題色,不會直接跳成白", () => {
+    const at = (v: number) => rgbOf(posterTone(solid(2, 2, [v, v, v]), red, 4, 0));
+    expect(at(10)[0]).toBeLessThan(40);
+    expect(at(110)).toEqual([215, 38, 46]);
+    const tint = at(160);
+    expect(tint[0]).toBeGreaterThan(215);
+    expect(tint[1]).toBeGreaterThan(100);
+    expect(tint[1]).toBeLessThan(200);
+    expect(at(250)[1]).toBeGreaterThan(240);
+  });
+
+  it("斜線質感:主題色與底色兩種,而且是一條一條的", () => {
+    const out = posterTone(solid(30, 30, [110, 110, 110]), red, 3, 6, 0.5, "lines");
+    const colors = new Set<string>();
+    for (let i = 0; i < out.length; i += 4) colors.add(`${out[i]},${out[i + 1]},${out[i + 2]}`);
+    expect(colors.size).toBe(2);
+    // 沿著線的方向(右下斜)走,顏色不變
+    const at = (x: number, y: number) => out[(y * 30 + x) * 4 + 1];
+    for (let d = 0; d < 10; d += 1) expect(at(5 + d, 5 + d)).toBe(at(5, 5));
+  });
+
+  it("預設是四階平塗(人像最清楚)", () => {
+    const { poster } = defaultPrintSettings();
+    expect(poster.levels).toBe(4);
+    expect(poster.texture).toBe("solid");
+  });
+});
+
+describe("print:介面", () => {
+  const size = { width: 800, height: 600 };
+  const ui = defaultInterfaceSettings();
+
+  it("時間字串換成秒;進度條照目前 ÷ 全長", () => {
+    expect(parseClock("3:45")).toBe(225);
+    expect(parseClock("1:02:03")).toBe(3723);
+    expect(parseClock("abc")).toBeNull();
+    expect(clockProgress("1:00", "4:00")).toBeCloseTo(0.25);
+    expect(clockProgress("9:00", "4:00")).toBe(1);
+    expect(clockProgress("??", "4:00")).toBeCloseTo(0.35);
+  });
+
+  it("播放器、貼文、限時動態以短邊當寬度,都是直式", () => {
+    for (const kind of ["player", "social", "story"] as const) {
+      const { canvas, photo } = printLayout(size, kind, ui);
+      expect(canvas.width).toBe(600);
+      expect(canvas.height).toBeGreaterThan(canvas.width);
+      expect(photo.x + photo.width).toBeLessThanOrEqual(canvas.width);
+      expect(photo.y + photo.height).toBeLessThanOrEqual(canvas.height);
+    }
+    expect(printLayout(size, "story", ui).canvas.height).toBe(Math.round((600 * 16) / 9));
+  });
+
+  it("貼文:方形比 4:5 矮;照片內縮,不貼齊左右邊", () => {
+    const square = printLayout(size, "social", { ...ui, social: { ...ui.social, ratio: "1:1" } }).photo;
+    const tall = printLayout(size, "social", { ...ui, social: { ...ui.social, ratio: "4:5" } }).photo;
+    expect(tall.height / tall.width).toBeCloseTo(1.25, 2);
+    expect(square.height).toBe(square.width);
+    expect(square.x).toBeGreaterThan(0);
+  });
+
+  it("文字為主的貼文:照片在內文下面,內文越長照片越往下", () => {
+    const short = printLayout(size, "social", { ...ui, social: { ...ui.social, layout: "text", caption: "hi" } });
+    const long = printLayout(size, "social", {
+      ...ui,
+      social: { ...ui.social, layout: "text", caption: "很長的一段內文".repeat(8) },
+    });
+    expect(short.photo.x).toBeGreaterThan(square(size) * 0.1);
+    expect(long.photo.y).toBeGreaterThan(short.photo.y);
+    expect(long.canvas.height).toBeGreaterThan(short.canvas.height);
+  });
+
+  it("影片是 16:9,關掉資訊區就只剩畫面", () => {
+    const video = printLayout(size, "video", { ...ui, video: { ...ui.video, info: false } });
+    expect(video.canvas).toEqual({ width: 800, height: 450 });
+    expect(printLayout(size, "video", ui).canvas.height).toBeGreaterThan(450);
+  });
+
+  it("換語言:還是預設的內容跟著換,自己改過的不動", () => {
+    const edited = { ...ui, player: { ...ui.player, title: "my song" } };
+    const ja = switchLanguage(edited, "ja");
+    expect(ja.ui.lang).toBe("ja");
+    expect(ja.player.title).toBe("my song");
+    expect(ja.social.time).toBe("3時間前");
+    expect(switchLanguage(ja, "zh").story.reply).toBe("回覆…");
+  });
+
+  it("估計行數:英文比中文一行塞得多,有上限", () => {
+    expect(estimateLines("abcdefghij", 10, 5)).toBe(1);
+    expect(estimateLines("一二三四五六七八九十", 5, 5)).toBe(2);
+    expect(estimateLines("字".repeat(100), 5, 4)).toBe(4);
+  });
+});
+
 describe("print:版面", () => {
   const size = { width: 800, height: 600 };
 
@@ -211,7 +312,7 @@ describe("print:版面", () => {
   it("每一種都有出現在分類裡,而且只出現一次", () => {
     const kinds = PRINT_GROUPS.flatMap((group) => group.kinds.map((item) => item.kind));
     expect(new Set(kinds).size).toBe(kinds.length);
-    expect(kinds).toHaveLength(10);
+    expect(kinds).toHaveLength(14);
   });
 });
 
@@ -219,5 +320,15 @@ describe("print:日期", () => {
   it("古早相機的日期印字與郵戳的日期格式", () => {
     expect(digicamDate({ y: 2026, m: 10, d: 1 })).toBe("'26 10 01");
     expect(postmarkDate({ y: 2026, m: 3, d: 9 })).toBe("2026.03.09");
+  });
+});
+
+describe("print:分階前的平滑", () => {
+  it("單一個雜訊點被抹平,大片的明暗不變", () => {
+    const px = solid(9, 9, [200, 200, 200]);
+    px.data.set([0, 0, 0, 255], (4 * 9 + 4) * 4);
+    const out = smoothLuminance(px, 1);
+    expect(out[4 * 9 + 4]).toBeGreaterThan(0.5);
+    expect(out[0]).toBeCloseTo(luminance(200, 200, 200) / 255, 5);
   });
 });
