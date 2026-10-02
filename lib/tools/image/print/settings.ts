@@ -1,3 +1,4 @@
+import { DEFAULT_AVATAR_FRAMING, DEFAULT_FRAMING, type Framing } from "./framing";
 import {
   defaultInterfaceSettings,
   interfaceLayout,
@@ -27,6 +28,9 @@ export type PrintKind =
   | InterfaceKind;
 
 export const INTERFACE_KINDS: readonly PrintKind[] = ["player", "video", "social", "story"];
+
+/** 照片會被框裁到、可以手動調構圖的種類 */
+export const FRAMED_KINDS: readonly PrintKind[] = ["stamp", "postcard", "ticket", "film", ...INTERFACE_KINDS];
 
 export function isInterfaceKind(kind: PrintKind): kind is InterfaceKind {
   return INTERFACE_KINDS.includes(kind);
@@ -136,6 +140,10 @@ export type PrintSettings = {
     text: string;
     textStyle: PosterTextStyle;
   };
+  /** 照片在框裡的構圖(拖曳、縮放),所有可裁的框共用,批次的每一張也套同一組 */
+  framing: Framing;
+  /** 介面頭像取照片的哪一塊 */
+  avatarFraming: Framing;
   ui: { lang: UiLang };
   player: PlayerSettings;
   video: VideoSettings;
@@ -185,6 +193,8 @@ export function defaultPrintSettings(): PrintSettings {
       text: "今天也好好過",
       textStyle: "tiles",
     },
+    framing: { ...DEFAULT_FRAMING },
+    avatarFraming: { ...DEFAULT_AVATAR_FRAMING },
     ...defaultInterfaceSettings(),
   };
 }
