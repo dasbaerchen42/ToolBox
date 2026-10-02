@@ -93,52 +93,6 @@ body {
 }
 /* 斜體是敘述、正體是對白:對白稍微加粗,兩者只靠濃淡區分 */
 .md-preview.md-soft-italic :is(p, li, td) { font-weight: 600; }
-.md-preview.md-soft-italic .chat-bubble { font-weight: 400; }
-
-/* 轉圖的對話框樣式:標了左/右的段落變成聊天泡泡 */
-.md-preview .chat-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6em;
-  margin: 1.2em 0;
-}
-.md-preview .chat-group.chat-continued { margin-top: -0.4em; }
-.md-preview .chat-left { align-items: flex-start; }
-.md-preview .chat-right { align-items: flex-end; }
-.md-preview .chat-run {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3em;
-  align-items: inherit;
-  width: 100%;
-}
-.md-preview .chat-name {
-  font-size: 0.8em;
-  color: var(--ink-secondary);
-  margin: 0 0.6em -0.3em;
-}
-.md-preview .chat-bubble {
-  max-width: 78%;
-  padding: 0.45em 0.9em;
-  border-radius: 1.1em;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-}
-.md-preview .chat-left .chat-bubble {
-  background: var(--paper-bg-3);
-  color: var(--ink-primary);
-  border-bottom-left-radius: 0.35em;
-}
-.md-preview .chat-right .chat-bubble {
-  background: var(--accent);
-  color: var(--on-accent);
-  border-bottom-right-radius: 0.35em;
-}
-/* 連續好幾顆時,只有最後一顆保留尖角,中間的都是圓的 */
-.md-preview .chat-left .chat-bubble:not(:last-child) { border-bottom-left-radius: 1.1em; }
-.md-preview .chat-right .chat-bubble:not(:last-child) { border-bottom-right-radius: 1.1em; }
-.md-preview .chat-bubble > *:first-child { margin-top: 0; }
-.md-preview .chat-bubble > *:last-child { margin-bottom: 0; }
 
 .md-preview code {
   font-family: var(--font-mono, ui-monospace, "SFMono-Regular", monospace);
