@@ -16,7 +16,8 @@ import {
   riso,
   type Pixels,
 } from "./pixels";
-import { printLayout, type PrintSettings, type Size } from "./settings";
+import { drawInterface } from "./interface";
+import { isInterfaceKind, printLayout, type PosterTextStyle, type PrintSettings, type Size } from "./settings";
 
 const FONT = `system-ui, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif`;
 const PAPER_COPY = hexToRgb("#e9e7e1");
@@ -176,6 +177,205 @@ function drawCollageText(
   }
 }
 
+const INK = "#141212";
+const PAPER = "#faf8f2";
+
+/** 彩帶:一條斜斜的長帶子,兩端剪成燕尾,後面墊一條黑色的影子帶 */
+function drawRibbon(ctx: CanvasRenderingContext2D, text: string, canvas: Size, u: number, theme: string) {
+  const width = canvas.width * 0.68;
+  const height = 11 * u;
+  const notch = height * 0.42;
+  ctx.save();
+  ctx.translate(canvas.width * 0.04 + width / 2, canvas.height - 15 * u);
+  ctx.rotate((-7 * Math.PI) / 180);
+  const band = (dx: number, dy: number, fill: string) => {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.moveTo(-width / 2 + dx, -height / 2 + dy);
+    ctx.lineTo(width / 2 + dx, -height / 2 + dy);
+    ctx.lineTo(width / 2 - notch + dx, dy);
+    ctx.lineTo(width / 2 + dx, height / 2 + dy);
+    ctx.lineTo(-width / 2 + dx, height / 2 + dy);
+    ctx.lineTo(-width / 2 + notch + dx, dy);
+    ctx.closePath();
+    ctx.fill();
+  };
+  band(1.2 * u, 1.4 * u, INK);
+  band(0, 0, theme);
+  // 上下兩條細白線,像緞帶的車邊
+  ctx.strokeStyle = "rgba(250, 248, 242, 0.75)";
+  ctx.lineWidth = Math.max(1, 0.35 * u);
+  ctx.setLineDash([u * 0.9, u * 0.6]);
+  ctx.beginPath();
+  ctx.moveTo(-width / 2 + notch * 1.4, -height / 2 + 1.3 * u);
+  ctx.lineTo(width / 2 - notch * 1.4, -height / 2 + 1.3 * u);
+  ctx.moveTo(-width / 2 + notch * 1.4, height / 2 - 1.3 * u);
+  ctx.lineTo(width / 2 - notch * 1.4, height / 2 - 1.3 * u);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = PAPER;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  let size = height * 0.62;
+  ctx.font = `900 ${size}px ${FONT}`;
+  const room = width - notch * 3;
+  const measured = ctx.measureText(text).width;
+  if (measured > room) {
+    size *= room / measured;
+    ctx.font = `900 ${size}px ${FONT}`;
+  }
+  ctx.fillText(text, 0, size * 0.04);
+  ctx.restore();
+}
+
+/** 圓點字:每個字一顆圓,顏色輪流換,高低稍微錯開 */
+function drawCircles(ctx: CanvasRenderingContext2D, chars: string[], canvas: Size, u: number, theme: string, seed: number) {
+  const random = mulberry32(seed * 17 + 3);
+  const styles = [
+    { bg: theme, fg: PAPER, ring: null },
+    { bg: INK, fg: PAPER, ring: null },
+    { bg: PAPER, fg: INK, ring: INK },
+  ];
+  let x = 6 * u;
+  let y = canvas.height - 14 * u;
+  const maxX = canvas.width * 0.72;
+  chars.forEach((char, i) => {
+    const r = (4.4 + random() * 1.2) * u;
+    if (x + r * 2 > maxX) {
+      x = 6 * u;
+      y -= 12 * u;
+    }
+    const style = styles[i % styles.length];
+    const cy = y + (random() - 0.5) * 2.5 * u;
+    ctx.save();
+    ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
+    ctx.shadowBlur = u;
+    ctx.shadowOffsetY = u * 0.4;
+    ctx.fillStyle = style.bg;
+    ctx.beginPath();
+    ctx.arc(x + r, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowColor = "transparent";
+    if (style.ring) {
+      ctx.strokeStyle = style.ring;
+      ctx.lineWidth = Math.max(1, 0.4 * u);
+      ctx.stroke();
+    }
+    ctx.fillStyle = style.fg;
+    ctx.font = `900 ${r * 1.15}px ${FONT}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(char, x + r, cy + r * 0.05);
+    ctx.restore();
+    x += r * 2 - 0.4 * u;
+  });
+}
+
+/** 字串切成幾行,每行最多 per 個字(盡量平均) */
+function splitLines(chars: string[], maxLines: number, per: number): string[] {
+  const lines = Math.min(maxLines, Math.max(1, Math.ceil(chars.length / per)));
+  const each = Math.ceil(chars.length / lines);
+  const out: string[] = [];
+  for (let i = 0; i < chars.length; i += each) out.push(chars.slice(i, i + each).join(""));
+  return out;
+}
+
+/** 圓章:一顆大圓,外圈虛線、裡面兩條橫線夾著字 */
+function drawBadge(ctx: CanvasRenderingContext2D, chars: string[], canvas: Size, u: number, theme: string) {
+  const r = 17 * u;
+  ctx.save();
+  ctx.translate(r + 5 * u, canvas.height - r - 6 * u);
+  ctx.rotate((-10 * Math.PI) / 180);
+  ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
+  ctx.shadowBlur = 1.5 * u;
+  ctx.shadowOffsetY = 0.6 * u;
+  ctx.fillStyle = theme;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowColor = "transparent";
+  ctx.strokeStyle = PAPER;
+  ctx.lineWidth = Math.max(1, 0.5 * u);
+  ctx.setLineDash([1.2 * u, 0.9 * u]);
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.86, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  const lines = splitLines(chars, 3, 4);
+  const size = Math.min(r * 0.42, (r * 1.15) / lines.length, (r * 1.35) / Math.max(...lines.map((l) => [...l].length)));
+  const top = (-(lines.length - 1) * size * 1.1) / 2;
+  ctx.fillStyle = PAPER;
+  ctx.font = `900 ${size}px ${FONT}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  lines.forEach((line, i) => ctx.fillText(line, 0, top + i * size * 1.1));
+  // 字的上下各一條細線
+  const half = r * 0.5;
+  const edge = top - size * 0.85;
+  ctx.lineWidth = Math.max(1, 0.4 * u);
+  ctx.beginPath();
+  ctx.moveTo(-half, edge);
+  ctx.lineTo(half, edge);
+  ctx.moveTo(-half, -edge);
+  ctx.lineTo(half, -edge);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** 標籤條:一行一條長方標籤,黑底與主題色交錯,左邊錯開一點 */
+function drawLabels(ctx: CanvasRenderingContext2D, chars: string[], canvas: Size, u: number, theme: string) {
+  const lines = splitLines(chars, 3, 6);
+  const size = 6.4 * u;
+  const pad = 1.6 * u;
+  let y = canvas.height - 8 * u - (lines.length - 1) * (size + pad * 2 + 1.2 * u);
+  lines.forEach((line, i) => {
+    ctx.save();
+    ctx.font = `900 ${size}px ${FONT}`;
+    const width = Math.min(canvas.width * 0.7, ctx.measureText(line).width + pad * 3);
+    const x = 5 * u + (i % 2) * 4 * u;
+    ctx.translate(x, y);
+    ctx.rotate(((i % 2 ? 2 : -2) * Math.PI) / 180);
+    ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
+    ctx.shadowBlur = u;
+    ctx.shadowOffsetY = u * 0.4;
+    ctx.fillStyle = i % 2 ? theme : INK;
+    ctx.fillRect(0, -size / 2 - pad, width, size + pad * 2);
+    ctx.shadowColor = "transparent";
+    ctx.fillStyle = PAPER;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(line, pad * 1.5, size * 0.04, width - pad * 3);
+    ctx.restore();
+    y += size + pad * 2 + 1.2 * u;
+  });
+}
+
+function drawPosterText(
+  ctx: CanvasRenderingContext2D,
+  style: PosterTextStyle,
+  text: string,
+  canvas: Size,
+  u: number,
+  theme: string,
+  seed: number
+) {
+  const chars = [...text.trim()].filter((c) => c.trim());
+  if (chars.length === 0) return;
+  switch (style) {
+    case "ribbon":
+      return drawRibbon(ctx, text.trim(), canvas, u, theme);
+    case "circles":
+      return drawCircles(ctx, chars, canvas, u, theme, seed);
+    case "badge":
+      return drawBadge(ctx, chars, canvas, u, theme);
+    case "label":
+      return drawLabels(ctx, chars, canvas, u, theme);
+    default:
+      return drawCollageText(ctx, text, canvas, u, theme, seed);
+  }
+}
+
 /**
  * 主程式:把 source(size 大小)照 settings 畫到 ctx 上。
  * ctx 的畫布要先設成 printLayout(size).canvas 的大小。
@@ -189,14 +389,16 @@ export function drawPrint(
   settings: PrintSettings,
   { scale = 1, develop = 1 }: { scale?: number; develop?: number } = {}
 ): void {
-  const layout = printLayout(size, settings.kind);
+  const layout = printLayout(size, settings.kind, settings);
   const { canvas, photo } = layout;
   const u = Math.min(size.width, size.height) / 100;
   const w = Math.round(photo.width);
   const h = Math.round(photo.height);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  switch (settings.kind) {
+  if (isInterfaceKind(settings.kind)) {
+    drawInterface(ctx, settings.kind, source, size, layout, settings);
+  } else switch (settings.kind) {
     case "halftone": {
       const px = pixelsOf(source, size, w, h);
       putPixels(ctx, px, halftone(px, settings.halftone.dot * u, hexToRgb(settings.halftone.paper)), 0, 0);
@@ -472,7 +674,14 @@ export function drawPrint(
       const px = pixelsOf(source, size, pw, ph);
       const toned = pixelsToCanvas(
         px,
-        posterTone(px, themeRgb, settings.poster.levels, settings.poster.dots ? 1.6 * u : 0, settings.poster.balance)
+        posterTone(
+          px,
+          themeRgb,
+          settings.poster.levels,
+          settings.poster.texture === "solid" ? 0 : settings.poster.dotSize * u,
+          settings.poster.balance,
+          settings.poster.texture === "lines" ? "lines" : "dots"
+        )
       );
       ctx.save();
       ctx.translate(W * 0.5, H * 0.46);
@@ -504,7 +713,7 @@ export function drawPrint(
       ctx.closePath();
       ctx.fill();
 
-      drawCollageText(ctx, settings.poster.text, canvas, u, theme, settings.seed);
+      drawPosterText(ctx, settings.poster.textStyle, settings.poster.text, canvas, u, theme, settings.seed);
       break;
     }
   }
@@ -519,7 +728,7 @@ export function drawPrint(
 
 /** 沖印所:壓平成新圖(邊框類的圖會比原圖大) */
 export async function applyPrint(image: WorkImage, settings: PrintSettings): Promise<WorkImage> {
-  const { canvas: size } = printLayout(image, settings.kind);
+  const { canvas: size } = printLayout(image, settings.kind, settings);
   assertCanvasSize(size.width, size.height);
 
   let bitmap: ImageBitmap;

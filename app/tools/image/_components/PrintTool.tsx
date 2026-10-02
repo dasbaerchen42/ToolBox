@@ -6,6 +6,7 @@ import { drawPrint } from "@/lib/tools/image/print/compose";
 import {
   defaultPrintSettings,
   printLayout,
+  POSTER_TEXT_STYLES,
   PRINT_GROUPS,
   THEME_COLORS,
   type PrintKind,
@@ -62,6 +63,10 @@ function readStored(): PrintSettings | null {
       ticket: { ...base.ticket, ...parsed.ticket },
       film: { ...base.film, ...parsed.film },
       poster: { ...base.poster, ...parsed.poster },
+      player: { ...base.player, ...parsed.player },
+      video: { ...base.video, ...parsed.video },
+      social: { ...base.social, ...parsed.social },
+      story: { ...base.story, ...parsed.story },
     };
   } catch {
     return null;
@@ -88,6 +93,29 @@ function TextField({
       onChange={(event) => onChange(event.target.value)}
       className={`w-full rounded-xl border px-3 py-2 text-sm ${t.input}`}
     />
+  );
+}
+
+/** 播放器的目前時間與全長;進度條照這兩個算 */
+function ClockFields({
+  current,
+  total,
+  onChange,
+  t,
+}: {
+  current: string;
+  total: string;
+  onChange: (patch: { current?: string; total?: string }) => void;
+  t: ThemeClasses;
+}) {
+  return (
+    <Field label="時間" hint="寫成 1:24 這樣，進度條會跟著走" t={t}>
+      <div className="flex items-center gap-2">
+        <TextField label="目前時間" value={current} onChange={(value) => onChange({ current: value })} t={t} />
+        <span className={t.muted}>/</span>
+        <TextField label="全長" value={total} onChange={(value) => onChange({ total: value })} t={t} />
+      </div>
+    </Field>
   );
 }
 
@@ -142,7 +170,7 @@ export default function PrintTool({ images, busy, t, onApply }: Props) {
           width: Math.max(1, Math.round(sample.width * scale)),
           height: Math.max(1, Math.round(sample.height * scale)),
         };
-        const { canvas: out } = printLayout(size, settings.kind);
+        const { canvas: out } = printLayout(size, settings.kind, settings);
         canvas.width = out.width;
         canvas.height = out.height;
         const ctx = canvas.getContext("2d");
@@ -221,10 +249,11 @@ export default function PrintTool({ images, busy, t, onApply }: Props) {
   const group = PRINT_GROUPS.find((g) => g.kinds.some((k) => k.kind === settings.kind)) ?? PRINT_GROUPS[0];
   const item = group.kinds.find((k) => k.kind === settings.kind) ?? group.kinds[0];
   const scale = Math.min(1, PREVIEW_MAX / Math.max(sample.width, sample.height));
-  const outSize = printLayout(sample, settings.kind).canvas;
+  const outSize = printLayout(sample, settings.kind, settings).canvas;
   const previewSize = printLayout(
     { width: Math.round(sample.width * scale), height: Math.round(sample.height * scale) },
-    settings.kind
+    settings.kind,
+    settings
   ).canvas;
   const aspect = previewSize.width / previewSize.height;
   const s = settings;
@@ -534,23 +563,42 @@ export default function PrintTool({ images, busy, t, onApply }: Props) {
                   </div>
                   <ColorField value={s.poster.color} onChange={(color) => updateIn("poster", { color })} t={t} />
                 </Field>
-                <Field label="色調" t={t}>
+                <Field label="色調" hint="人像用「四階」臉部比較清楚" t={t}>
                   <Segmented
                     value={String(s.poster.levels)}
-                    onChange={(value) => updateIn("poster", { levels: Number(value) as 2 | 3 })}
+                    onChange={(value) => updateIn("poster", { levels: Number(value) as 2 | 3 | 4 })}
                     t={t}
                     options={[
+                      { value: "4", label: "四階" },
                       { value: "3", label: "白＋主題色＋黑" },
                       { value: "2", label: "主題色＋黑" },
                     ]}
                   />
                 </Field>
-                <Toggle
-                  checked={s.poster.dots}
-                  onChange={(dots) => updateIn("poster", { dots })}
-                  label="中間調用主題色網點"
-                  t={t}
-                />
+                <Field label="主題色的質感" t={t}>
+                  <Segmented
+                    value={s.poster.texture}
+                    onChange={(texture) => updateIn("poster", { texture })}
+                    t={t}
+                    options={[
+                      { value: "solid", label: "平塗" },
+                      { value: "dots", label: "網點" },
+                      { value: "lines", label: "斜線" },
+                    ]}
+                  />
+                </Field>
+                {s.poster.texture !== "solid" && (
+                  <RangeField
+                    label={s.poster.texture === "dots" ? "網點大小" : "線距"}
+                    display={s.poster.dotSize.toFixed(1)}
+                    value={s.poster.dotSize}
+                    min={0.5}
+                    max={2.5}
+                    step={0.1}
+                    onChange={(dotSize) => updateIn("poster", { dotSize })}
+                    t={t}
+                  />
+                )}
                 <RangeField
                   label="明暗"
                   display={s.poster.balance < 0.4 ? "偏亮" : s.poster.balance > 0.6 ? "偏暗" : "中間"}
@@ -582,19 +630,183 @@ export default function PrintTool({ images, busy, t, onApply }: Props) {
                   onChange={(tilt) => updateIn("poster", { tilt })}
                   t={t}
                 />
-                <Field label="剪貼字" hint="每個字有自己的底色、大小與角度；按「換一組」重新排" t={t}>
-                  <TextField label="剪貼字" value={s.poster.text} onChange={(text) => updateIn("poster", { text })} t={t} />
+                <Field label="標語字" t={t}>
+                  <TextField label="標語字" value={s.poster.text} onChange={(text) => updateIn("poster", { text })} t={t} />
+                </Field>
+                <Field
+                  label="字的樣式"
+                  hint={POSTER_TEXT_STYLES.find((style) => style.value === s.poster.textStyle)?.hint}
+                  t={t}
+                >
+                  <Segmented
+                    value={s.poster.textStyle}
+                    onChange={(textStyle) => updateIn("poster", { textStyle })}
+                    t={t}
+                    options={POSTER_TEXT_STYLES.map(({ value, label }) => ({ value, label }))}
+                  />
                 </Field>
               </>
             )}
 
-            {(s.kind === "photocopy" || s.kind === "poster") && (
+            {s.kind === "player" && (
+              <>
+                <Field label="歌名" t={t}>
+                  <TextField label="歌名" value={s.player.title} onChange={(title) => updateIn("player", { title })} t={t} />
+                </Field>
+                <Field label="歌手" t={t}>
+                  <TextField label="歌手" value={s.player.artist} onChange={(artist) => updateIn("player", { artist })} t={t} />
+                </Field>
+                <ClockFields
+                  current={s.player.current}
+                  total={s.player.total}
+                  onChange={(patch) => updateIn("player", patch)}
+                  t={t}
+                />
+                <Field label="底色" t={t}>
+                  <Segmented
+                    value={s.player.theme}
+                    onChange={(theme) => updateIn("player", { theme })}
+                    t={t}
+                    options={[
+                      { value: "blur", label: "照片暈色" },
+                      { value: "light", label: "淺色" },
+                      { value: "dark", label: "深色" },
+                    ]}
+                  />
+                </Field>
+                <Toggle checked={s.player.playing} onChange={(playing) => updateIn("player", { playing })} label="播放中" t={t} />
+                <Toggle checked={s.player.liked} onChange={(liked) => updateIn("player", { liked })} label="已收藏（實心愛心）" t={t} />
+              </>
+            )}
+
+            {s.kind === "video" && (
+              <>
+                <ClockFields
+                  current={s.video.current}
+                  total={s.video.total}
+                  onChange={(patch) => updateIn("video", patch)}
+                  t={t}
+                />
+                <Field label="進度條顏色" t={t}>
+                  <ColorField value={s.video.accent} onChange={(accent) => updateIn("video", { accent })} t={t} />
+                </Field>
+                <Toggle checked={s.video.paused} onChange={(paused) => updateIn("video", { paused })} label="暫停中（中間顯示播放鍵）" t={t} />
+                <Toggle checked={s.video.info} onChange={(info) => updateIn("video", { info })} label="下面接標題資訊區" t={t} />
+                {s.video.info && (
+                  <>
+                    <Field label="標題" t={t}>
+                      <TextField label="影片標題" value={s.video.title} onChange={(title) => updateIn("video", { title })} t={t} />
+                    </Field>
+                    <Field label="副標" t={t}>
+                      <TextField label="影片副標" value={s.video.meta} onChange={(meta) => updateIn("video", { meta })} t={t} />
+                    </Field>
+                    <Field label="資訊區" t={t}>
+                      <Segmented
+                        value={s.video.theme}
+                        onChange={(theme) => updateIn("video", { theme })}
+                        t={t}
+                        options={[
+                          { value: "dark", label: "深色" },
+                          { value: "light", label: "淺色" },
+                        ]}
+                      />
+                    </Field>
+                  </>
+                )}
+              </>
+            )}
+
+            {s.kind === "social" && (
+              <>
+                <Field label="名字" t={t}>
+                  <TextField label="帳號名字" value={s.social.name} onChange={(name) => updateIn("social", { name })} t={t} />
+                </Field>
+                <Field label="地點" hint="留空就不顯示" t={t}>
+                  <TextField label="地點" value={s.social.place} onChange={(place) => updateIn("social", { place })} t={t} />
+                </Field>
+                <Field label="讚數" t={t}>
+                  <TextField label="讚數" value={s.social.likes} onChange={(likes) => updateIn("social", { likes })} t={t} />
+                </Field>
+                <Field label="內文" t={t}>
+                  <textarea
+                    value={s.social.caption}
+                    aria-label="內文"
+                    maxLength={120}
+                    rows={3}
+                    onChange={(event) => updateIn("social", { caption: event.target.value })}
+                    className={`w-full rounded-xl border px-3 py-2 text-sm ${t.input}`}
+                  />
+                </Field>
+                <Field label="時間" t={t}>
+                  <TextField label="發文時間" value={s.social.time} onChange={(time) => updateIn("social", { time })} t={t} />
+                </Field>
+                <Field label="照片比例" t={t}>
+                  <Segmented
+                    value={s.social.ratio}
+                    onChange={(ratio) => updateIn("social", { ratio })}
+                    t={t}
+                    options={[
+                      { value: "1:1", label: "方形" },
+                      { value: "4:5", label: "4:5 直式" },
+                    ]}
+                  />
+                </Field>
+                <Field label="底色" t={t}>
+                  <Segmented
+                    value={s.social.theme}
+                    onChange={(theme) => updateIn("social", { theme })}
+                    t={t}
+                    options={[
+                      { value: "light", label: "淺色" },
+                      { value: "dark", label: "深色" },
+                    ]}
+                  />
+                </Field>
+                <Toggle checked={s.social.liked} onChange={(liked) => updateIn("social", { liked })} label="已按讚（紅色愛心）" t={t} />
+              </>
+            )}
+
+            {s.kind === "story" && (
+              <>
+                <Field label="名字" t={t}>
+                  <TextField label="名字" value={s.story.name} onChange={(name) => updateIn("story", { name })} t={t} />
+                </Field>
+                <Field label="時間" t={t}>
+                  <TextField label="時間" value={s.story.time} onChange={(time) => updateIn("story", { time })} t={t} />
+                </Field>
+                <RangeField
+                  label="總共幾段"
+                  display={String(s.story.segments)}
+                  value={s.story.segments}
+                  min={1}
+                  max={10}
+                  onChange={(segments) =>
+                    updateIn("story", { segments, current: Math.min(segments, s.story.current) })
+                  }
+                  t={t}
+                />
+                <RangeField
+                  label="現在第幾段"
+                  display={String(s.story.current)}
+                  value={s.story.current}
+                  min={1}
+                  max={s.story.segments}
+                  onChange={(current) => updateIn("story", { current })}
+                  t={t}
+                />
+                <Field label="回覆框文字" t={t}>
+                  <TextField label="回覆框文字" value={s.story.reply} onChange={(reply) => updateIn("story", { reply })} t={t} />
+                </Field>
+              </>
+            )}
+
+            {(s.kind === "photocopy" || (s.kind === "poster" && (s.poster.textStyle === "tiles" || s.poster.textStyle === "circles"))) && (
               <ActionButton
                 tone="secondary"
                 t={t}
                 onClick={() => update("seed", 1 + Math.floor(Math.random() * 100000))}
               >
-                換一組{s.kind === "poster" ? "剪貼字擺法" : "碳粉痕"}
+                換一組{s.kind === "poster" ? "字的擺法" : "碳粉痕"}
               </ActionButton>
             )}
           </div>
