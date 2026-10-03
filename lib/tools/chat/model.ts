@@ -11,20 +11,27 @@ export type ChatMessage = { id: string; side: ChatSide; text: string };
 export type ChatTheme = "paper" | "light" | "dark";
 
 export type ChatSettings = {
+  /** 最上面的標題列(名稱、副標題、頭像);關掉就整條不畫 */
+  showHeader: boolean;
   /** 最上面的聊天室名稱 */
   title: string;
   /** 名稱下面的小字,例如「上線中」;空的就不顯示 */
   subtitle: string;
   leftName: string;
   rightName: string;
-  /** 左邊每一串訊息上面顯示名字 */
-  showNames: boolean;
-  /** 左邊每一串訊息旁邊顯示頭像(名字的第一個字) */
-  showAvatars: boolean;
-  /** 最下面「XXX 正在輸入…」 */
+  /** 每一串訊息旁邊顯示頭像(上傳的圖,沒有就用名字的第一個字) */
+  leftShowAvatar: boolean;
+  rightShowAvatar: boolean;
+  /** 每一串訊息上面顯示名字 */
+  leftShowName: boolean;
+  rightShowName: boolean;
+  /** 上傳的頭像(縮小過的 data URL);空字串就用名字的第一個字 */
+  leftAvatar: string;
+  rightAvatar: string;
+  /** 最下面「XXX is typing…」 */
   typing: boolean;
   typingSide: "left" | "right";
-  /** 正在輸入的字;空的就用「名字 正在輸入…」 */
+  /** 正在輸入的字;空的就用「名字 is typing…」 */
   typingText: string;
   /** 最底下畫一條假的輸入列 */
   inputBar: boolean;
@@ -49,12 +56,17 @@ export const CHAT_WIDTHS: { value: ChatSettings["width"]; label: string }[] = [
 
 export function defaultChatSettings(): ChatSettings {
   return {
-    title: "程歌",
+    showHeader: true,
+    title: "小熊",
     subtitle: "上線中",
-    leftName: "菅原仁",
-    rightName: "程歌",
-    showNames: false,
-    showAvatars: true,
+    leftName: "小熊",
+    rightName: "熊寶",
+    leftShowAvatar: true,
+    rightShowAvatar: false,
+    leftShowName: false,
+    rightShowName: false,
+    leftAvatar: "",
+    rightAvatar: "",
     typing: true,
     typingSide: "left",
     typingText: "",
@@ -78,9 +90,11 @@ export function newMessageId(): string {
 export function sampleMessages(): ChatMessage[] {
   return [
     { id: newMessageId(), side: "center", text: "下午 3:24" },
-    { id: newMessageId(), side: "right", text: "強制微波熱炒" },
-    { id: newMessageId(), side: "left", text: "強制微波熱炒是什麼啦😂\n妳是想把我放進微波爐裡轉嗎" },
-    { id: newMessageId(), side: "left", text: "那我會爆炸喔 橘子是圓的才能滾 熊不能微波" },
+    { id: newMessageId(), side: "left", text: "晚餐要吃什麼" },
+    { id: newMessageId(), side: "right", text: "都可以～" },
+    { id: newMessageId(), side: "left", text: "那吃火鍋？" },
+    { id: newMessageId(), side: "right", text: "好欸🍲\n我要很多很多玉米" },
+    { id: newMessageId(), side: "center", text: "熊寶開心地轉了一圈" },
   ];
 }
 
@@ -149,7 +163,7 @@ export function initialOf(name: string): string {
 export function typingLabel(settings: ChatSettings): string {
   if (settings.typingText.trim()) return settings.typingText.trim();
   const name = settings.typingSide === "left" ? settings.leftName : settings.rightName;
-  return name.trim() ? `${name.trim()} 正在輸入…` : "正在輸入…";
+  return name.trim() ? `${name.trim()} is typing…` : "typing…";
 }
 
 /** 換邊:左 → 右 → 置中 → 左 */
@@ -175,6 +189,9 @@ export function readChatRoom(raw: unknown): ChatRoom | null {
   const base = defaultChatSettings();
   const settings = { ...base } as Record<string, unknown>;
   if (isRecord(raw.settings)) {
+    // 舊版只有左邊能開頭像、名字
+    if (typeof raw.settings.showAvatars === "boolean") settings.leftShowAvatar = raw.settings.showAvatars;
+    if (typeof raw.settings.showNames === "boolean") settings.leftShowName = raw.settings.showNames;
     for (const [key, value] of Object.entries(base)) {
       const incoming = raw.settings[key];
       if (incoming !== undefined && typeof incoming === typeof value) settings[key] = incoming;
@@ -184,6 +201,9 @@ export function readChatRoom(raw: unknown): ChatRoom | null {
   if (!["paper", "light", "dark"].includes(settings.theme as string)) settings.theme = base.theme;
   if (settings.pages !== "long" && settings.pages !== "screen") settings.pages = base.pages;
   if (!["blank", "line", "whole"].includes(settings.pasteSplit as string)) settings.pasteSplit = base.pasteSplit;
+  for (const key of ["leftAvatar", "rightAvatar"] as const) {
+    if (!/^(data:image\/[a-z+]+;base64,[A-Za-z0-9+/=]+)?$/.test(settings[key] as string)) settings[key] = "";
+  }
   if (settings.typingSide !== "left" && settings.typingSide !== "right") settings.typingSide = base.typingSide;
   const messages = Array.isArray(raw.messages)
     ? raw.messages.filter(

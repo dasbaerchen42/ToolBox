@@ -22,7 +22,8 @@ export function chatMetrics(settings: ChatSettings) {
     bubblePadX: Math.round(body * 0.85),
     bubblePadY: Math.round(body * 0.55),
     avatar: wide ? 36 : 32,
-    header: wide ? 72 : 64,
+    /** 標題列關掉時是 0 */
+    header: settings.showHeader ? (wide ? 72 : 64) : 0,
     inputBar: wide ? 64 : 58,
     groupGap: 14,
     runGap: 4,
@@ -131,9 +132,15 @@ export function layoutMessages(
   measure: Measure
 ): { items: LayoutItem[]; height: number } {
   const m = chatMetrics(settings);
-  const avatarSpace = settings.showAvatars ? m.avatar + 8 : 0;
-  const maxBubble = Math.round((m.width - m.padX * 2 - avatarSpace) * 0.78);
+  const showAvatar = { left: settings.leftShowAvatar, right: settings.rightShowAvatar };
+  const showName = { left: settings.leftShowName, right: settings.rightShowName };
+  const names = { left: settings.leftName.trim(), right: settings.rightName.trim() };
+  const avatarSpace = (side: "left" | "right") => (showAvatar[side] ? m.avatar + 8 : 0);
+  const maxBubble = Math.round((m.width - m.padX * 2 - Math.max(avatarSpace("left"), avatarSpace("right"))) * 0.78);
   const textMax = maxBubble - m.bubblePadX * 2;
+  /** 泡泡靠哪一邊:左邊從頭像右邊開始,右邊在頭像左邊結束 */
+  const bubbleX = (side: "left" | "right", w: number) =>
+    side === "left" ? m.padX + avatarSpace("left") : m.width - m.padX - avatarSpace("right") - w;
   const items: LayoutItem[] = [];
   let y = m.groupGap;
   let previous: ChatSide | null = null;
@@ -145,8 +152,9 @@ export function layoutMessages(
     if (index > 0) y += startsRun ? m.groupGap : m.runGap;
 
     if (side === "center") {
-      const lines = wrapLines(message.text, m.width * 0.72, fonts.small, measure);
-      const w = Math.min(m.width * 0.8, Math.max(...lines.map((line) => measure(line, fonts.small))) + 20);
+      // 置中的小字(時間、旁白):沒有底框,只是置中;w、h 是點選的範圍
+      const lines = wrapLines(message.text, m.width * 0.78, fonts.small, measure);
+      const w = Math.min(m.width * 0.84, Math.max(...lines.map((line) => measure(line, fonts.small))) + 20);
       const h = lines.length * Math.round(m.small * 1.5) + 8;
       items.push({ kind: "center", id: message.id, lines, x: (m.width - w) / 2, y, w, h });
       y += h;
@@ -154,14 +162,13 @@ export function layoutMessages(
       return;
     }
 
-    const name = side === "left" ? settings.leftName : settings.rightName;
-    const showName = startsRun && side === "left" && settings.showNames && name.trim() !== "";
-    if (showName) y += m.small + 6;
+    const name = names[side];
+    const withName = startsRun && showName[side] && name !== "";
+    if (withName) y += m.small + 6;
     const lines = wrapLines(message.text, textMax, fonts.body, measure);
     const textWidth = Math.max(m.body, ...lines.map((line) => measure(line, fonts.body)));
     const w = Math.ceil(textWidth + m.bubblePadX * 2);
     const h = lines.length * m.lineHeight + m.bubblePadY * 2;
-    const x = side === "left" ? m.padX + (settings.showAvatars ? avatarSpace : 0) : m.width - m.padX - w;
     items.push({
       kind: "bubble",
       id: message.id,
@@ -169,9 +176,9 @@ export function layoutMessages(
       lines,
       first: startsRun,
       last: nextSide !== side,
-      name: showName ? name.trim() : null,
-      avatar: startsRun && side === "left" && settings.showAvatars,
-      x,
+      name: withName ? name : null,
+      avatar: startsRun && showAvatar[side],
+      x: bubbleX(side, w),
       y,
       w,
       h,
@@ -185,9 +192,16 @@ export function layoutMessages(
     y += previous === side ? m.runGap : m.groupGap;
     const w = Math.round(m.body * 3.6);
     const h = m.lineHeight + m.bubblePadY * 2;
-    const avatar = side === "left" && settings.showAvatars;
-    const x = side === "left" ? m.padX + (settings.showAvatars ? avatarSpace : 0) : m.width - m.padX - w;
-    items.push({ kind: "typing", side, label: typingLabel(settings), avatar: avatar && previous !== side, x, y, w, h });
+    items.push({
+      kind: "typing",
+      side,
+      label: typingLabel(settings),
+      avatar: showAvatar[side] && previous !== side,
+      x: bubbleX(side, w),
+      y,
+      w,
+      h,
+    });
     y += h + m.small + 8;
   }
 

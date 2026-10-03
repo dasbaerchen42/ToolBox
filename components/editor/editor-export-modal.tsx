@@ -13,7 +13,7 @@ import {
   type FontFamilyName,
 } from "@/lib/preferences";
 import { FONT_OPTIONS, getFontFamily } from "@/lib/editor-font";
-import { shareImages } from "@/lib/download";
+import { downloadEach, shareImages } from "@/lib/download";
 import { useCanShareImages } from "@/hooks/useCanShareImages";
 import { type WritingMode } from "@/lib/storage";
 import {
@@ -241,7 +241,7 @@ export default function EditorExportModal({
     }
   }
 
-  async function download() {
+  async function download(mode: "zip" | "each" = "zip") {
     if (!images) return;
     const picked = images.filter((_, index) => pickedPages.has(index));
     if (picked.length === 0) {
@@ -254,6 +254,9 @@ export default function EditorExportModal({
       if (picked.length === 1) {
         downloadBlob(picked[0]);
         setStatus("已下載 1 張 PNG。");
+      } else if (mode === "each") {
+        await downloadEach(picked);
+        setStatus(`已逐張下載 ${picked.length} 張 PNG。`);
       } else {
         downloadBlob(await zipImages(picked, title));
         setStatus(`已打包 ${picked.length} 張成 zip。`);
@@ -531,15 +534,35 @@ export default function EditorExportModal({
           >
             {busy ? "處理中……" : images ? "重新產生" : "產生圖片"}
           </button>
-          {images && (
+          {images && pickedPages.size <= 1 && (
             <button
               type="button"
-              onClick={download}
+              onClick={() => void download()}
               disabled={busy}
               className={`rounded-2xl border px-4 py-2 text-sm transition disabled:opacity-50 ${theme.border} ${theme.primaryButton} ${theme.primaryButtonText}`}
             >
               下載選取的（{pickedPages.size}）
             </button>
+          )}
+          {images && pickedPages.size > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={() => void download("each")}
+                disabled={busy}
+                className={`rounded-2xl border px-4 py-2 text-sm transition disabled:opacity-50 ${theme.border} ${theme.primaryButton} ${theme.primaryButtonText}`}
+              >
+                逐張下載（{pickedPages.size}）
+              </button>
+              <button
+                type="button"
+                onClick={() => void download("zip")}
+                disabled={busy}
+                className={`rounded-2xl border px-4 py-2 text-sm transition disabled:opacity-50 ${theme.border} ${theme.primaryButton} ${theme.primaryButtonText}`}
+              >
+                打包 ZIP
+              </button>
+            </>
           )}
           {images && canShare && (
             <button

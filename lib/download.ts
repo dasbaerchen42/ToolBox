@@ -50,6 +50,17 @@ export function downloadBlob({ name, blob }: ExportedImage): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
+/**
+ * 一張一張下載(不打包)。中間隔一小段時間,
+ * 瀏覽器才不會把連續的下載當成同一個而擋掉;第一次可能會問「允許下載多個檔案」。
+ */
+export async function downloadEach(images: ExportedImage[], gapMs = 500): Promise<void> {
+  for (const [index, image] of images.entries()) {
+    if (index > 0) await new Promise((resolve) => setTimeout(resolve, gapMs));
+    downloadBlob(image);
+  }
+}
+
 let shareSupport: boolean | null = null;
 
 /**

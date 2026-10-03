@@ -1,4 +1,4 @@
-import { chatFonts, layoutMessages, maxBodyHeight, paginate, wrapLines, type Measure } from "./layout";
+import { chatFonts, chatMetrics, layoutMessages, maxBodyHeight, paginate, wrapLines, type Measure } from "./layout";
 import {
   defaultChatSettings,
   initialOf,
@@ -36,21 +36,23 @@ describe("chat:貼上整理", () => {
     expect(moveMessage(list, "b", -1).map((m) => m.id)).toEqual(["b", "a"]);
     expect(moveMessage(list, "a", -1)).toBe(list);
     expect(initialOf("kanon")).toBe("K");
-    expect(initialOf("菅原仁")).toBe("菅");
+    expect(initialOf("小熊")).toBe("小");
     const settings = defaultChatSettings();
-    expect(typingLabel(settings)).toBe("菅原仁 正在輸入…");
+    expect(typingLabel(settings)).toBe("小熊 is typing…");
+    expect(typingLabel({ ...settings, typingSide: "right" })).toBe("熊寶 is typing…");
     expect(typingLabel({ ...settings, typingText: "Kanon is typing…" })).toBe("Kanon is typing…");
   });
 
   it("讀回存檔:壞掉的欄位用預設值,壞掉的訊息略過", () => {
     const room = readChatRoom({
-      settings: { title: "群組", width: 999, theme: "neon", showNames: "yes" },
+      settings: { title: "群組", width: 999, theme: "neon", leftShowName: "yes", leftAvatar: "javascript:alert(1)" },
       messages: [{ id: "a", side: "left", text: "hi" }, { id: "b", side: "up", text: "x" }, null],
     })!;
     expect(room.settings.title).toBe("群組");
     expect(room.settings.width).toBe(390);
     expect(room.settings.theme).toBe("paper");
-    expect(room.settings.showNames).toBe(false);
+    expect(room.settings.leftShowName).toBe(false);
+    expect(room.settings.leftAvatar).toBe("");
     expect(room.messages).toHaveLength(1);
     expect(readChatRoom("nope")).toBeNull();
   });
@@ -94,11 +96,27 @@ describe("chat:版面", () => {
   it("正在輸入接在最後;左邊開名字時名字佔一行", () => {
     const withTyping = layoutMessages(messages, { ...settings, typing: true }, fonts, measure);
     expect(withTyping.items.at(-1)?.kind).toBe("typing");
-    const named = layoutMessages(messages, { ...settings, showNames: true }, fonts, measure);
+    const named = layoutMessages(messages, { ...settings, leftShowName: true }, fonts, measure);
     const plain = layoutMessages(messages, settings, fonts, measure);
     const first = named.items[1];
-    expect(first.kind === "bubble" && first.name).toBe("菅原仁");
+    expect(first.kind === "bubble" && first.name).toBe("小熊");
     expect(named.height).toBeGreaterThan(plain.height);
+  });
+
+  it("右邊也能有頭像與名字:泡泡讓出頭像的位置", () => {
+    const both = { ...settings, rightShowAvatar: true, rightShowName: true };
+    const { items } = layoutMessages(messages, both, fonts, measure);
+    const reply = items[3];
+    expect(reply.kind === "bubble" && reply.avatar && reply.name).toBe("熊寶");
+    expect(reply.x + reply.w).toBe(settings.width - 12 - (32 + 8));
+  });
+
+  it("舊存檔的 showAvatars、showNames 搬到左邊;標題列關掉時高度是 0", () => {
+    const room = readChatRoom({ settings: { showAvatars: false, showNames: true }, messages: [] })!;
+    expect(room.settings.leftShowAvatar).toBe(false);
+    expect(room.settings.leftShowName).toBe(true);
+    expect(room.settings.showHeader).toBe(true);
+    expect(chatMetrics({ ...settings, showHeader: false }).header).toBe(0);
   });
 
   it("太長時只在訊息之間分張,每張都不超過上限", () => {
