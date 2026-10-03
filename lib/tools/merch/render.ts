@@ -1,21 +1,17 @@
 // 周邊工坊的畫法。所有座標都是「設計單位」(DESIGN_SIZE),
 // 輸出時呼叫端先 ctx.scale 放大,線條與拼豆都是算出來的,放大不糊。
 
-import { shade } from "@/lib/tools/beads/color";
 import { beadShades, drawBeads } from "@/lib/tools/beads/draw";
 import type { BeadColor } from "@/lib/tools/beads/palette";
 import type { BeadPattern } from "@/lib/tools/beads/pattern";
 import { meltOf } from "@/lib/tools/beads/finish";
 import {
   artKey,
-  type AcrylicDesign,
-  type BeadCharmDesign,
   type CardDesign,
   type CharmDesign,
   type OmamoriDesign,
   type Placed,
 } from "./design";
-import { applyHomography, drawPerspective, homography, isConvex, rectQuad, type Quad } from "./perspective";
 import { partPosition, type Body, type Container } from "./physics";
 
 const FONT = `system-ui, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif`;
@@ -197,12 +193,6 @@ function drawMotifFrame(ctx: CanvasRenderingContext2D, w: number, h: number, ins
 export function cardArea(w: number, h: number) {
   const inset = w * 0.07;
   return { x: inset, y: inset, width: w - inset * 2, height: h - inset * 2 };
-}
-
-/** 透卡板子上放貼紙的範圍(握把不算) */
-export function acrylicArea(design: AcrylicDesign) {
-  const { width, boardHeight } = acrylicBoardSize(design);
-  return { x: 0, y: 0, width, height: boardHeight };
 }
 
 export type CardAssets = { photo: (CanvasImageSource & { width: number; height: number }) | null; arts: Map<string, Art> };
@@ -575,19 +565,8 @@ function drawEmbroidery(ctx: CanvasRenderingContext2D, text: string, x: number, 
   ctx.restore();
 }
 
-/**
- * 御守。side 是正面或背面;sway 是繩結晃動的角度(弧度)。
- * 背面只有「御守」兩個大字與一行小字。
- */
-export function drawOmamori(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  design: OmamoriDesign,
-  side: "front" | "back",
-  sway: number,
-  bell: Art | null
-) {
+/** 御守的繩結(與拼豆小鈴鐺):從袋口的孔往上繞一圈再打結,繞著孔晃(sway 是弧度) */
+export function drawOmamoriCord(ctx: CanvasRenderingContext2D, w: number, h: number, design: OmamoriDesign, sway: number, bell: Art | null) {
   // 繩結:從袋口往上繞一圈再打結,繞著袋口晃
   ctx.save();
   ctx.translate(w / 2, h * 0.21);
@@ -624,12 +603,15 @@ export function drawOmamori(
     ctx.restore();
   }
   ctx.restore();
+}
 
-  // 袋子
+/**
+ * 御守袋的印刷:布料、花紋、滾邊、繡字。side 是正面或背面,
+ * 背面只有「御守」兩個大字與一行小字。壓克力御守把它當印刷層。
+ */
+export function drawOmamoriBag(ctx: CanvasRenderingContext2D, w: number, h: number, design: OmamoriDesign, side: "front" | "back") {
+  // 袋子(印在壓克力上,所以不帶陰影)
   ctx.save();
-  ctx.shadowColor = "rgba(0, 0, 0, 0.28)";
-  ctx.shadowBlur = 16;
-  ctx.shadowOffsetY = 6;
   const bag = omamoriBag(ctx, w, h);
   ctx.fillStyle = design.fabric;
   ctx.fill();
@@ -689,236 +671,4 @@ export function drawOmamori(
     chars.forEach((char, i) => ctx.fillText(char, w / 2, y0 + i * w * 0.055));
     ctx.restore();
   }
-}
-
-/** 透卡的板子(攤平):透明壓克力 + 貼紙 + 邊;打卡棒在下面多一根握把 */
-export function acrylicBoardSize(design: AcrylicDesign) {
-  const width = 600;
-  const boardHeight = design.shape === "circle" ? 600 : 420;
-  const stick = design.mode === "stick" ? 260 : 0;
-  return { width, height: boardHeight + stick, boardHeight };
-}
-
-export function drawAcrylicBoard(ctx: CanvasRenderingContext2D, design: AcrylicDesign, arts: Map<string, Art>) {
-  const { width, boardHeight, height } = acrylicBoardSize(design);
-  const path = () => {
-    ctx.beginPath();
-    if (design.shape === "circle") ctx.arc(width / 2, boardHeight / 2, width / 2 - 6, 0, Math.PI * 2);
-    else ctx.roundRect(6, 6, width - 12, boardHeight - 12, 36);
-  };
-
-  // 握把(打卡棒):在板子後面
-  if (design.mode === "stick") {
-    ctx.save();
-    const sw = 46;
-    const g = ctx.createLinearGradient(width / 2 - sw / 2, 0, width / 2 + sw / 2, 0);
-    g.addColorStop(0, "rgba(230, 236, 245, 0.55)");
-    g.addColorStop(0.5, "rgba(255, 255, 255, 0.85)");
-    g.addColorStop(1, "rgba(210, 218, 230, 0.55)");
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.roundRect(width / 2 - sw / 2, boardHeight - 40, sw, height - boardHeight + 34, 18);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  // 壓克力本體:幾乎透明,只帶一點點白
-  ctx.save();
-  path();
-  ctx.fillStyle = design.edge ? "rgba(255, 255, 255, 0.1)" : "rgba(255, 255, 255, 0)";
-  ctx.fill();
-  ctx.restore();
-
-  const area = acrylicArea(design);
-  ctx.save();
-  path();
-  ctx.clip();
-  for (const placed of design.stickers) {
-    const art = arts.get(artKey(placed));
-    if (art) drawPlaced(ctx, art, placed, area);
-  }
-  ctx.restore();
-
-  if (design.edge) {
-    // 壓克力的厚度:亮色描邊 + 內側一條細亮線 + 淡淡的斜反光
-    ctx.save();
-    path();
-    ctx.lineWidth = 10;
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
-    ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
-    ctx.shadowBlur = 8;
-    ctx.stroke();
-    ctx.shadowColor = "transparent";
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
-    ctx.stroke();
-    path();
-    ctx.clip();
-    const g = ctx.createLinearGradient(0, 0, width, boardHeight);
-    g.addColorStop(0, "rgba(255, 255, 255, 0.28)");
-    g.addColorStop(0.3, "rgba(255, 255, 255, 0)");
-    g.addColorStop(0.62, "rgba(255, 255, 255, 0)");
-    g.addColorStop(0.7, "rgba(255, 255, 255, 0.16)");
-    g.addColorStop(0.78, "rgba(255, 255, 255, 0)");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, width, boardHeight);
-    ctx.restore();
-  }
-}
-
-/**
- * 四個角只管板子;打卡棒的握把在板子下面,用同一個透視延伸出去。
- * 延伸到地平線另一邊(透視拉太斜)時回傳 null,只好把整張塞進四個角。
- */
-export function acrylicImageQuad(design: AcrylicDesign, board: Quad): Quad | null {
-  const { width, height, boardHeight } = acrylicBoardSize(design);
-  if (height === boardHeight) return board;
-  const h = homography(rectQuad(0, 0, width, boardHeight), board);
-  const corners = rectQuad(0, 0, width, height);
-  if (corners.some((p) => h[6] * p.x + h[7] * p.y + h[8] <= 0.05)) return null;
-  const quad = corners.map((p) => applyHomography(h, p)) as Quad;
-  return isConvex(quad) ? quad : null;
-}
-
-/**
- * 透卡整張:照片當背景,板子透視貼在四個角上。
- * 沒有照片時用一張淡淡的漸層當背景,也能直接做。
- */
-export function drawAcrylicScene(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  design: AcrylicDesign,
-  photo: (CanvasImageSource & { width: number; height: number }) | null,
-  board: HTMLCanvasElement
-) {
-  if (photo) drawCover(ctx, photo, 0, 0, w, h);
-  else {
-    const g = ctx.createLinearGradient(0, 0, w, h);
-    g.addColorStop(0, "#f3e6c8");
-    g.addColorStop(1, "#bbc8e6");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, h);
-  }
-  const quad = design.corners.map((p) => ({ x: p.x * w, y: p.y * h })) as Quad;
-  drawPerspective(ctx, board, board.width, board.height, acrylicImageQuad(design, quad) ?? quad);
-}
-
-// ---- 拼豆吊飾:作品本身打孔掛鍊 ----
-
-/**
- * 掛點:最上面一列有豆子的格子裡,離中線最近的那一顆(格為單位的中心)。
- * 真的拼豆吊飾就是讓小圈穿過最上面那顆豆子的洞,掛起來才正。
- */
-export function hangBead(pattern: BeadPattern): { x: number; y: number } | null {
-  const center = (pattern.cols - 1) / 2;
-  for (let row = 0; row < pattern.rows; row += 1) {
-    let best = -1;
-    for (let col = 0; col < pattern.cols; col += 1) {
-      if (pattern.cells[row * pattern.cols + col] < 0) continue;
-      if (best < 0 || Math.abs(col - center) < Math.abs(best - center)) best = col;
-    }
-    if (best >= 0) return { x: best + 0.5, y: row + 0.5 };
-  }
-  return null;
-}
-
-/**
- * 吊飾的版面:作品要畫多大。作品是從掛點那顆豆子吊著的,掛點不一定在正中間,
- * 所以照「掛點往左、往右哪一邊比較寬」來算,兩邊都留擺動的空間,才不會擺出畫面。
- */
-export function beadCharmLayout(w: number, h: number, art: Art, hang: { x: number; y: number }) {
-  const cols = art.pattern?.cols ?? 1;
-  const rows = art.pattern?.rows ?? 1;
-  const reach = Math.max(hang.x, cols - hang.x);
-  const cell = Math.min((w * 0.36) / reach, (h * 0.6) / rows);
-  return { scale: cell / (art.width / cols), cell, drop: h * 0.07 };
-}
-
-function metalStroke(ctx: CanvasRenderingContext2D, color: string, width: number) {
-  ctx.lineWidth = width;
-  ctx.strokeStyle = shade(color, -0.25);
-  ctx.stroke();
-  ctx.lineWidth = width * 0.45;
-  ctx.strokeStyle = shade(color, 0.35);
-  ctx.stroke();
-}
-
-/**
- * 拼豆吊飾。swing 是繞吊點擺動的角度(弧度)。
- * 上面是鑰匙圈加短鍊(或手機吊繩),小圈穿過作品最上面那顆豆子的洞。
- */
-export function drawBeadCharm(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  design: BeadCharmDesign,
-  art: Art | null,
-  swing: number
-) {
-  const pivot = { x: w / 2, y: h * 0.2 };
-
-  // 吊繩或鑰匙圈(不跟著擺)
-  ctx.save();
-  if (design.hardware === "ring") {
-    const r = w * 0.085;
-    ctx.beginPath();
-    ctx.arc(pivot.x, pivot.y - r * 1.05, r, 0, Math.PI * 2);
-    metalStroke(ctx, design.metal, w * 0.016);
-  } else {
-    // 手機吊繩:一條細繩繞成長圈,往上延伸出畫面
-    ctx.lineCap = "round";
-    ctx.strokeStyle = design.strap;
-    ctx.lineWidth = w * 0.013;
-    ctx.beginPath();
-    ctx.moveTo(pivot.x - w * 0.02, pivot.y);
-    ctx.bezierCurveTo(pivot.x - w * 0.09, pivot.y - h * 0.08, pivot.x - w * 0.05, 0, pivot.x - w * 0.03, -4);
-    ctx.moveTo(pivot.x + w * 0.02, pivot.y);
-    ctx.bezierCurveTo(pivot.x + w * 0.09, pivot.y - h * 0.08, pivot.x + w * 0.05, 0, pivot.x + w * 0.03, -4);
-    ctx.stroke();
-    ctx.fillStyle = shade(design.strap, -0.2);
-    ctx.beginPath();
-    ctx.roundRect(pivot.x - w * 0.03, pivot.y - h * 0.012, w * 0.06, h * 0.028, w * 0.01);
-    ctx.fill();
-  }
-  ctx.restore();
-
-  if (!art || !art.pattern) return;
-  const hang = hangBead(art.pattern);
-  if (!hang) return;
-  const { scale, cell, drop } = beadCharmLayout(w, h, art, hang);
-
-  ctx.save();
-  ctx.translate(pivot.x, pivot.y);
-  ctx.rotate(swing);
-
-  // 短鍊:幾個橢圓環一上一下
-  const links = design.hardware === "ring" ? 3 : 1;
-  const linkH = drop / Math.max(1, links);
-  for (let k = 0; k < links; k += 1) {
-    ctx.beginPath();
-    if (k % 2 === 0) ctx.ellipse(0, linkH * (k + 0.5), w * 0.012, linkH * 0.62, 0, 0, Math.PI * 2);
-    else ctx.ellipse(0, linkH * (k + 0.5), w * 0.004, linkH * 0.62, 0, 0, Math.PI * 2);
-    metalStroke(ctx, design.metal, w * 0.008);
-  }
-
-  // 作品:讓掛點那顆豆子的中心剛好在鍊子下面
-  const bead = { x: hang.x * cell, y: hang.y * cell };
-  const top = drop + cell * 0.55;
-  ctx.save();
-  ctx.translate(-bead.x, top - bead.y);
-  ctx.shadowColor = "rgba(0, 0, 0, 0.28)";
-  ctx.shadowBlur = cell * 0.9;
-  ctx.shadowOffsetY = cell * 0.35;
-  ctx.drawImage(art.source, 0, 0, art.width * scale, art.height * scale);
-  ctx.restore();
-
-  // 小圈:從鍊子末端繞過那顆豆子的洞(前半圈畫在豆子上面)
-  ctx.beginPath();
-  ctx.ellipse(0, (drop + top) / 2, cell * 0.2, (top - drop) / 2 + cell * 0.12, 0, 0, Math.PI * 2);
-  metalStroke(ctx, design.metal, Math.max(2, cell * 0.1));
-  ctx.restore();
 }

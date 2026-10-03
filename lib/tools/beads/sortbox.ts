@@ -9,33 +9,45 @@
 import { hexToRgb, labDistanceSq, oklabToRgb, rgbToHex, rgbToOklab, type Lab } from "./color";
 import type { BeadColor } from "./palette";
 
-export type BoxShape = "strip" | "box";
-export type BoxLevel = "easy" | "medium" | "hard";
+/**
+ * strip:一維色條(兩端固定);three:三色色條(兩端與正中間固定,中間轉個彎);
+ * box:二維漸層盒(四角固定);big:8×8 大盒(四角固定);
+ * wheel:色輪,一圈色相繞回原點(固定相鄰兩格,才知道是順時針還是逆時針)。
+ */
+export type BoxShape = "strip" | "three" | "box" | "big" | "wheel";
+export type BoxLevel = "easy" | "medium" | "hard" | "extreme";
 
 export const BOX_SHAPES: { value: BoxShape; label: string }[] = [
   { value: "strip", label: "一維色條" },
-  { value: "box", label: "二維漸層盒" },
+  { value: "three", label: "三色色條" },
+  { value: "box", label: "漸層盒" },
+  { value: "big", label: "8×8 大盒" },
+  { value: "wheel", label: "色輪" },
 ];
 
 export const BOX_LEVELS: { value: BoxLevel; label: string }[] = [
   { value: "easy", label: "輕鬆" },
   { value: "medium", label: "普通" },
   { value: "hard", label: "細膩" },
+  { value: "extreme", label: "極細膩" },
 ];
 
-/** 格數越多越難;相鄰兩格的色差越小越難 */
+/** 格數越多越難;相鄰兩格的色差越小越難。色輪的 cols 是一圈幾格 */
 const SIZES: Record<BoxShape, Record<BoxLevel, { cols: number; rows: number }>> = {
-  strip: { easy: { cols: 8, rows: 1 }, medium: { cols: 11, rows: 1 }, hard: { cols: 14, rows: 1 } },
-  box: { easy: { cols: 5, rows: 4 }, medium: { cols: 6, rows: 5 }, hard: { cols: 7, rows: 6 } },
+  strip: { easy: { cols: 8, rows: 1 }, medium: { cols: 11, rows: 1 }, hard: { cols: 14, rows: 1 }, extreme: { cols: 16, rows: 1 } },
+  three: { easy: { cols: 9, rows: 1 }, medium: { cols: 13, rows: 1 }, hard: { cols: 15, rows: 1 }, extreme: { cols: 17, rows: 1 } },
+  box: { easy: { cols: 5, rows: 4 }, medium: { cols: 6, rows: 5 }, hard: { cols: 7, rows: 6 }, extreme: { cols: 8, rows: 7 } },
+  big: { easy: { cols: 8, rows: 8 }, medium: { cols: 8, rows: 8 }, hard: { cols: 8, rows: 8 }, extreme: { cols: 8, rows: 8 } },
+  wheel: { easy: { cols: 10, rows: 1 }, medium: { cols: 14, rows: 1 }, hard: { cols: 18, rows: 1 }, extreme: { cols: 22, rows: 1 } },
 };
 
-/** 相鄰兩格在 OKLab 裡差多少;人眼大約 0.02 開始分得出來,細膩的也留一點餘裕 */
-const STEP: Record<BoxLevel, number> = { easy: 0.065, medium: 0.045, hard: 0.032 };
+/** 相鄰兩格在 OKLab 裡差多少;人眼大約 0.02 開始分得出來,極細膩就貼著這條線 */
+const STEP: Record<BoxLevel, number> = { easy: 0.065, medium: 0.045, hard: 0.032, extreme: 0.024 };
 
 /** 雜豆和那一格差多少(越小越難挑) */
-const STRAY_DELTA: Record<BoxLevel, number> = { easy: 0.1, medium: 0.07, hard: 0.05 };
+const STRAY_DELTA: Record<BoxLevel, number> = { easy: 0.1, medium: 0.07, hard: 0.05, extreme: 0.04 };
 /** 幾格混了雜豆 */
-const STRAY_CELLS: Record<BoxLevel, number> = { easy: 2, medium: 3, hard: 4 };
+const STRAY_CELLS: Record<BoxLevel, number> = { easy: 2, medium: 3, hard: 4, extreme: 5 };
 
 /** 小於這個距離就當成同一色(和 JND 差不多,看起來一樣的就是一樣) */
 export const SAME_COLOR = 0.012;
@@ -52,6 +64,12 @@ export type SortBox = {
   rows: number;
   /** 每個位置該是什麼顏色(排好的樣子) */
   targets: string[];
+  /**
+   * 看起來一樣的顏色分成同一組(連鎖也算:A 像 B、B 像 C,三個同一組)。
+   * 對不對看「放進來的豆子和這一格同組」——「很像」不會遞移,直接比距離的話,
+   * B 的豆子可能先卡進 A 的位置,剩下的格子就再也湊不齊,整盒卡死。
+   */
+  groups: number[];
   /** 固定不動的位置:色條的兩端、漸層盒的四個角 */
   anchors: number[];
   /** cells[位置] = 現在放在這裡的是哪一格的豆子(targets 的索引) */
@@ -84,13 +102,13 @@ const lerp = (x: Lab, y: Lab, t: number): Lab => ({
 });
 
 /**
- * 挑端點:色條挑兩色,漸層盒挑四個角。相鄰兩端點的距離要接近「步距 × 格數」,
+ * 挑端點:色條挑兩色、三色色條挑三色、漸層盒挑四個角。相鄰兩端點的距離要接近「步距 × 格數」,
  * 這樣中間每一格之間的色差剛好是這個難度要的步距。找不到就把範圍放寬一點再找。
  */
 function pickCorners(shape: BoxShape, cols: number, rows: number, step: number, palette: BeadColor[], rng: Rng): Lab[] {
   const labs = palette.map((color) => toLab(color.hex));
   const pick = () => labs[Math.floor(rng() * labs.length)];
-  const wantX = step * (cols - 1);
+  const wantX = step * (shape === "three" ? (cols - 1) / 2 : cols - 1);
   const wantY = step * (rows - 1);
   for (let slack = 0.15; slack < 2; slack += 0.15) {
     const ok = (x: Lab, y: Lab, want: number) => Math.abs(dist(x, y) - want) <= want * slack;
@@ -100,15 +118,39 @@ function pickCorners(shape: BoxShape, cols: number, rows: number, step: number, 
       if (!ok(a, b, wantX)) continue;
       if (shape === "strip") return [a, b];
       const c = pick();
+      // 三色:a → b → c,c 不能繞回 a 附近(不然後半段看起來像在倒退)
+      if (shape === "three") {
+        if (ok(b, c, wantX) && dist(a, c) > wantX * 1.2) return [a, b, c];
+        continue;
+      }
       const d = pick();
-      // 左上 a、右上 b、左下 c、右下 d
-      if (ok(a, c, wantY) && ok(b, d, wantY) && ok(c, d, wantX)) return [a, b, c, d];
+      // 左上 a、右上 b、左下 c、右下 d。對角也要夠遠(像攤平的一張色紙),
+      // 不然漸層會在中間折回來,一大片顏色看起來都一樣
+      const diagonal = Math.hypot(wantX, wantY) * 0.85;
+      if (ok(a, c, wantY) && ok(b, d, wantY) && ok(c, d, wantX) && dist(a, d) >= diagonal && dist(b, c) >= diagonal) {
+        return [a, b, c, d];
+      }
     }
   }
-  return shape === "strip" ? [labs[0], labs[labs.length - 1]] : [labs[0], labs[1], labs[2], labs[3]];
+  const n = labs.length;
+  return shape === "strip" ? [labs[0], labs[n - 1]] : shape === "three" ? [labs[0], labs[30], labs[n - 1]] : [labs[0], labs[1], labs[2], labs[3]];
 }
 
-/** 排好的樣子:色條是兩端之間內插,漸層盒是四個角的雙線性內插 */
+/**
+ * 色輪:OKLCH 裡固定亮度與彩度,色相繞一圈。彩度照「相鄰兩格要差多少」反推,
+ * 太飽和換回 sRGB 會被夾掉,所以有上限(格子少時就會比要求的再難一點)。
+ */
+export function wheelTargets(count: number, step: number, rng: Rng): string[] {
+  const L = 0.76 + (rng() - 0.5) * 0.08;
+  const chroma = Math.min(0.12, step / (2 * Math.sin(Math.PI / count)));
+  const start = rng() * Math.PI * 2;
+  return Array.from({ length: count }, (_, i) => {
+    const h = start + (i * Math.PI * 2) / count;
+    return toHex({ L, a: chroma * Math.cos(h), b: chroma * Math.sin(h) });
+  });
+}
+
+/** 排好的樣子:色條是兩端之間內插,三色色條分兩段,漸層盒是四個角的雙線性內插 */
 export function gradientTargets(shape: BoxShape, cols: number, rows: number, corners: Lab[]): string[] {
   const targets: string[] = [];
   for (let row = 0; row < rows; row += 1) {
@@ -116,7 +158,13 @@ export function gradientTargets(shape: BoxShape, cols: number, rows: number, cor
       const u = cols === 1 ? 0 : col / (cols - 1);
       const v = rows === 1 ? 0 : row / (rows - 1);
       const lab =
-        shape === "strip" ? lerp(corners[0], corners[1], u) : lerp(lerp(corners[0], corners[1], u), lerp(corners[2], corners[3], u), v);
+        shape === "strip"
+          ? lerp(corners[0], corners[1], u)
+          : shape === "three"
+            ? u <= 0.5
+              ? lerp(corners[0], corners[1], u * 2)
+              : lerp(corners[1], corners[2], u * 2 - 1)
+            : lerp(lerp(corners[0], corners[1], u), lerp(corners[2], corners[3], u), v);
       targets.push(toHex(lab));
     }
   }
@@ -124,13 +172,28 @@ export function gradientTargets(shape: BoxShape, cols: number, rows: number, cor
 }
 
 export function anchorPositions(shape: BoxShape, cols: number, rows: number): number[] {
-  return shape === "strip" ? [0, cols - 1] : [0, cols - 1, (rows - 1) * cols, rows * cols - 1];
+  if (shape === "strip") return [0, cols - 1];
+  if (shape === "three") return [0, (cols - 1) / 2, cols - 1];
+  if (shape === "wheel") return [0, 1];
+  return [0, cols - 1, (rows - 1) * cols, rows * cols - 1];
 }
 
-/** 這個位置現在放的豆子對不對(看起來一樣就算對) */
+/** 把看起來一樣的顏色併成同一組(union-find),回傳每個位置的組號 */
+export function lookAlikeGroups(targets: string[]): number[] {
+  const labs = targets.map(toLab);
+  const parent = targets.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  for (let i = 0; i < labs.length; i += 1) {
+    for (let j = i + 1; j < labs.length; j += 1) {
+      if (dist(labs[i], labs[j]) < SAME_COLOR) parent[find(i)] = find(j);
+    }
+  }
+  return targets.map((_, i) => find(i));
+}
+
+/** 這個位置現在放的豆子對不對(和這一格同一組,也就是看起來一樣,就算對) */
 export function isCorrect(box: SortBox, pos: number): boolean {
-  const here = box.targets[box.cells[pos]];
-  return here === box.targets[pos] || dist(toLab(here), toLab(box.targets[pos])) < SAME_COLOR;
+  return box.groups[box.cells[pos]] === box.groups[pos];
 }
 
 /** 固定的端點與已經排對的格子都卡住了,不能再拖 */
@@ -210,10 +273,22 @@ function makeStrays(box: Omit<SortBox, "cells" | "strays">, rng: Rng): Stray[] {
 /** 開一盒新的 */
 export function newSortBox(shape: BoxShape, level: BoxLevel, palette: BeadColor[], rng: Rng = Math.random): SortBox {
   const { cols, rows } = SIZES[shape][level];
-  const corners = pickCorners(shape, cols, rows, STEP[level], palette, rng);
-  const targets = gradientTargets(shape, cols, rows, corners);
+  // 開幾盒候選,留「看起來一樣的格子」最少的那一盒(多半第一盒就是 0)
+  let targets: string[] = [];
+  let merged = Infinity;
+  for (let attempt = 0; attempt < 12 && merged > 0; attempt += 1) {
+    const candidate =
+      shape === "wheel"
+        ? wheelTargets(cols, STEP[level], rng)
+        : gradientTargets(shape, cols, rows, pickCorners(shape, cols, rows, STEP[level], palette, rng));
+    const lost = candidate.length - new Set(lookAlikeGroups(candidate)).size;
+    if (lost < merged) {
+      targets = candidate;
+      merged = lost;
+    }
+  }
   const anchors = anchorPositions(shape, cols, rows);
-  const base = { shape, level, cols, rows, targets, anchors };
+  const base = { shape, level, cols, rows, targets, groups: lookAlikeGroups(targets), anchors };
   return { ...base, cells: shuffleCells(targets.length, anchors, rng, { ...base, strays: [] }), strays: makeStrays(base, rng) };
 }
 
@@ -242,14 +317,14 @@ export function straysLeft(box: SortBox): number {
   return box.strays.filter((stray) => !stray.picked).length;
 }
 
-/** 整理好的豆盒:去掉看起來重複的顏色,照位置順序 */
+/** 整理好的豆盒:看起來一樣的(同一組)只留第一個,照位置順序 */
 export function rewardColors(box: SortBox): string[] {
-  const colors: string[] = [];
-  for (const hex of box.targets) {
-    const lab = toLab(hex);
-    if (colors.every((other) => dist(toLab(other), lab) >= SAME_COLOR)) colors.push(hex);
-  }
-  return colors;
+  const seen = new Set<number>();
+  return box.targets.filter((_, i) => {
+    if (seen.has(box.groups[i])) return false;
+    seen.add(box.groups[i]);
+    return true;
+  });
 }
 
 // ---- 獎勵色盤:整理好的豆盒收進收藏冊,接在預設色盤後面,拼豆板上可以用 ----

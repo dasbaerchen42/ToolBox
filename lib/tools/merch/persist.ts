@@ -4,6 +4,7 @@
 // 讀回來的東西一律當作不可信(可能是舊版存的、被改壞的):
 // 每一種周邊跟預設值逐欄合併,型別不對的欄位用預設值,不讓一筆壞資料把整頁弄壞。
 
+import type { Placement } from "./acrylic-shape";
 import { defaultDesigns, MERCH_KINDS, type MerchDesigns, type MerchKind, type Placed, type Recolor } from "./design";
 
 export const MERCH_STORE_KEY = "merch-workshop";
@@ -38,6 +39,21 @@ function mergeFlat<T extends Record<string, unknown>>(base: T, raw: unknown): T 
 }
 
 const isNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+
+/** 放在照片上的位置:數字都要是有限值;四個角的偏移要剛好四個 */
+function readPlacement(raw: unknown, fallback: Placement): Placement {
+  if (!isRecord(raw)) return fallback;
+  const tilt = raw.tilt;
+  const okTilt = Array.isArray(tilt) && tilt.length === 4 && tilt.every((p) => isRecord(p) && isNumber(p.x) && isNumber(p.y));
+  if (![raw.x, raw.y, raw.size, raw.rotation].every(isNumber) || !okTilt) return fallback;
+  return {
+    x: raw.x as number,
+    y: raw.y as number,
+    size: Math.min(1.5, Math.max(0.05, raw.size as number)),
+    rotation: raw.rotation as number,
+    tilt: (tilt as Placement["tilt"]).map((p) => ({ x: p.x, y: p.y })) as Placement["tilt"],
+  };
+}
 
 /** 換色表:色號 → 色號,都是短字串;不對的整張換色表丟掉(貼紙本身留著) */
 function readRecolor(raw: unknown): Recolor | undefined {
@@ -95,11 +111,15 @@ export function sanitizeDesigns(raw: unknown): MerchDesigns {
 
   const acrylic = mergeFlat(base.acrylic, raw.acrylic);
   acrylic.stickers = isRecord(raw.acrylic) ? readPlaced(raw.acrylic.stickers) : base.acrylic.stickers;
-  const corners = isRecord(raw.acrylic) ? raw.acrylic.corners : null;
-  acrylic.corners =
-    Array.isArray(corners) && corners.length === 4 && corners.every((p) => isRecord(p) && isNumber(p.x) && isNumber(p.y))
-      ? (corners as MerchDesigns["acrylic"]["corners"])
-      : base.acrylic.corners;
+  acrylic.place = readPlacement(isRecord(raw.acrylic) ? raw.acrylic.place : null, base.acrylic.place);
+  if (!["none", "photo", "polaroid", "line"].includes(acrylic.frame)) acrylic.frame = base.acrylic.frame;
+  if (acrylic.mode !== "card" && acrylic.mode !== "stick") acrylic.mode = base.acrylic.mode;
+  acrylic.margin = Math.min(60, Math.max(4, acrylic.margin));
+  acrylic.caption = acrylic.caption.slice(0, 24);
+  for (const look of [acrylic, omamori]) {
+    look.clarity = Math.min(1, Math.max(0, look.clarity));
+    look.edge = Math.min(1, Math.max(0, look.edge));
+  }
 
   // 兩色欄位(tuple)要剛好兩個字串
   const pair = (value: unknown, fallback: [string, string]): [string, string] =>
@@ -109,11 +129,9 @@ export function sanitizeDesigns(raw: unknown): MerchDesigns {
   card.mosaic = pair(isRecord(raw.card) ? raw.card.mosaic : null, base.card.mosaic);
   card.frameColors = pair(isRecord(raw.card) ? raw.card.frameColors : null, base.card.frameColors);
 
-  const beadcharm = withRecolor(mergeFlat(base.beadcharm, raw.beadcharm), isRecord(raw.beadcharm) ? raw.beadcharm : {});
-  if (beadcharm.hardware !== "ring" && beadcharm.hardware !== "strap") beadcharm.hardware = base.beadcharm.hardware;
   if (!["none", "lace", "beads", "motif"].includes(card.frame)) card.frame = base.card.frame;
 
-  return { card, charm, omamori, acrylic, beadcharm };
+  return { card, charm, omamori, acrylic };
 }
 
 /** 讀回整份存檔;不是這個格式就回 null(當作第一次來) */

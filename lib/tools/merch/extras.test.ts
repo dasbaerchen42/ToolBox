@@ -3,7 +3,7 @@ import { DEFAULT_PALETTE } from "@/lib/tools/beads/palette";
 import { recolorPattern, TEMPLATES, templatePattern } from "@/lib/tools/beads/templates";
 import { artKey, defaultDesigns, parseArtKey } from "./design";
 import { sanitizeDesigns } from "./persist";
-import { hangBead, motifPositions } from "./render";
+import { motifPositions } from "./render";
 
 const code = (index: number) => DEFAULT_PALETTE[index].code;
 const indexOf = (c: string) => DEFAULT_PALETTE.findIndex((color) => color.code === c);
@@ -30,14 +30,7 @@ describe("周邊:換色", () => {
   });
 });
 
-describe("周邊:拼豆吊飾與自己拼的框", () => {
-  it("掛點是最上面一列、離中線最近的那顆豆子", () => {
-    // 第 0 列是空的;第 1 列在第 1、4 格有豆子(5 寬,中線是 2)
-    const pattern = { cols: 5, rows: 3, cells: [-1, -1, -1, -1, -1, -1, 0, -1, -1, 0, 0, 0, 0, 0, 0] };
-    expect(hangBead(pattern)).toEqual({ x: 1.5, y: 1.5 });
-    expect(hangBead({ cols: 2, rows: 1, cells: [-1, -1] })).toBeNull();
-  });
-
+describe("周邊:自己拼的框", () => {
   it("框的圖樣:四個角都有、沿著邊排、都在卡片裡", () => {
     const w = 550;
     const h = 850;
@@ -56,31 +49,26 @@ describe("周邊:拼豆吊飾與自己拼的框", () => {
 });
 
 describe("周邊:存檔讀回", () => {
-  it("換色、拼豆吊飾、框的圖樣都讀得回來;壞掉的欄位用預設值", () => {
+  it("換色、框的圖樣都讀得回來;壞掉的欄位用預設值;舊存檔的拼豆吊飾直接忽略", () => {
     const base = defaultDesigns();
     const saved = JSON.parse(
       JSON.stringify({
         ...base,
         card: { ...base.card, frame: "motif", frameArt: "tpl:star-7#W29>W75", stickers: [{ ...base.card.stickers[0], recolor: { W04: "W75" } }] },
-        beadcharm: { ...base.beadcharm, artId: "album:abc", hardware: "strap", recolor: { W04: "W12" } },
+        beadcharm: { artId: "album:abc", hardware: "strap" },
       })
     );
     const out = sanitizeDesigns(saved);
     expect(out.card.frame).toBe("motif");
     expect(out.card.frameArt).toBe("tpl:star-7#W29>W75");
     expect(out.card.stickers[0].recolor).toEqual({ W04: "W75" });
-    expect(out.beadcharm).toMatchObject({ artId: "album:abc", hardware: "strap", recolor: { W04: "W12" } });
+    expect("beadcharm" in out).toBe(false);
 
     const broken = sanitizeDesigns({
       card: { frame: "glitter", stickers: [{ ...base.card.stickers[0], recolor: { "W#1": 5 } }] },
-      beadcharm: { hardware: "rope", recolor: "nope" },
     });
     expect(broken.card.frame).toBe(base.card.frame);
     expect(broken.card.stickers[0].recolor).toBeUndefined();
-    expect(broken.beadcharm.hardware).toBe("ring");
-    expect(broken.beadcharm.recolor).toBeUndefined();
-    // 舊版存檔沒有拼豆吊飾:整份用預設
-    expect(sanitizeDesigns({ card: base.card }).beadcharm).toEqual(base.beadcharm);
   });
 
   it("自己存的模板:收藏冊讀得回「模板」分頁", () => {

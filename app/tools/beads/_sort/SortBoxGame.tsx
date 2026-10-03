@@ -28,12 +28,22 @@ import { ActionButton, Field, Segmented, StationHint, Toggle } from "../../image
 /** 收納盒是實體的塑膠盒,不跟著網站主題換色 */
 const TRAY = "#f6f4ef";
 const WALL = "#dcd8ce";
-const FLOOR = "#ebe8e1";
+const FLOOR = "#f1eee8";
+/** 卡住的格子:底比較深、隔板比較深 */
+const FLOOR_SUNK = "#e2ded4";
+const WALL_SUNK = "#bdb6a7";
 const SNAP_MS = 260;
 /** 色條太窄(手機上一格不到這麼寬)就直著放 */
 const MIN_STRIP_CELL = 34;
 
-type Layout = { cell: number; pad: number; width: number; height: number; vertical: boolean };
+/** 每一格的左上角;色輪另外記圓心與半徑(畫圓環盒用) */
+type Layout = {
+  cell: number;
+  width: number;
+  height: number;
+  origins: { x: number; y: number }[];
+  ring: { cx: number; cy: number; r: number } | null;
+};
 
 function shadesOf(hex: string): BeadShades {
   return { base: hex, light: shade(hex, 0.45), dark: shade(hex, -0.35) };
@@ -52,6 +62,14 @@ function beadSpots(pos: number): { x: number; y: number }[] {
 }
 
 const BEAD_SIZE = 0.27;
+
+const START_MESSAGES: Record<BoxShape, string> = {
+  strip: "兩端的顏色固定住了，把中間排成順順的漸層。",
+  three: "兩端和正中間固定住了，前半段往中間、後半段往另一端，排成兩段漸層。",
+  box: "四個角固定住了，把中間排成順順的漸層。",
+  big: "8×8 的大盒子，四個角固定住了，慢慢排。",
+  wheel: "色輪繞一圈會回到原點。最上面相鄰的兩格固定住了，照那個方向把顏色排一圈。",
+};
 
 /** 「喀」一聲:很短的一下高頻,用 WebAudio 現做,不必載音檔 */
 function useClick() {
@@ -128,37 +146,47 @@ export default function SortBoxGame({
   const layout = useMemo<Layout | null>(() => {
     if (width === 0) return null;
     const pad = 10;
-    const vertical = box.shape === "strip" && (width - pad * 2) / box.cols < MIN_STRIP_CELL;
+    const n = box.cells.length;
+    if (box.shape === "wheel") {
+      // 色輪:一圈格子排在圓上。半徑與格子大小一起算,讓相鄰兩格剛好不重疊
+      const size = Math.min(width, 440) - pad * 2;
+      const k = 0.9 * Math.sin(Math.PI / n);
+      const radius = size / 2 / (1 + k);
+      const cell = Math.floor(Math.min(64, 2 * radius * k));
+      const side = Math.ceil(radius * 2 + cell + pad * 2);
+      const c = side / 2;
+      const origins = Array.from({ length: n }, (_, i) => {
+        const a = -Math.PI / 2 + (i * Math.PI * 2) / n;
+        return { x: c + Math.cos(a) * radius - cell / 2, y: c + Math.sin(a) * radius - cell / 2 };
+      });
+      return { cell, width: side, height: side, origins, ring: { cx: c, cy: c, r: radius } };
+    }
+    const linear = box.shape === "strip" || box.shape === "three";
+    const vertical = linear && (width - pad * 2) / box.cols < MIN_STRIP_CELL;
     const across = vertical ? box.rows : box.cols;
     const down = vertical ? box.cols : box.rows;
     const room = (vertical ? Math.min(width, 120) : width) - pad * 2;
     // 直著放的色條很長,格子小一點才不會拉得太長
-    const cell = Math.floor(Math.min(vertical ? 60 : 84, room / across));
-    return { cell, pad, width: cell * across + pad * 2, height: cell * down + pad * 2, vertical };
-  }, [width, box.shape, box.cols, box.rows]);
-
-  /** 位置 → 格子左上角(CSS px) */
-  const cellOrigin = useCallback(
-    (pos: number) => {
-      if (!layout) return { x: 0, y: 0 };
+    const cell = Math.floor(Math.min(vertical ? 56 : 84, room / across));
+    const origins = Array.from({ length: n }, (_, pos) => {
       const col = pos % box.cols;
       const row = Math.floor(pos / box.cols);
-      const [x, y] = layout.vertical ? [row, col] : [col, row];
-      return { x: layout.pad + x * layout.cell, y: layout.pad + y * layout.cell };
-    },
-    [layout, box.cols]
-  );
+      const [x, y] = vertical ? [row, col] : [col, row];
+      return { x: pad + x * cell, y: pad + y * cell };
+    });
+    return { cell, width: cell * across + pad * 2, height: cell * down + pad * 2, origins, ring: null };
+  }, [width, box.shape, box.cols, box.rows, box.cells.length]);
+
+  /** 位置 → 格子左上角(CSS px) */
+  const cellOrigin = useCallback((pos: number) => layout?.origins[pos] ?? { x: 0, y: 0 }, [layout]);
 
   const cellAt = useCallback(
     (x: number, y: number): number | null => {
       if (!layout) return null;
-      const cx = Math.floor((x - layout.pad) / layout.cell);
-      const cy = Math.floor((y - layout.pad) / layout.cell);
-      const [col, row] = layout.vertical ? [cy, cx] : [cx, cy];
-      if (col < 0 || row < 0 || col >= box.cols || row >= box.rows) return null;
-      return row * box.cols + col;
+      const index = layout.origins.findIndex((o) => x >= o.x && x < o.x + layout.cell && y >= o.y && y < o.y + layout.cell);
+      return index < 0 ? null : index;
     },
-    [layout, box.cols, box.rows]
+    [layout]
   );
 
   const draw = useCallback(
@@ -177,59 +205,103 @@ export default function SortBoxGame({
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       ctx.clearRect(0, 0, layout.width, layout.height);
 
-      // 盒子本體
+      const { cell } = layout;
+      // 盒子本體:方盒,或色輪的圓環盒
       ctx.fillStyle = TRAY;
-      ctx.beginPath();
-      ctx.roundRect(1, 1, layout.width - 2, layout.height - 2, 12);
-      ctx.fill();
       ctx.strokeStyle = WALL;
       ctx.lineWidth = 2;
-      ctx.stroke();
+      ctx.beginPath();
+      if (layout.ring) {
+        const { cx, cy, r } = layout.ring;
+        ctx.arc(cx, cy, r + cell * 0.78, 0, Math.PI * 2);
+        ctx.arc(cx, cy, Math.max(4, r - cell * 0.78), 0, Math.PI * 2, true);
+        ctx.fill("evenodd");
+        ctx.stroke();
+      } else {
+        ctx.roundRect(1, 1, layout.width - 2, layout.height - 2, 12);
+        ctx.fill();
+        ctx.stroke();
+      }
 
-      const { cell } = layout;
       const bead = cell * BEAD_SIZE;
       let animating = false;
       const dragging = drag.current?.moved ? drag.current : null;
 
-      const drawCell = (pos: number, x: number, y: number, lift: number) => {
+      /**
+       * 一格。sunk = 已經卡住(端點或排對了):格子底比較深、內緣有陰影、
+       * 豆子小一點暗一點,像壓進盒子裡;還能動的格子底比較亮、微微浮起。
+       */
+      const drawCell = (pos: number, x: number, y: number, lift: number, sunk: boolean) => {
         const inset = cell * 0.06;
+        const fx = x + inset;
+        const fy = y + inset;
+        const fw = cell - inset * 2;
+        const radius = cell * 0.14;
         ctx.save();
         if (lift > 0) {
           ctx.shadowColor = "rgba(40, 30, 20, 0.28)";
           ctx.shadowBlur = 10 * lift;
           ctx.shadowOffsetY = 4 * lift;
+        } else if (!sunk) {
+          ctx.shadowColor = "rgba(40, 30, 20, 0.14)";
+          ctx.shadowBlur = 3;
+          ctx.shadowOffsetY = 1.5;
         }
-        ctx.fillStyle = FLOOR;
+        ctx.fillStyle = sunk ? FLOOR_SUNK : FLOOR;
         ctx.beginPath();
-        ctx.roundRect(x + inset, y + inset, cell - inset * 2, cell - inset * 2, cell * 0.14);
+        ctx.roundRect(fx, fy, fw, fw, radius);
         ctx.fill();
         ctx.restore();
+
         const hex = box.targets[box.cells[pos]];
         const shades = shadesOf(hex);
+        const squeeze = sunk ? 0.92 : 1;
+        const drop = sunk ? cell * 0.02 : 0;
         beadSpots(pos).forEach((spot, slot) => {
-          const stray = withStrays && sorted ? box.strays.find((s) => s.pos === pos && s.slot === slot) : undefined;
+          const stray = withStrays && sorted ? box.strays.find((st) => st.pos === pos && st.slot === slot) : undefined;
           if (stray?.picked) return;
           drawLooseBead(
             ctx,
-            x + cell / 2 + spot.x * cell,
-            y + cell / 2 + spot.y * cell,
-            bead,
+            x + cell / 2 + spot.x * cell * squeeze,
+            y + cell / 2 + spot.y * cell * squeeze + drop,
+            bead * squeeze,
             stray ? shadesOf(stray.hex) : shades,
             pos * 11 + slot
           );
         });
+
+        if (sunk) {
+          // 內緣陰影:上緣與左緣深一點,像格子往下凹;整格再蒙一層淡淡的暗
+          ctx.save();
+          ctx.beginPath();
+          ctx.roundRect(fx, fy, fw, fw, radius);
+          ctx.clip();
+          ctx.fillStyle = "rgba(70, 55, 35, 0.07)";
+          ctx.fillRect(fx, fy, fw, fw);
+          const shadow = ctx.createLinearGradient(fx, fy, fx + fw * 0.35, fy + fw * 0.35);
+          shadow.addColorStop(0, "rgba(70, 55, 35, 0.32)");
+          shadow.addColorStop(1, "rgba(70, 55, 35, 0)");
+          ctx.strokeStyle = shadow;
+          ctx.lineWidth = Math.max(3, cell * 0.09);
+          ctx.beginPath();
+          ctx.roundRect(fx, fy, fw, fw, radius);
+          ctx.stroke();
+          ctx.restore();
+        }
       };
 
       for (let pos = 0; pos < box.cells.length; pos += 1) {
         if (dragging && dragging.from === pos) continue;
         const origin = cellOrigin(pos);
+        const sunk = isLocked(box, pos);
         const snapStart = snaps.current.get(pos);
         let scale = 1;
         if (snapStart !== undefined) {
+          // 卡進去:往下按一下再回到凹下去的位置
           const p = (now - snapStart) / SNAP_MS;
           if (p >= 1) snaps.current.delete(pos);
           else {
-            scale = 1 + Math.sin(p * Math.PI) * 0.09;
+            scale = 1 - Math.sin(p * Math.PI) * 0.08;
             animating = true;
           }
         }
@@ -237,36 +309,38 @@ export default function SortBoxGame({
         ctx.translate(origin.x + cell / 2, origin.y + cell / 2);
         ctx.scale(scale, scale);
         ctx.translate(-origin.x - cell / 2, -origin.y - cell / 2);
-        drawCell(pos, origin.x, origin.y, selected === pos ? 1 : 0);
+        drawCell(pos, origin.x, origin.y, selected === pos ? 1 : 0, sunk);
         ctx.restore();
 
-        // 格子之間的隔板;固定的端點在角落畫一個小圓釘
-        ctx.strokeStyle = WALL;
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(origin.x, origin.y, cell, cell);
+        // 隔板:卡住的格子是深一點的實線,還能動的是淡淡的細線
+        ctx.strokeStyle = sunk ? WALL_SUNK : WALL;
+        ctx.lineWidth = sunk ? 2.5 : 1.2;
+        ctx.beginPath();
+        ctx.roundRect(origin.x + 1, origin.y + 1, cell - 2, cell - 2, layout.ring ? cell * 0.2 : 2);
+        ctx.stroke();
         if (box.anchors.includes(pos)) {
-          ctx.fillStyle = "#b7b1a3";
+          ctx.fillStyle = "#a59e8f";
           ctx.beginPath();
-          ctx.arc(origin.x + cell * 0.12, origin.y + cell * 0.12, Math.max(2, cell * 0.035), 0, Math.PI * 2);
+          ctx.arc(origin.x + cell * 0.13, origin.y + cell * 0.13, Math.max(2, cell * 0.04), 0, Math.PI * 2);
           ctx.fill();
         }
         if (selected === pos) {
           ctx.strokeStyle = "#8a6d3b";
           ctx.lineWidth = 2;
           ctx.setLineDash([4, 3]);
-          ctx.strokeRect(origin.x + 2, origin.y + 2, cell - 4, cell - 4);
+          ctx.strokeRect(origin.x + 3, origin.y + 3, cell - 6, cell - 6);
           ctx.setLineDash([]);
         }
-        if (showHint && picking && box.strays.some((s) => s.pos === pos && !s.picked)) {
+        if (showHint && picking && box.strays.some((st) => st.pos === pos && !st.picked)) {
           ctx.strokeStyle = "rgba(192, 87, 62, 0.85)";
           ctx.lineWidth = 2.5;
-          ctx.strokeRect(origin.x + 2, origin.y + 2, cell - 4, cell - 4);
+          ctx.strokeRect(origin.x + 3, origin.y + 3, cell - 6, cell - 6);
         }
       }
 
       // 拖著的那一格浮在最上面,跟著手指走
       if (dragging) {
-        drawCell(dragging.from, dragging.x - cell / 2, dragging.y - cell / 2, 1.2);
+        drawCell(dragging.from, dragging.x - cell / 2, dragging.y - cell / 2, 1.2, false);
       }
       return animating;
     },
@@ -292,7 +366,7 @@ export default function SortBoxGame({
     setCollected(false);
     setShowHint(false);
     snaps.current.clear();
-    setMessage(nextShape === "strip" ? "兩端的顏色固定住了，把中間排成順順的漸層。" : "四個角固定住了，把中間排成順順的漸層。");
+    setMessage(START_MESSAGES[nextShape]);
   }
 
   function trySwap(a: number, b: number) {

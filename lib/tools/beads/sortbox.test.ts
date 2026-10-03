@@ -4,6 +4,8 @@ import {
   addBoxPalette,
   anchorPositions,
   BEADS_PER_CELL,
+  BOX_LEVELS,
+  BOX_SHAPES,
   correctCount,
   extendedPalette,
   isCorrect,
@@ -28,29 +30,47 @@ function solve(box: SortBox): SortBox {
   let current = box;
   for (let pos = 0; pos < current.cells.length; pos += 1) {
     if (isCorrect(current, pos)) continue;
-    const from = current.cells.findIndex((_, p) => p !== pos && !isLocked(current, p) && current.cells[p] === pos);
+    // 找一格放著「看起來就是這一色」的豆子(不一定是同一顆:漸層裡可能有兩格幾乎一樣)
+    const from = current.cells.findIndex((_, p) => p !== pos && !isLocked(current, p) && isCorrect(swapCells(current, pos, p), pos));
+    expect(from).toBeGreaterThanOrEqual(0);
     current = swapCells(current, pos, from);
   }
   return current;
 }
 
 describe("整理豆盒:開盒", () => {
-  it("色條兩端、漸層盒四角固定;其他打亂,排對的不超過一成", () => {
-    for (const [shape, level] of [
-      ["strip", "easy"],
-      ["strip", "hard"],
-      ["box", "medium"],
-      ["box", "hard"],
-    ] as const) {
-      const box = newSortBox(shape, level, DEFAULT_PALETTE, seededRng(7));
-      expect(box.anchors).toEqual(anchorPositions(shape, box.cols, box.rows));
-      expect(box.targets).toHaveLength(box.cols * box.rows);
-      for (const pos of box.anchors) expect(box.cells[pos]).toBe(pos);
-      expect([...box.cells].sort((a, b) => a - b)).toEqual(box.targets.map((_, i) => i));
-      const free = box.cells.length - box.anchors.length;
-      expect(correctCount(box) - box.anchors.length).toBeLessThanOrEqual(Math.max(1, Math.floor(free * 0.1)));
-      expect(isSorted(box)).toBe(false);
+  it("每種盒子、每種難度:端點固定;其他打亂,排對的不超過一成;一路換下去排得好", () => {
+    for (const shape of BOX_SHAPES.map((item) => item.value)) {
+      for (const level of BOX_LEVELS.map((item) => item.value)) {
+        const box = newSortBox(shape, level, DEFAULT_PALETTE, seededRng(7));
+        expect(box.anchors).toEqual(anchorPositions(shape, box.cols, box.rows));
+        expect(box.targets).toHaveLength(box.cols * box.rows);
+        for (const pos of box.anchors) expect(box.cells[pos]).toBe(pos);
+        expect([...box.cells].sort((a, b) => a - b)).toEqual(box.targets.map((_, i) => i));
+        const free = box.cells.length - box.anchors.length;
+        expect(correctCount(box) - box.anchors.length).toBeLessThanOrEqual(Math.max(1, Math.floor(free * 0.1)));
+        expect(isSorted(box)).toBe(false);
+        expect(isSorted(solve(box))).toBe(true);
+      }
     }
+  });
+
+  it("三色色條:正中間那格是第二個端點;色輪:繞一圈、相鄰兩格都分得出來", () => {
+    const three = newSortBox("three", "medium", DEFAULT_PALETTE, seededRng(9));
+    expect(three.anchors).toEqual([0, (three.cols - 1) / 2, three.cols - 1]);
+    const wheel = newSortBox("wheel", "hard", DEFAULT_PALETTE, seededRng(9));
+    expect(wheel.anchors).toEqual([0, 1]);
+    const ring = wheel.targets.map((hex, i) => gap(hex, wheel.targets[(i + 1) % wheel.targets.length]));
+    expect(Math.min(...ring)).toBeGreaterThan(0.015);
+  });
+
+  it("極細膩比細膩更細", () => {
+    const meanStep = (box: SortBox) =>
+      box.targets.slice(1).reduce((sum, hex, i) => sum + gap(box.targets[i], hex), 0) / (box.targets.length - 1);
+    const hard = newSortBox("strip", "hard", DEFAULT_PALETTE, seededRng(4));
+    const extreme = newSortBox("strip", "extreme", DEFAULT_PALETTE, seededRng(4));
+    expect(meanStep(extreme)).toBeLessThan(meanStep(hard));
+    expect(extreme.cols).toBeGreaterThanOrEqual(hard.cols);
   });
 
   it("越難,相鄰兩格的色差越小;但都還分得出來", () => {

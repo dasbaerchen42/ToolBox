@@ -70,7 +70,7 @@ import EditPanel, { type EditTool } from "./_components/EditPanel";
 import ColorList from "./_components/ColorList";
 import AlbumPanel from "./_components/AlbumPanel";
 import { useDarkBackground } from "./_components/useDarkBackground";
-import MerchWorkshop, { type MerchRequest } from "./_merch/MerchWorkshop";
+import MerchWorkshop from "./_merch/MerchWorkshop";
 import SortBoxGame from "./_sort/SortBoxGame";
 import {
   addBoxPalette,
@@ -218,7 +218,6 @@ export default function BeadsPage() {
   const [view, setView] = useState<"beads" | "merch" | "sort">("beads");
   const [merchOpened, setMerchOpened] = useState(false);
   const [sortOpened, setSortOpened] = useState(false);
-  const [merchRequest, setMerchRequest] = useState<MerchRequest | null>(null);
   // 整理豆盒收進來的色盤:接在預設色盤後面,預設色的索引不變
   const [boxStore, setBoxStore] = useState<BoxStore>({ lastCode: 0, boxes: [] });
   const palette = useMemo(() => extendedPalette(DEFAULT_PALETTE, boxStore.boxes), [boxStore.boxes]);
@@ -622,16 +621,6 @@ export default function BeadsPage() {
     return work;
   }
 
-  /** 做成拼豆吊飾:先收進收藏冊(還沒收或有改過的話),再帶去周邊的「拼豆吊飾」 */
-  function sendToCharm() {
-    if (!pattern) return;
-    const id = savedAs && !dirty ? savedAs.id : saveWork(false)?.id;
-    if (!id) return;
-    setMerchRequest({ artId: `album:${id}`, nonce: Date.now() });
-    setMerchOpened(true);
-    setView("merch");
-  }
-
   function openWork(work: SavedWork) {
     if (savedAs?.id !== work.id && !confirmDiscard("打開別的作品")) return;
     const next = fromSavedWork(work, palette);
@@ -852,7 +841,7 @@ export default function BeadsPage() {
 
         {merchOpened && (
           <div hidden={view !== "merch"}>
-            <MerchWorkshop album={album} palette={palette} active={view === "merch"} request={merchRequest} t={t} />
+            <MerchWorkshop album={album} palette={palette} active={view === "merch"} t={t} />
           </div>
         )}
 
@@ -1348,14 +1337,6 @@ export default function BeadsPage() {
                           另存一份
                         </ActionButton>
                       )}
-                      <ActionButton
-                        t={t}
-                        tone="secondary"
-                        onClick={sendToCharm}
-                        disabled={busy || animating || total === 0}
-                      >
-                        做成吊飾
-                      </ActionButton>
                     </div>
                     <ActionButton
                       t={t}

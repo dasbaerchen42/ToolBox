@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { buildOmamori, drawAcrylicOmamori } from "@/lib/tools/merch/acrylic";
 import { DESIGN_SIZE, type OmamoriDesign } from "@/lib/tools/merch/design";
-import { drawOmamori, type Art } from "@/lib/tools/merch/render";
+import type { Art } from "@/lib/tools/merch/render";
 import { useDesignCanvas } from "./useDesignCanvas";
 
 const { width: W, height: H } = DESIGN_SIZE.omamori;
@@ -39,6 +40,12 @@ export default function OmamoriStage({
     shown.current = side;
   }, [side]);
 
+  // 兩面各做一片壓克力(翻面動畫過半時換另一面);預覽用 1.5 倍,放大看也清楚
+  const pieces = useMemo(
+    () => ({ front: buildOmamori(design, "front", W, H, 1.5), back: buildOmamori(design, "back", W, H, 1.5) }),
+    [design]
+  );
+
   const render = useCallback(
     (now: number) => {
       let face = shown.current;
@@ -54,10 +61,10 @@ export default function OmamoriStage({
         ctx.translate(W / 2, 0);
         ctx.scale(Math.max(0.02, squeeze), 1);
         ctx.translate(-W / 2, 0);
-        drawOmamori(ctx, W, H, design, face, sway.current.angle, bell);
+        drawAcrylicOmamori(ctx, W, H, design, pieces[face], sway.current.angle, bell);
       });
     },
-    [paint, design, bell]
+    [paint, design, bell, pieces]
   );
 
   useEffect(() => {

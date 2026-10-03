@@ -1,5 +1,4 @@
 import { clampPlacement, defaultDesigns, placeSticker } from "./design";
-import { acrylicImageQuad } from "./render";
 import { readStoredMerch, sanitizeDesigns } from "./persist";
 import { eraseCircle, eraseSelection, opaqueBounds, wandSelect, type Pixels } from "../image/wand";
 import {
@@ -210,22 +209,6 @@ describe("design:貼紙擺法與打卡棒的透視延伸", () => {
     expect(clampPlacement(2, -1)).toEqual({ x: 1.05, y: -0.05 });
   });
 
-  it("打卡棒:板子的四個角不變,握把沿同一個透視往下延伸", () => {
-    const design = { ...defaultDesigns().acrylic, mode: "stick" as const };
-    const board: Quad = [
-      { x: 100, y: 120 },
-      { x: 500, y: 100 },
-      { x: 520, y: 400 },
-      { x: 90, y: 430 },
-    ];
-    const quad = acrylicImageQuad(design, board)!;
-    expect(quad[0].x).toBeCloseTo(100, 6);
-    expect(quad[1].y).toBeCloseTo(100, 6);
-    expect(quad[2].y).toBeGreaterThan(400);
-    expect(quad[3].y).toBeGreaterThan(430);
-    // 透卡沒有握把:就是板子本身
-    expect(acrylicImageQuad(defaultDesigns().acrylic, board)).toBe(board);
-  });
 });
 
 describe("persist:周邊存檔", () => {
@@ -235,7 +218,7 @@ describe("persist:周邊存檔", () => {
       card: { frame: "beads", laser: "yes", stickers: [{ id: "a", artId: "tpl:star-7", x: 0.5, y: 0.5, size: 0.3, rotation: 0 }, { id: 3 }] },
       charm: { pieces: "nope" },
       omamori: { front: "平安", bell: 5 },
-      acrylic: { corners: [{ x: 0, y: 0 }] },
+      acrylic: { place: { x: 0.5 }, mode: "glass", edge: true, margin: 999 },
     });
     expect(designs.card.frame).toBe("beads");
     expect(designs.card.laser).toBe(base.card.laser);
@@ -244,7 +227,10 @@ describe("persist:周邊存檔", () => {
     expect(designs.charm.pieces.map((piece) => piece.artId)).toEqual(base.charm.pieces.map((piece) => piece.artId));
     expect(designs.omamori.front).toBe("平安");
     expect(designs.omamori.bell).toBeNull();
-    expect(designs.acrylic.corners).toEqual(base.acrylic.corners);
+    expect(designs.acrylic.place).toEqual(base.acrylic.place);
+    expect(designs.acrylic.mode).toBe(base.acrylic.mode);
+    expect(designs.acrylic.edge).toBe(base.acrylic.edge);
+    expect(designs.acrylic.margin).toBe(60);
   });
 
   it("不是這個格式就當作沒有存檔", () => {
