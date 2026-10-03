@@ -70,6 +70,14 @@ import ColorList from "./_components/ColorList";
 import AlbumPanel from "./_components/AlbumPanel";
 import { useDarkBackground } from "./_components/useDarkBackground";
 import MerchWorkshop from "./_merch/MerchWorkshop";
+import SortBoxGame from "./_sort/SortBoxGame";
+import {
+  addBoxPalette,
+  BOX_PALETTES_KEY,
+  extendedPalette,
+  readBoxStore,
+  type BoxStore,
+} from "@/lib/tools/beads/sortbox";
 
 const PALETTE = DEFAULT_PALETTE;
 const PALETTE_LAB = paletteLab(PALETTE);
@@ -205,9 +213,13 @@ export default function BeadsPage() {
   const [withBoard, setWithBoard] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
-  // 上面的「拼豆／周邊」分頁。周邊第一次打開才掛上去,之後切來切去兩邊的進度都留著
-  const [view, setView] = useState<"beads" | "merch">("beads");
+  // 上面的「拼豆／周邊／豆盒」分頁。周邊與豆盒第一次打開才掛上去,之後切來切去各自的進度都留著
+  const [view, setView] = useState<"beads" | "merch" | "sort">("beads");
   const [merchOpened, setMerchOpened] = useState(false);
+  const [sortOpened, setSortOpened] = useState(false);
+  // 整理豆盒收進來的色盤:接在預設色盤後面,預設色的索引不變
+  const [boxStore, setBoxStore] = useState<BoxStore>({ lastCode: 0, boxes: [] });
+  const palette = useMemo(() => extendedPalette(DEFAULT_PALETTE, boxStore.boxes), [boxStore.boxes]);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingShare = useRef<{ key: string; file: ExportedImage } | null>(null);
 
@@ -217,6 +229,21 @@ export default function BeadsPage() {
 
   useEffect(() => {
     setAlbum(loadAlbum());
+    try {
+      const raw = localStorage.getItem(BOX_PALETTES_KEY);
+      if (raw) setBoxStore(readBoxStore(JSON.parse(raw)));
+    } catch {
+      // 讀不到就當沒有
+    }
+  }, []);
+
+  const saveBoxStore = useCallback((next: BoxStore) => {
+    setBoxStore(next);
+    try {
+      localStorage.setItem(BOX_PALETTES_KEY, JSON.stringify(next));
+    } catch {
+      // 存不了就只留在這次
+    }
   }, []);
 
   const showNotice = useCallback((text: string, kind: "info" | "error" = "info") => {
@@ -341,7 +368,7 @@ export default function BeadsPage() {
   /** 套用內建模板:色位用模板預設的顏色,之後在色位清單換色 */
   function startTemplate(template: BeadTemplate) {
     if (!confirmDiscard("套用模板")) return;
-    const next = templatePattern(template, PALETTE);
+    const next = templatePattern(template, palette);
     setName(template.name);
     setSavedAs(null);
     setSaveKind(defaultKind(next.cols, next.rows));
@@ -424,7 +451,7 @@ export default function BeadsPage() {
       setColor(picked);
       setMaterial(materialAt(current, index));
       setTool("pen");
-      showNotice(`取到「${PALETTE[picked].name}」，換回畫筆。`);
+      showNotice(`取到「${palette[picked].name}」，換回畫筆。`);
       return;
     }
 
@@ -535,7 +562,7 @@ export default function BeadsPage() {
     const current = editWhole((p) => ({ cells: replaceColor(p.cells, index, -1), materials: p.materials }));
     if (!current) return;
     const count = current.cells.filter((cell) => cell === index).length;
-    showNotice(`清掉「${PALETTE[index].name}」${count} 顆，按「復原」可以拿回來。`);
+    showNotice(`清掉「${palette[index].name}」${count} 顆，按「復原」可以拿回來。`);
   }
 
   /** 色位換色:這個顏色的每一顆都換成另一個顏色,整張圖跟著變 */
@@ -546,8 +573,8 @@ export default function BeadsPage() {
     const merged = current.cells.includes(to);
     showNotice(
       merged
-        ? `「${PALETTE[from].name}」換成「${PALETTE[to].name}」，跟原本的「${PALETTE[to].name}」併成同一色了。`
-        : `「${PALETTE[from].name}」換成「${PALETTE[to].name}」。`
+        ? `「${palette[from].name}」換成「${palette[to].name}」，跟原本的「${palette[to].name}」併成同一色了。`
+        : `「${palette[from].name}」換成「${palette[to].name}」。`
     );
   }
 
@@ -568,7 +595,7 @@ export default function BeadsPage() {
   function saveWork(asNew: boolean) {
     if (!pattern) return;
     const target = asNew ? undefined : (savedAs ?? undefined);
-    const work = toSavedWork(pattern, PALETTE, name, target, undefined, saveKind);
+    const work = toSavedWork(pattern, palette, name, target, undefined, saveKind);
     setSavedAs({ id: work.id, createdAt: work.createdAt });
     setName(work.name);
     setDirty(false);
@@ -582,7 +609,7 @@ export default function BeadsPage() {
 
   function openWork(work: SavedWork) {
     if (savedAs?.id !== work.id && !confirmDiscard("打開別的作品")) return;
-    const next = fromSavedWork(work, PALETTE);
+    const next = fromSavedWork(work, palette);
     setSavedAs({ id: work.id, createdAt: work.createdAt });
     setName(work.name);
     setSaveKind(work.kind);
@@ -645,7 +672,7 @@ export default function BeadsPage() {
 
   async function buildPng(): Promise<ExportedImage | null> {
     if (!pattern) return null;
-    const blob = await renderPatternPng(pattern, PALETTE, {
+    const blob = await renderPatternPng(pattern, palette, {
       cell: EXPORT_CELL,
       melt: currentMelt,
       board: withBoard,
@@ -659,7 +686,7 @@ export default function BeadsPage() {
   const handleSvg = () =>
     run(async () => {
       if (!pattern) return;
-      const svg = patternToSvg(pattern, PALETTE, {
+      const svg = patternToSvg(pattern, palette, {
         melt: currentMelt,
         shape: beadShape,
         board: withBoard,
@@ -675,7 +702,7 @@ export default function BeadsPage() {
   const handleSheet = () =>
     run(async () => {
       if (!pattern) return;
-      const blob = await renderSheetPng(pattern, PALETTE, name.trim() || "拼豆圖紙");
+      const blob = await renderSheetPng(pattern, palette, name.trim() || "拼豆圖紙");
       downloadBlob({ name: `${sanitizeFileName(`${name.trim() || "拼豆"}-圖紙`)}.png`, blob });
       return "已下載圖紙。";
     });
@@ -763,15 +790,17 @@ export default function BeadsPage() {
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-xl font-semibold tracking-[0.08em]">拼豆工坊</h1>
               <Segmented
-                label="拼豆或周邊"
+                label="拼豆、周邊或豆盒"
                 value={view}
                 onChange={(next) => {
                   setView(next);
                   if (next === "merch") setMerchOpened(true);
+                  if (next === "sort") setSortOpened(true);
                 }}
                 options={[
                   { value: "beads", label: "拼豆" },
                   { value: "merch", label: "周邊" },
+                  { value: "sort", label: "豆盒" },
                 ]}
                 t={t}
               />
@@ -779,7 +808,9 @@ export default function BeadsPage() {
             <p className={`mt-0.5 text-xs tracking-[0.04em] ${t.muted}`}>
               {view === "beads"
                 ? "照片轉成拼豆或在空板上自己拼，看豆子落進板子再燙成一片"
-                : "把拼豆作品與照片做成小卡套、搖搖吊飾、御守、透卡"}
+                : view === "merch"
+                  ? "把拼豆作品與照片做成小卡套、搖搖吊飾、御守、透卡"
+                  : "把打翻的豆盒整理回漂亮的漸層，整理好的豆盒變成一組新色盤"}
               ・全部在你的瀏覽器裡完成，照片不會離開這台電腦
             </p>
           </div>
@@ -796,7 +827,29 @@ export default function BeadsPage() {
 
         {merchOpened && (
           <div hidden={view !== "merch"}>
-            <MerchWorkshop album={album} palette={PALETTE} active={view === "merch"} t={t} />
+            <MerchWorkshop album={album} palette={palette} active={view === "merch"} t={t} />
+          </div>
+        )}
+
+        {sortOpened && (
+          <div hidden={view !== "sort"}>
+            <SortBoxGame
+              store={boxStore}
+              active={view === "sort"}
+              t={t}
+              onCollect={(box) => saveBoxStore(addBoxPalette(boxStore, box))}
+              onRemove={(id) => {
+                const next = { ...boxStore, boxes: boxStore.boxes.filter((item) => item.id !== id) };
+                const nextPalette = extendedPalette(DEFAULT_PALETTE, next.boxes);
+                // 拿掉一盒後,後面的顏色索引會往前移:目前的圖照色號(找不到就找最接近的)重新對應,
+                // 復原紀錄裡的舊索引對不上了,一起清掉
+                if (pattern) setPattern(fromSavedWork(toSavedWork(pattern, palette, name), nextPalette));
+                setPast([]);
+                setFuture([]);
+                setColor(DEFAULT_COLOR);
+                saveBoxStore(next);
+              }}
+            />
           </div>
         )}
 
@@ -814,7 +867,7 @@ export default function BeadsPage() {
                   >
                     <BeadCanvas
                       pattern={pattern}
-                      palette={PALETTE}
+                      palette={palette}
                       stage={stage}
                       cell={
                         showHints
@@ -852,7 +905,7 @@ export default function BeadsPage() {
                               setColor(counts[0].index);
                             }
                           }}
-                          label={`只亮「${PALETTE[color].name}」`}
+                          label={`只亮「${palette[color].name}」`}
                           t={t}
                         />
                       )}
@@ -1027,7 +1080,7 @@ export default function BeadsPage() {
                       display={`${settings.maxColors} 色`}
                       value={settings.maxColors}
                       min={2}
-                      max={PALETTE.length}
+                      max={DEFAULT_PALETTE.length}
                       onChange={(value) => changeConversion({ maxColors: value })}
                       t={t}
                     />
@@ -1152,7 +1205,7 @@ export default function BeadsPage() {
 
                 {pattern && editing && (
                   <EditPanel
-                    palette={PALETTE}
+                    palette={palette}
                     tool={tool}
                     color={color}
                     material={material}
@@ -1272,7 +1325,7 @@ export default function BeadsPage() {
 
                 {pattern && (
                   <ColorList
-                    palette={PALETTE}
+                    palette={palette}
                     counts={counts}
                     canEdit={editing}
                     t={t}
@@ -1294,7 +1347,7 @@ export default function BeadsPage() {
 
                 <AlbumPanel
                   works={album}
-                  palette={PALETTE}
+                  palette={palette}
                   activeId={savedAs?.id ?? null}
                   busy={busy || animating}
                   t={t}

@@ -10,6 +10,7 @@ import {
   DEFAULT_STYLE,
   MATERIAL_CLEAR,
   MATERIAL_GLOW,
+  MATERIAL_MATTE,
   materialAt,
   type BeadStyle,
 } from "./finish";
@@ -415,6 +416,13 @@ export function drawFallingBead(
   fillBead(args);
   shadeBead(args);
   ctx.globalAlpha = 1;
+}
+
+/** 一顆沒燙、不在板子上的霧面豆子(豆盒裡散著的那種),cell 是豆子的直徑 */
+export function drawLooseBead(ctx: CanvasRenderingContext2D, cx: number, cy: number, cell: number, shades: BeadShades, seed: number): void {
+  const args: BeadArgs = { ctx, cx, cy, cell, shades, melt: 0, material: MATERIAL_MATTE, style: DEFAULT_STYLE, seed };
+  fillBead(args);
+  shadeBead(args);
 }
 
 /**
