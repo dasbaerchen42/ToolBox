@@ -6,13 +6,14 @@
 
 import type { Quad } from "./perspective";
 
-export type MerchKind = "card" | "charm" | "omamori" | "acrylic";
+export type MerchKind = "card" | "charm" | "omamori" | "acrylic" | "beadcharm";
 
 export const MERCH_KINDS: { kind: MerchKind; label: string; hint: string }[] = [
   { kind: "card", label: "小卡套", hint: "照片＋框、蕾絲邊、貼紙、雷射膜；移動滑鼠或傾斜手機，雷射彩虹會流動" },
   { kind: "charm", label: "搖搖吊飾", hint: "後層照片或底色，前層透明空間裝拼豆小零件；拖動或晃手機，零件照真實形狀碰撞翻滾" },
   { kind: "omamori", label: "御守", hint: "布料與花紋、正面繡字、繩結顏色，可以掛拼豆小鈴鐺；翻面看背面" },
   { kind: "acrylic", label: "透卡／打卡棒", hint: "透明壓克力板貼上拼豆或去背素材，疊在你的照片前；拖四個角讓板子傾斜" },
+  { kind: "beadcharm", label: "拼豆吊飾", hint: "燙好的拼豆作品本身就是吊飾：最上面那顆豆子的洞穿過小圈，掛上鑰匙圈或手機吊繩；拖動或晃手機它會擺" },
 ];
 
 /** 一張貼紙放在設計上的位置:x、y 是中心點(0–1,相對設計區),size 是寬度佔設計區寬的比例 */
@@ -23,15 +24,45 @@ export type Placed = {
   y: number;
   size: number;
   rotation: number;
+  /** 換色:原本的色號 → 換成的色號。拼豆素材以色位存,放進周邊後一樣能換色 */
+  recolor?: Recolor;
 };
+
+export type Recolor = Record<string, string>;
+
+/**
+ * 一張貼紙實際要畫的那份圖的鑰匙:沒換色就是 artId;換了色就在後面接上換法,
+ * 同一份素材換成不同顏色會是不同的圖(各自快取)。
+ */
+export function artKey(item: { artId: string; recolor?: Recolor }): string {
+  const pairs = Object.entries(item.recolor ?? {})
+    .filter(([from, to]) => from !== to)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return pairs.length === 0 ? item.artId : `${item.artId}#${pairs.map(([from, to]) => `${from}>${to}`).join(",")}`;
+}
+
+/** artKey 拆回 artId 與換法 */
+export function parseArtKey(key: string): { artId: string; recolor: Recolor } {
+  const cut = key.indexOf("#");
+  if (cut < 0) return { artId: key, recolor: {} };
+  const recolor: Recolor = {};
+  for (const pair of key.slice(cut + 1).split(",")) {
+    const [from, to] = pair.split(">");
+    if (from && to) recolor[from] = to;
+  }
+  return { artId: key.slice(0, cut), recolor };
+}
 
 export type CardDesign = {
   background: "photo" | "mosaic" | "color";
   color: string;
   /** 馬賽克底的兩個顏色 */
   mosaic: [string, string];
-  frame: "none" | "lace" | "beads";
+  /** motif:用一份拼豆素材(自己拼的也行)沿著邊排一圈當框 */
+  frame: "none" | "lace" | "beads" | "motif";
   frameColors: [string, string];
+  /** 框的圖樣(artKey);frame 是 motif 時用 */
+  frameArt: string;
   laser: boolean;
   gloss: boolean;
   stickers: Placed[];
@@ -43,7 +74,7 @@ export type CharmDesign = {
   color: string;
   ring: string;
   /** 吊飾裡的零件:哪一份圖、多大(一顆豆子幾個設計單位) */
-  pieces: { id: string; artId: string; cell: number }[];
+  pieces: { id: string; artId: string; cell: number; recolor?: Recolor }[];
 };
 
 export type OmamoriDesign = {
@@ -67,11 +98,22 @@ export type AcrylicDesign = {
   corners: Quad;
 };
 
+/** 拼豆吊飾:作品本身打孔掛鍊 */
+export type BeadCharmDesign = {
+  artId: string;
+  recolor?: Recolor;
+  /** ring:鑰匙圈 + 短鍊;strap:手機吊繩 */
+  hardware: "ring" | "strap";
+  metal: string;
+  strap: string;
+};
+
 export type MerchDesigns = {
   card: CardDesign;
   charm: CharmDesign;
   omamori: OmamoriDesign;
   acrylic: AcrylicDesign;
+  beadcharm: BeadCharmDesign;
 };
 
 /** 每種周邊的設計尺寸(設計單位,輸出時再乘倍率) */
@@ -81,6 +123,7 @@ export const DESIGN_SIZE: Record<MerchKind, { width: number; height: number }> =
   charm: { width: 640, height: 820 },
   omamori: { width: 480, height: 820 },
   acrylic: { width: 900, height: 1200 },
+  beadcharm: { width: 560, height: 820 },
 };
 
 /** 搖搖吊飾零件預設的大小:一顆豆子幾個設計單位 */
@@ -100,6 +143,7 @@ export function defaultDesigns(): MerchDesigns {
       mosaic: ["#f2a0a1", "#fdf2f2"],
       frame: "lace",
       frameColors: ["#e95295", "#fbca4d"],
+      frameArt: "tpl:heart-5",
       laser: true,
       gloss: true,
       stickers: [
@@ -143,6 +187,7 @@ export function defaultDesigns(): MerchDesigns {
         { x: 0.18, y: 0.66 },
       ],
     },
+    beadcharm: { artId: "tpl:cat-9", hardware: "ring", metal: "#cfcfd4", strap: "#e95295" },
   };
 }
 

@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import type { ThemeClasses } from "@/lib/theme";
-import type { Placed } from "@/lib/tools/merch/design";
+import type { BeadColor } from "@/lib/tools/beads/palette";
+import { artKey, type Placed, type Recolor } from "@/lib/tools/merch/design";
 import type { Art } from "@/lib/tools/merch/render";
 import { ActionButton, RangeField } from "../../image/_components/controls";
 
@@ -14,7 +16,7 @@ export function hitPlaced(
 ): Placed | null {
   for (let i = stickers.length - 1; i >= 0; i -= 1) {
     const placed = stickers[i];
-    const art = arts.get(placed.artId);
+    const art = arts.get(artKey(placed));
     if (!art) continue;
     // 轉回貼紙自己的座標再比,旋轉過的貼紙也點得準
     const cx = area.x + placed.x * area.width;
@@ -51,18 +53,113 @@ export function drawSelection(
   ctx.restore();
 }
 
-/** 選到的貼紙:大小、旋轉、移到最上面、拿掉 */
+/**
+ * 拼豆貼紙換色:列出這張素材用到的每一色,點一色再從色盤挑新的。
+ * 換法記在貼紙上(色號 → 色號),素材本身不變,同一份素材可以在不同周邊上是不同顏色。
+ */
+export function RecolorControls({
+  placed,
+  getArt,
+  palette,
+  onChange,
+  t,
+}: {
+  /** 貼紙、吊飾……任何「一份圖 + 換色表」 */
+  placed: { artId: string; recolor?: Recolor };
+  getArt: (key: string) => Art | null;
+  palette: BeadColor[];
+  onChange: (recolor: Recolor | undefined) => void;
+  t: ThemeClasses;
+}) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const base = getArt(placed.artId)?.pattern;
+  if (!base) return null;
+  const used = [...new Set(base.cells.filter((cell) => cell >= 0))].map((index) => palette[index]).filter(Boolean);
+  const recolor = placed.recolor ?? {};
+  const byCode = new Map(palette.map((color) => [color.code, color]));
+  const changed = Object.keys(recolor).length > 0;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs tracking-[0.06em]">換色</span>
+        {changed && (
+          <button
+            type="button"
+            onClick={() => {
+              onChange(undefined);
+              setEditing(null);
+            }}
+            className={`rounded-lg border px-2 py-0.5 text-[11px] ${t.secondary}`}
+          >
+            還原顏色
+          </button>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {used.map((color) => {
+          const now = byCode.get(recolor[color.code] ?? color.code) ?? color;
+          return (
+            <button
+              key={color.code}
+              type="button"
+              onClick={() => setEditing(editing === color.code ? null : color.code)}
+              aria-label={`換掉「${color.name}」，現在是「${now.name}」`}
+              aria-pressed={editing === color.code}
+              className={`flex items-center gap-0.5 rounded-full border p-0.5 ${editing === color.code ? "border-(--accent)" : "border-(--border-light)"}`}
+            >
+              <span className="h-5 w-5 rounded-full border border-black/10" style={{ background: color.hex }} />
+              {now !== color && (
+                <>
+                  <span className={`text-[10px] ${t.muted}`}>→</span>
+                  <span className="h-5 w-5 rounded-full border border-black/10" style={{ background: now.hex }} />
+                </>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {editing && (
+        <div role="group" aria-label="換成哪一色" className="grid grid-cols-[repeat(auto-fill,minmax(22px,1fr))] gap-1">
+          {palette.map((color) => (
+            <button
+              key={color.code}
+              type="button"
+              title={`${color.code} ${color.name}`}
+              aria-label={`換成「${color.name}」`}
+              onClick={() => {
+                const next = { ...recolor };
+                if (color.code === editing) delete next[editing];
+                else next[editing] = color.code;
+                onChange(Object.keys(next).length > 0 ? next : undefined);
+                setEditing(null);
+              }}
+              className="aspect-square rounded-full border border-black/10"
+              style={{ background: color.hex }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 選到的貼紙:大小、旋轉、換色、移到最上面、拿掉 */
 export default function PlacedControls({
   stickers,
   selected,
   onChange,
   onSelect,
+  getArt,
+  palette,
   t,
 }: {
   stickers: Placed[];
   selected: string | null;
   onChange: (stickers: Placed[]) => void;
   onSelect: (id: string | null) => void;
+  getArt: (key: string) => Art | null;
+  palette: BeadColor[];
   t: ThemeClasses;
 }) {
   const placed = stickers.find((item) => item.id === selected);
@@ -95,6 +192,14 @@ export default function PlacedControls({
         min={-180}
         max={180}
         onChange={(rotation) => update({ rotation })}
+        t={t}
+      />
+      <RecolorControls
+        key={placed.id}
+        placed={placed}
+        getArt={getArt}
+        palette={palette}
+        onChange={(recolor) => update({ recolor })}
         t={t}
       />
       <div className="flex flex-wrap gap-2">

@@ -16,8 +16,14 @@ const FILE_VERSION = 1;
 /** 板子邊長的上限:大板 58,留一點餘裕給之後的多板拼接 */
 const MAX_SIDE = 232;
 
-/** 作品:完整的一幅;素材:迷你板拼的小零件,之後給周邊工坊用 */
-export type AlbumKind = "work" | "material";
+/**
+ * 作品:完整的一幅;素材:迷你板拼的小零件,之後給周邊工坊用;
+ * 模板:自己拼的圖存成色位模板,套用時開一張新的,在色位清單換色重複使用。
+ * (存檔本來就只記「用到哪幾色」加上每格指向第幾色,本身就是色位格式)
+ */
+export type AlbumKind = "work" | "material" | "template";
+
+export const ALBUM_KIND_LABELS: Record<AlbumKind, string> = { work: "作品", material: "素材", template: "模板" };
 
 export type SavedWork = {
   id: string;
@@ -150,7 +156,7 @@ function readWork(value: unknown): SavedWork | null {
   const now = new Date().toISOString();
   return {
     id: raw.id,
-    kind: raw.kind === "material" ? "material" : "work",
+    kind: raw.kind === "material" || raw.kind === "template" ? raw.kind : "work",
     name: raw.name.slice(0, 60),
     createdAt: isText(raw.createdAt) ? raw.createdAt : now,
     updatedAt: isText(raw.updatedAt) ? raw.updatedAt : now,

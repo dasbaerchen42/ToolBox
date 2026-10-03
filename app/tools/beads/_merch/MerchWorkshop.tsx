@@ -5,6 +5,7 @@ import { idbGet, idbSet } from "@/lib/idb";
 import { MERCH_STORE_KEY, readStoredMerch, type StoredMerch } from "@/lib/tools/merch/persist";
 import type { ThemeClasses } from "@/lib/theme";
 import { downloadBlob, shareImages, type ExportedImage } from "@/lib/download";
+import { encodeGif, recordVideo, videoFormat, type LoopDrawer } from "@/lib/animate";
 import { useCanShareImages } from "@/hooks/useCanShareImages";
 import { canvasToPng } from "@/lib/tools/beads/draw";
 import type { SavedWork } from "@/lib/tools/beads/album";
@@ -12,6 +13,8 @@ import type { BeadColor } from "@/lib/tools/beads/palette";
 import { decodePhoto } from "@/lib/tools/beads/photo";
 import { ImageDecodeError } from "@/lib/tools/image/render";
 import {
+  artKey,
+  parseArtKey,
   CHARM_CELL,
   DESIGN_SIZE,
   defaultDesigns,
@@ -22,10 +25,23 @@ import {
   type MerchKind,
   type Placed,
 } from "@/lib/tools/merch/design";
-import type { Vec } from "@/lib/tools/merch/physics";
+import type { Container, Vec } from "@/lib/tools/merch/physics";
+import {
+  acrylicWobble,
+  cardLaserAngle,
+  charmPieceOffsets,
+  charmSwing,
+  GIF_FPS,
+  LOOP_SECONDS,
+  beadCharmSwing,
+  omamoriSway,
+  VIDEO_FPS,
+} from "@/lib/tools/merch/motion";
 import {
   acrylicBoardSize,
+  charmGeometry,
   drawAcrylicBoard,
+  drawBeadCharm,
   drawAcrylicScene,
   drawCard,
   drawCharm,
@@ -37,16 +53,24 @@ import { ToolPane } from "../../image/_components/WorkbenchLayout";
 import AcrylicStage from "./AcrylicStage";
 import ArtLibrary from "./ArtLibrary";
 import { isPieceable, MAX_PIECE_SIDE, useArts, type Cutout } from "./arts";
+import BeadCharmStage from "./BeadCharmStage";
 import CardStage from "./CardStage";
 import CharmStage from "./CharmStage";
 import OmamoriStage from "./OmamoriStage";
-import PlacedControls from "./PlacedControls";
+import PlacedControls, { RecolorControls } from "./PlacedControls";
 import { needsMotionPermission, requestMotionPermission } from "./useDesignCanvas";
 import WandDialog from "./WandDialog";
 
 /** 輸出倍率:設計單位 × 2,小卡就是 1100×1700 */
 const EXPORT_SCALE = 2;
 const MAX_PIECES = 12;
+/** 動態輸出:GIF 小一點(檔案才傳得動),影片長邊到 1080 */
+const GIF_MAX_SIDE = 560;
+const VIDEO_MAX_SIDE = 1080;
+/** GIF 透明只有全有全無,邊緣會毛,所以鋪淡色底;影片也用同一個底 */
+const LOOP_BACKGROUND = "#f4f1ea";
+/** 錄的時候吊飾縮一點、從上緣往下掛,擺動時角不會出框 */
+const CHARM_LOOP_SCALE = 0.88;
 
 const PATTERNS = [
   { value: "asanoha", label: "麻葉" },
@@ -61,19 +85,41 @@ type Notice = { text: string; kind: "info" | "error" } | null;
  * 周邊工坊:小卡套、搖搖吊飾、御守、透卡／打卡棒。
  * 素材來自內建模板、相簿(作品與素材)與魔術棒去背的圖片;一張「你的照片」四種周邊共用。
  */
+/** 從拼豆那邊「做成吊飾」送過來的:哪一份作品;nonce 每次按都不一樣 */
+export type MerchRequest = { artId: string; nonce: number };
+
+/** 把送過來的作品掛到拼豆吊飾上 */
+const withCharmArt = (designs: MerchDesigns, artId: string): MerchDesigns => ({
+  ...designs,
+  beadcharm: { ...designs.beadcharm, artId, recolor: undefined },
+});
+
 export default function MerchWorkshop({
   album,
   palette,
   active,
+  request,
   t,
 }: {
   album: SavedWork[];
   palette: BeadColor[];
   active: boolean;
+  request: MerchRequest | null;
   t: ThemeClasses;
 }) {
-  const [kind, setKind] = useState<MerchKind>("card");
-  const [designs, setDesigns] = useState<MerchDesigns>(defaultDesigns);
+  // 第一次掛上就帶著的請求:等讀回存檔之後再套,才不會被存檔蓋掉
+  const [firstRequest] = useState(request);
+  const [handledRequest, setHandledRequest] = useState(request?.nonce ?? null);
+  const [kind, setKind] = useState<MerchKind>(request ? "beadcharm" : "card");
+  const [designs, setDesigns] = useState<MerchDesigns>(() =>
+    request ? withCharmArt(defaultDesigns(), request.artId) : defaultDesigns()
+  );
+  // 已經開著的時候又送一份過來:在這次渲染就換過去(React 建議的「依 props 調整 state」寫法)
+  if (request && request.nonce !== handledRequest) {
+    setHandledRequest(request.nonce);
+    setKind("beadcharm");
+    setDesigns((current) => withCharmArt(current, request.artId));
+  }
   const [photo, setPhoto] = useState<ImageBitmap | null>(null);
   /** 照片的原始檔:存檔用(ImageBitmap 存不進去) */
   const [photoBlob, setPhotoBlob] = useState<Blob | null>(null);
@@ -89,6 +135,8 @@ export default function MerchWorkshop({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const canShare = useCanShareImages();
+  // 這個元件只在瀏覽器裡掛上,可以直接問能不能錄影
+  const [video] = useState(() => videoFormat());
 
   const photoInput = useRef<HTMLInputElement>(null);
   const wandInput = useRef<HTMLInputElement>(null);
@@ -126,8 +174,8 @@ export default function MerchWorkshop({
           }
         }
         if (cancelled) return;
-        setDesigns(stored.designs);
-        setKind(stored.kind);
+        setDesigns(firstRequest ? withCharmArt(stored.designs, firstRequest.artId) : stored.designs);
+        setKind(firstRequest ? "beadcharm" : stored.kind);
         setCutouts(restoredCutouts);
         setPhoto(restoredPhoto);
         setPhotoBlob(restoredPhoto ? stored.photo : null);
@@ -137,7 +185,7 @@ export default function MerchWorkshop({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [firstRequest]);
 
   // 自動存檔:停下來 0.5 秒才寫,拖貼紙時不會每一格都存
   useEffect(() => {
@@ -173,10 +221,15 @@ export default function MerchWorkshop({
   const charm = designs.charm;
   const omamori = designs.omamori;
   const acrylic = designs.acrylic;
+  const beadcharm = designs.beadcharm;
 
-  const cardArts = useMemo(() => artMap(card.stickers.map((item) => item.artId)), [artMap, card.stickers]);
-  const charmArts = useMemo(() => artMap(charm.pieces.map((item) => item.artId)), [artMap, charm.pieces]);
-  const acrylicArts = useMemo(() => artMap(acrylic.stickers.map((item) => item.artId)), [artMap, acrylic.stickers]);
+  const cardArts = useMemo(
+    () => artMap([...card.stickers.map(artKey), ...(card.frame === "motif" ? [card.frameArt] : [])]),
+    [artMap, card.stickers, card.frame, card.frameArt]
+  );
+  const charmArt = useMemo(() => getArt(artKey(beadcharm)), [getArt, beadcharm]);
+  const charmArts = useMemo(() => artMap(charm.pieces.map(artKey)), [artMap, charm.pieces]);
+  const acrylicArts = useMemo(() => artMap(acrylic.stickers.map(artKey)), [artMap, acrylic.stickers]);
   const bell = useMemo(() => (omamori.bell ? getArt(omamori.bell) : null), [getArt, omamori.bell]);
 
   const showNotice = (text: string, noticeKind: "info" | "error" = "info") => setNotice({ text, kind: noticeKind });
@@ -212,6 +265,8 @@ export default function MerchWorkshop({
       }
       const cell = charm.pieces[0]?.cell ?? CHARM_CELL;
       update("charm", { ...charm, pieces: [...charm.pieces, { id: newId("piece"), artId, cell }] });
+    } else if (kind === "beadcharm") {
+      update("beadcharm", { ...beadcharm, artId, recolor: undefined });
     } else {
       update("omamori", { ...omamori, bell: artId });
     }
@@ -230,6 +285,7 @@ export default function MerchWorkshop({
     if (kind === "card") drawCard(ctx, width, height, card, { photo, arts: cardArts }, 0.7);
     else if (kind === "charm") drawCharm(ctx, width, height, charm, photo, charmPieces.current);
     else if (kind === "omamori") drawOmamori(ctx, width, height, omamori, side, 0, bell);
+    else if (kind === "beadcharm") drawBeadCharm(ctx, width, height, beadcharm, charmArt, 0);
     else {
       const size = acrylicBoardSize(acrylic);
       const board = document.createElement("canvas");
@@ -242,10 +298,85 @@ export default function MerchWorkshop({
     return canvas;
   }
 
+  const fileBase = () => `周邊-${MERCH_KINDS.find((item) => item.kind === kind)?.label.replace("／", "-") ?? "周邊"}`;
+
   async function buildPng(): Promise<ExportedImage> {
-    const label = MERCH_KINDS.find((item) => item.kind === kind)?.label.replace("／", "-") ?? "周邊";
-    return { name: `周邊-${label}.png`, blob: await canvasToPng(renderExport()) };
+    return { name: `${fileBase()}.png`, blob: await canvasToPng(renderExport()) };
   }
+
+  /** 錄 GIF/影片用的一圈:照 motion.ts 設計好的路徑畫,最後一格接回第一格(設計單位) */
+  function loopDrawer(): LoopDrawer {
+    const { width, height } = DESIGN_SIZE[kind];
+    if (kind === "card") {
+      return (ctx, t) => drawCard(ctx, width, height, card, { photo, arts: cardArts }, cardLaserAngle(t));
+    }
+    if (kind === "omamori") return (ctx, t) => drawOmamori(ctx, width, height, omamori, side, omamoriSway(t), bell);
+    if (kind === "beadcharm") return (ctx, t) => drawBeadCharm(ctx, width, height, beadcharm, charmArt, beadCharmSwing(t));
+    if (kind === "acrylic") {
+      const size = acrylicBoardSize(acrylic);
+      const board = document.createElement("canvas");
+      board.width = size.width;
+      board.height = size.height;
+      const boardCtx = board.getContext("2d");
+      if (boardCtx) drawAcrylicBoard(boardCtx, acrylic, acrylicArts);
+      return (ctx, t) =>
+        drawAcrylicScene(ctx, width, height, { ...acrylic, corners: acrylicWobble(acrylic.corners, t) }, photo, board);
+    }
+    // 吊飾:零件從現在停著的位置開始晃(跟畫面上看到的一樣)
+    const pieces = charmPieces.current;
+    const { inner } = charmGeometry(charm, width, height);
+    const box: Container = inner.kind === "circle" ? { ...inner, r: inner.r - 3 } : { ...inner, hw: inner.hw - 3, hh: inner.hh - 3 };
+    const bodies = pieces.map((piece) => piece.body);
+    return (ctx, t) => {
+      const offsets = charmPieceOffsets(bodies, box, t);
+      const moved = pieces.map((piece, k) => ({
+        ...piece,
+        body: {
+          ...piece.body,
+          x: piece.body.x + offsets[k].dx,
+          y: piece.body.y + offsets[k].dy,
+          angle: piece.body.angle + offsets[k].dAngle,
+        },
+      }));
+      ctx.translate(width / 2, height * 0.03);
+      ctx.rotate(charmSwing(t));
+      ctx.scale(CHARM_LOOP_SCALE, CHARM_LOOP_SCALE);
+      ctx.translate(-width / 2, 0);
+      drawCharm(ctx, width, height, charm, photo, moved);
+    };
+  }
+
+  function loopSpec(maxSide: number, fps: number, label: string) {
+    const { width, height } = DESIGN_SIZE[kind];
+    const scale = maxSide / Math.max(width, height);
+    const draw = loopDrawer();
+    return {
+      width: Math.round(width * scale),
+      height: Math.round(height * scale),
+      background: LOOP_BACKGROUND,
+      seconds: LOOP_SECONDS,
+      fps,
+      draw: ((ctx, t) => {
+        ctx.scale(scale, scale);
+        draw(ctx, t);
+      }) as LoopDrawer,
+      onProgress: (progress: number) => showNotice(`${label} ${Math.round(progress * 100)}%`),
+    };
+  }
+
+  const handleGif = () =>
+    run(async () => {
+      const blob = await encodeGif(loopSpec(GIF_MAX_SIDE, GIF_FPS, "GIF 編碼中…"));
+      downloadBlob({ name: `${fileBase()}.gif`, blob });
+      return `已下載 GIF（${(blob.size / 1024 / 1024).toFixed(1)} MB）。`;
+    });
+
+  const handleVideo = () =>
+    run(async () => {
+      const { blob, ext } = await recordVideo({ ...loopSpec(VIDEO_MAX_SIDE, VIDEO_FPS, "錄影中…"), loops: 2 });
+      downloadBlob({ name: `${fileBase()}.${ext}`, blob });
+      return `已下載影片（${ext.toUpperCase()}，${(blob.size / 1024 / 1024).toFixed(1)} MB）。`;
+    });
 
   async function run(task: () => Promise<string | undefined>) {
     setBusy(true);
@@ -299,6 +430,8 @@ export default function MerchWorkshop({
       />
     ) : kind === "charm" ? (
       <CharmStage design={charm} photo={photo} arts={charmArts} active={active} piecesRef={charmPieces} shakeRef={shake} />
+    ) : kind === "beadcharm" ? (
+      <BeadCharmStage design={beadcharm} art={charmArt} active={active} />
     ) : kind === "omamori" ? (
       <OmamoriStage
         design={omamori}
@@ -319,7 +452,7 @@ export default function MerchWorkshop({
       />
     );
 
-  const usesPhoto = kind !== "omamori";
+  const usesPhoto = kind !== "omamori" && kind !== "beadcharm";
 
   return (
     <div className="flex flex-col gap-4">
@@ -418,11 +551,37 @@ export default function MerchWorkshop({
                     options={[
                       { value: "lace", label: "蕾絲邊" },
                       { value: "beads", label: "拼豆框" },
+                      { value: "motif", label: "自己拼的框" },
                       { value: "none", label: "不加框" },
                     ]}
                     t={t}
                   />
                 </Field>
+                {card.frame === "motif" && (
+                  <Field
+                    label="框的圖樣"
+                    hint="挑一份小拼豆，沿著四邊排一圈。用迷你板自己拼一個、收藏成「素材」或「模板」就會出現在這裡。"
+                    t={t}
+                  >
+                    <ArtLibrary
+                      entries={entries}
+                      getArt={getArt}
+                      onPick={(frameArt) => update("card", { ...card, frameArt })}
+                      filter={isPieceable}
+                      t={t}
+                    />
+                    <RecolorControls
+                      key={card.frameArt.split("#")[0]}
+                      placed={parseArtKey(card.frameArt)}
+                      getArt={getArt}
+                      palette={palette}
+                      onChange={(recolor) =>
+                        update("card", { ...card, frameArt: artKey({ artId: parseArtKey(card.frameArt).artId, recolor }) })
+                      }
+                      t={t}
+                    />
+                  </Field>
+                )}
                 {card.frame === "beads" && (
                   <Field label="拼豆框兩色" t={t}>
                     <ColorField
@@ -569,6 +728,37 @@ export default function MerchWorkshop({
               </>
             )}
 
+            {kind === "beadcharm" && (
+              <>
+                <Field label="掛在哪裡" t={t}>
+                  <Segmented
+                    label="掛在哪裡"
+                    value={beadcharm.hardware}
+                    onChange={(hardware) => update("beadcharm", { ...beadcharm, hardware })}
+                    options={[
+                      { value: "ring", label: "鑰匙圈" },
+                      { value: "strap", label: "手機吊繩" },
+                    ]}
+                    t={t}
+                  />
+                </Field>
+                <Field label={beadcharm.hardware === "ring" ? "金屬顏色" : "金屬與吊繩顏色"} t={t}>
+                  <ColorField value={beadcharm.metal} onChange={(metal) => update("beadcharm", { ...beadcharm, metal })} t={t} />
+                  {beadcharm.hardware === "strap" && (
+                    <ColorField value={beadcharm.strap} onChange={(strap) => update("beadcharm", { ...beadcharm, strap })} t={t} />
+                  )}
+                </Field>
+                <RecolorControls
+                  key={beadcharm.artId}
+                  placed={beadcharm}
+                  getArt={getArt}
+                  palette={palette}
+                  onChange={(recolor) => update("beadcharm", { ...beadcharm, recolor })}
+                  t={t}
+                />
+              </>
+            )}
+
             {kind === "acrylic" && (
               <>
                 <Field label="款式" t={t}>
@@ -613,7 +803,15 @@ export default function MerchWorkshop({
 
             {stickers && (
               <Field label="貼紙" t={t}>
-                <PlacedControls stickers={stickers} selected={selected} onChange={setStickers} onSelect={setSelected} t={t} />
+                <PlacedControls
+                  stickers={stickers}
+                  selected={selected}
+                  onChange={setStickers}
+                  onSelect={setSelected}
+                  getArt={getArt}
+                  palette={palette}
+                  t={t}
+                />
               </Field>
             )}
 
@@ -634,14 +832,16 @@ export default function MerchWorkshop({
 
             <Field
               label={
-                kind === "charm" ? "加零件" : kind === "omamori" ? "拼豆小鈴鐺" : "加貼紙"
+                kind === "charm" ? "加零件" : kind === "omamori" ? "拼豆小鈴鐺" : kind === "beadcharm" ? "掛哪一份作品" : "加貼紙"
               }
               hint={
                 kind === "charm"
                   ? `只放得進 ${MAX_PIECE_SIDE}×${MAX_PIECE_SIDE} 以內的小拼豆；在拼豆工坊用迷你板拼好、收藏成「素材」就會出現在這裡。`
                   : kind === "omamori"
                     ? "點一個掛在繩結旁邊。"
-                    : "相簿裡的作品與素材都在這裡；也可以上傳圖片去背。"
+                    : kind === "beadcharm"
+                      ? "收藏冊裡的作品、素材、模板都可以；在拼豆那邊按「做成吊飾」會直接送過來。"
+                      : "相簿裡的作品與素材都在這裡；也可以上傳圖片去背。"
               }
               t={t}
             >
@@ -649,7 +849,9 @@ export default function MerchWorkshop({
                 entries={entries}
                 getArt={getArt}
                 onPick={addSticker}
-                filter={kind === "charm" || kind === "omamori" ? isPieceable : undefined}
+                filter={
+                  kind === "charm" || kind === "omamori" ? isPieceable : kind === "beadcharm" ? (entry) => Boolean(entry.pattern) : undefined
+                }
                 onUpload={kind === "card" || kind === "acrylic" ? () => wandInput.current?.click() : undefined}
                 t={t}
               />
@@ -659,12 +861,23 @@ export default function MerchWorkshop({
               <ActionButton t={t} onClick={() => void handleDownload()} disabled={busy}>
                 下載 PNG
               </ActionButton>
+              <ActionButton tone="secondary" t={t} onClick={() => void handleGif()} disabled={busy}>
+                下載 GIF
+              </ActionButton>
+              {video && (
+                <ActionButton tone="secondary" t={t} onClick={() => void handleVideo()} disabled={busy}>
+                  下載影片
+                </ActionButton>
+              )}
               {canShare && (
                 <ActionButton tone="secondary" t={t} onClick={() => void handleShare()} disabled={busy}>
                   存到相簿／分享
                 </ActionButton>
               )}
             </div>
+            <p className={`text-[11px] leading-5 ${t.muted}`}>
+              GIF 與影片是 {LOOP_SECONDS} 秒的循環：{kind === "card" ? "雷射膜來回流動" : kind === "charm" ? "吊飾擺動、零件跟著滑" : kind === "omamori" ? "繩結輕輕晃" : kind === "beadcharm" ? "吊飾左右擺" : "板子像拿在手上微微晃"}。GIF 最多 256 色，雷射與亮粉會有一點色帶；影片畫質完整，錄的時候要等 {LOOP_SECONDS * 2} 秒。
+            </p>
             <p className={`text-[11px] leading-5 ${t.muted}`}>
               {saveFailed
                 ? "這個瀏覽器存不了進度（可能是無痕模式），關掉頁面前記得先下載。"

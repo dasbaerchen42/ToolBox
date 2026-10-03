@@ -56,6 +56,22 @@ export const TEMPLATES: BeadTemplate[] = [
   },
 ];
 
+/**
+ * 換色:照色號把某幾色換成另一色(色號 → 色號)。找不到的色號就不換。
+ * 素材以色位存,同一份素材放進周邊後可以換成別的顏色,不必回去重拼。
+ */
+export function recolorPattern(pattern: BeadPattern, palette: BeadColor[], recolor: Record<string, string>): BeadPattern {
+  const byCode = new Map(palette.map((color, index) => [color.code, index]));
+  const swap = new Map<number, number>();
+  for (const [from, to] of Object.entries(recolor)) {
+    const a = byCode.get(from);
+    const b = byCode.get(to);
+    if (a !== undefined && b !== undefined) swap.set(a, b);
+  }
+  if (swap.size === 0) return pattern;
+  return { ...pattern, cells: pattern.cells.map((cell) => swap.get(cell) ?? cell) };
+}
+
 /** 模板 → 格子資料。slotColors 給了就用它(色盤索引),沒給就用模板預設的色號 */
 export function templatePattern(
   template: BeadTemplate,

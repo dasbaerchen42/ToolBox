@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { clampPlacement, DESIGN_SIZE, type AcrylicDesign } from "@/lib/tools/merch/design";
+import { artKey, clampPlacement, DESIGN_SIZE, type AcrylicDesign } from "@/lib/tools/merch/design";
 import { applyHomography, homography, isConvex, rectQuad, type Quad } from "@/lib/tools/merch/perspective";
 import { acrylicArea, acrylicBoardSize, drawAcrylicBoard, drawAcrylicScene, type Art } from "@/lib/tools/merch/render";
 import { drawSelection, hitPlaced } from "./PlacedControls";
@@ -47,7 +47,7 @@ export default function AcrylicStage({
     if (ctx) {
       drawAcrylicBoard(ctx, design, arts);
       const placed = design.stickers.find((item) => item.id === selected);
-      const art = placed && arts.get(placed.artId);
+      const art = placed && arts.get(artKey(placed));
       if (placed && art) drawSelection(ctx, placed, art, acrylicArea(design));
     }
     return canvas;

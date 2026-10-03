@@ -4,7 +4,8 @@ import { useCallback, useMemo, useState } from "react";
 import { fromSavedWork, type SavedWork } from "@/lib/tools/beads/album";
 import type { BeadColor } from "@/lib/tools/beads/palette";
 import type { BeadPattern } from "@/lib/tools/beads/pattern";
-import { TEMPLATES, templatePattern } from "@/lib/tools/beads/templates";
+import { recolorPattern, TEMPLATES, templatePattern } from "@/lib/tools/beads/templates";
+import { parseArtKey } from "@/lib/tools/merch/design";
 import { rasterizeBeads, type Art } from "@/lib/tools/merch/render";
 
 /** 素材庫裡的一項:還沒畫成圖,要用時才畫(大幅作品畫起來不便宜) */
@@ -51,13 +52,13 @@ export function useArts(album: SavedWork[], cutouts: Cutout[], palette: BeadColo
       version: "1",
       pattern: templatePattern(template, palette),
     }));
-    // 素材在前(本來就是為周邊拼的小零件),作品在後
-    for (const kind of ["material", "work"] as const) {
+    // 自己存的模板跟內建模板放一起;素材在前(本來就是為周邊拼的小零件),作品在後
+    for (const kind of ["template", "material", "work"] as const) {
       for (const work of album) {
         if (work.kind !== kind) continue;
         list.push({
           id: `album:${work.id}`,
-          label: work.name || (kind === "material" ? "未命名素材" : "未命名作品"),
+          label: work.name || (kind === "material" ? "未命名素材" : kind === "template" ? "未命名模板" : "未命名作品"),
           group: kind,
           version: work.updatedAt,
           pattern: fromSavedWork(work, palette),
@@ -72,23 +73,26 @@ export function useArts(album: SavedWork[], cutouts: Cutout[], palette: BeadColo
 
   const byId = useMemo(() => new Map(entries.map((entry) => [entry.id, entry])), [entries]);
 
+  /** key 是 artKey:artId,或 artId 加上換色(換過色的拼豆另外畫一份、另外快取) */
   const getArt = useCallback(
-    (id: string): Art | null => {
-      const entry = byId.get(id);
+    (key: string): Art | null => {
+      const { artId, recolor } = parseArtKey(key);
+      const entry = byId.get(artId);
       if (!entry) return null;
-      const cached = cache.get(id);
+      const cached = cache.get(key);
       if (cached && cached.version === entry.version) return cached.art;
-      const source = entry.canvas ?? (entry.pattern ? rasterizeBeads(entry.pattern, palette) : null);
+      const pattern = entry.pattern ? recolorPattern(entry.pattern, palette, recolor) : undefined;
+      const source = entry.canvas ?? (pattern ? rasterizeBeads(pattern, palette) : null);
       if (!source) return null;
       const art: Art = {
-        id,
+        id: key,
         label: entry.label,
         source,
         width: source.width,
         height: source.height,
-        pattern: entry.pattern,
+        pattern,
       };
-      cache.set(id, { version: entry.version, art });
+      cache.set(key, { version: entry.version, art });
       return art;
     },
     [byId, cache, palette],

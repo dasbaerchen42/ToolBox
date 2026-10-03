@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { clampPlacement, DESIGN_SIZE, type CardDesign } from "@/lib/tools/merch/design";
+import { artKey, clampPlacement, DESIGN_SIZE, type CardDesign } from "@/lib/tools/merch/design";
 import { cardArea, drawCard, type Art } from "@/lib/tools/merch/render";
 import { drawSelection, hitPlaced } from "./PlacedControls";
 import { useDesignCanvas } from "./useDesignCanvas";
@@ -38,7 +38,7 @@ export default function CardStage({
     paint((ctx) => {
       drawCard(ctx, W, H, design, { photo, arts }, angle.current);
       const placed = design.stickers.find((item) => item.id === selected);
-      const art = placed && arts.get(placed.artId);
+      const art = placed && arts.get(artKey(placed));
       if (placed && art) drawSelection(ctx, placed, art, cardArea(W, H));
     });
   }, [paint, design, photo, arts, selected]);
