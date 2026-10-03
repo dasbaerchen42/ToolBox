@@ -7,13 +7,11 @@ import type { BeadPattern } from "@/lib/tools/beads/pattern";
 import { meltOf } from "@/lib/tools/beads/finish";
 import {
   artKey,
-  type AcrylicDesign,
   type CardDesign,
   type CharmDesign,
   type OmamoriDesign,
   type Placed,
 } from "./design";
-import { applyHomography, drawPerspective, homography, isConvex, rectQuad, type Quad } from "./perspective";
 import { partPosition, type Body, type Container } from "./physics";
 
 const FONT = `system-ui, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif`;
@@ -195,12 +193,6 @@ function drawMotifFrame(ctx: CanvasRenderingContext2D, w: number, h: number, ins
 export function cardArea(w: number, h: number) {
   const inset = w * 0.07;
   return { x: inset, y: inset, width: w - inset * 2, height: h - inset * 2 };
-}
-
-/** 透卡板子上放貼紙的範圍(握把不算) */
-export function acrylicArea(design: AcrylicDesign) {
-  const { width, boardHeight } = acrylicBoardSize(design);
-  return { x: 0, y: 0, width, height: boardHeight };
 }
 
 export type CardAssets = { photo: (CanvasImageSource & { width: number; height: number }) | null; arts: Map<string, Art> };
@@ -573,19 +565,8 @@ function drawEmbroidery(ctx: CanvasRenderingContext2D, text: string, x: number, 
   ctx.restore();
 }
 
-/**
- * 御守。side 是正面或背面;sway 是繩結晃動的角度(弧度)。
- * 背面只有「御守」兩個大字與一行小字。
- */
-export function drawOmamori(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  design: OmamoriDesign,
-  side: "front" | "back",
-  sway: number,
-  bell: Art | null
-) {
+/** 御守的繩結(與拼豆小鈴鐺):從袋口的孔往上繞一圈再打結,繞著孔晃(sway 是弧度) */
+export function drawOmamoriCord(ctx: CanvasRenderingContext2D, w: number, h: number, design: OmamoriDesign, sway: number, bell: Art | null) {
   // 繩結:從袋口往上繞一圈再打結,繞著袋口晃
   ctx.save();
   ctx.translate(w / 2, h * 0.21);
@@ -622,12 +603,15 @@ export function drawOmamori(
     ctx.restore();
   }
   ctx.restore();
+}
 
-  // 袋子
+/**
+ * 御守袋的印刷:布料、花紋、滾邊、繡字。side 是正面或背面,
+ * 背面只有「御守」兩個大字與一行小字。壓克力御守把它當印刷層。
+ */
+export function drawOmamoriBag(ctx: CanvasRenderingContext2D, w: number, h: number, design: OmamoriDesign, side: "front" | "back") {
+  // 袋子(印在壓克力上,所以不帶陰影)
   ctx.save();
-  ctx.shadowColor = "rgba(0, 0, 0, 0.28)";
-  ctx.shadowBlur = 16;
-  ctx.shadowOffsetY = 6;
   const bag = omamoriBag(ctx, w, h);
   ctx.fillStyle = design.fabric;
   ctx.fill();
@@ -687,120 +671,4 @@ export function drawOmamori(
     chars.forEach((char, i) => ctx.fillText(char, w / 2, y0 + i * w * 0.055));
     ctx.restore();
   }
-}
-
-/** 透卡的板子(攤平):透明壓克力 + 貼紙 + 邊;打卡棒在下面多一根握把 */
-export function acrylicBoardSize(design: AcrylicDesign) {
-  const width = 600;
-  const boardHeight = design.shape === "circle" ? 600 : 420;
-  const stick = design.mode === "stick" ? 260 : 0;
-  return { width, height: boardHeight + stick, boardHeight };
-}
-
-export function drawAcrylicBoard(ctx: CanvasRenderingContext2D, design: AcrylicDesign, arts: Map<string, Art>) {
-  const { width, boardHeight, height } = acrylicBoardSize(design);
-  const path = () => {
-    ctx.beginPath();
-    if (design.shape === "circle") ctx.arc(width / 2, boardHeight / 2, width / 2 - 6, 0, Math.PI * 2);
-    else ctx.roundRect(6, 6, width - 12, boardHeight - 12, 36);
-  };
-
-  // 握把(打卡棒):在板子後面
-  if (design.mode === "stick") {
-    ctx.save();
-    const sw = 46;
-    const g = ctx.createLinearGradient(width / 2 - sw / 2, 0, width / 2 + sw / 2, 0);
-    g.addColorStop(0, "rgba(230, 236, 245, 0.55)");
-    g.addColorStop(0.5, "rgba(255, 255, 255, 0.85)");
-    g.addColorStop(1, "rgba(210, 218, 230, 0.55)");
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.roundRect(width / 2 - sw / 2, boardHeight - 40, sw, height - boardHeight + 34, 18);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  // 壓克力本體:幾乎透明,只帶一點點白
-  ctx.save();
-  path();
-  ctx.fillStyle = design.edge ? "rgba(255, 255, 255, 0.1)" : "rgba(255, 255, 255, 0)";
-  ctx.fill();
-  ctx.restore();
-
-  const area = acrylicArea(design);
-  ctx.save();
-  path();
-  ctx.clip();
-  for (const placed of design.stickers) {
-    const art = arts.get(artKey(placed));
-    if (art) drawPlaced(ctx, art, placed, area);
-  }
-  ctx.restore();
-
-  if (design.edge) {
-    // 壓克力的厚度:亮色描邊 + 內側一條細亮線 + 淡淡的斜反光
-    ctx.save();
-    path();
-    ctx.lineWidth = 10;
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
-    ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
-    ctx.shadowBlur = 8;
-    ctx.stroke();
-    ctx.shadowColor = "transparent";
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
-    ctx.stroke();
-    path();
-    ctx.clip();
-    const g = ctx.createLinearGradient(0, 0, width, boardHeight);
-    g.addColorStop(0, "rgba(255, 255, 255, 0.28)");
-    g.addColorStop(0.3, "rgba(255, 255, 255, 0)");
-    g.addColorStop(0.62, "rgba(255, 255, 255, 0)");
-    g.addColorStop(0.7, "rgba(255, 255, 255, 0.16)");
-    g.addColorStop(0.78, "rgba(255, 255, 255, 0)");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, width, boardHeight);
-    ctx.restore();
-  }
-}
-
-/**
- * 四個角只管板子;打卡棒的握把在板子下面,用同一個透視延伸出去。
- * 延伸到地平線另一邊(透視拉太斜)時回傳 null,只好把整張塞進四個角。
- */
-export function acrylicImageQuad(design: AcrylicDesign, board: Quad): Quad | null {
-  const { width, height, boardHeight } = acrylicBoardSize(design);
-  if (height === boardHeight) return board;
-  const h = homography(rectQuad(0, 0, width, boardHeight), board);
-  const corners = rectQuad(0, 0, width, height);
-  if (corners.some((p) => h[6] * p.x + h[7] * p.y + h[8] <= 0.05)) return null;
-  const quad = corners.map((p) => applyHomography(h, p)) as Quad;
-  return isConvex(quad) ? quad : null;
-}
-
-/**
- * 透卡整張:照片當背景,板子透視貼在四個角上。
- * 沒有照片時用一張淡淡的漸層當背景,也能直接做。
- */
-export function drawAcrylicScene(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  design: AcrylicDesign,
-  photo: (CanvasImageSource & { width: number; height: number }) | null,
-  board: HTMLCanvasElement
-) {
-  if (photo) drawCover(ctx, photo, 0, 0, w, h);
-  else {
-    const g = ctx.createLinearGradient(0, 0, w, h);
-    g.addColorStop(0, "#f3e6c8");
-    g.addColorStop(1, "#bbc8e6");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, h);
-  }
-  const quad = design.corners.map((p) => ({ x: p.x * w, y: p.y * h })) as Quad;
-  drawPerspective(ctx, board, board.width, board.height, acrylicImageQuad(design, quad) ?? quad);
 }

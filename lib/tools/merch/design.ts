@@ -4,15 +4,15 @@
 // 貼紙只記三件事:用哪一份圖(art)、位置/大小/旋轉、(拼豆的話)燙法與材質跟著格子資料走。
 // 同一顆星星可以同時當吊飾裡的小亮片,也能放大當卡套主角。
 
-import type { Quad } from "./perspective";
+import { defaultPlacement, type Placement } from "./acrylic-shape";
 
 export type MerchKind = "card" | "charm" | "omamori" | "acrylic";
 
 export const MERCH_KINDS: { kind: MerchKind; label: string; hint: string }[] = [
   { kind: "card", label: "小卡套", hint: "照片＋框、蕾絲邊、貼紙、雷射膜；移動滑鼠或傾斜手機，雷射彩虹會流動" },
   { kind: "charm", label: "搖搖吊飾", hint: "後層照片或底色，前層透明空間裝拼豆小零件；拖動或晃手機，零件照真實形狀碰撞翻滾" },
-  { kind: "omamori", label: "御守", hint: "布料與花紋、正面繡字、繩結顏色，可以掛拼豆小鈴鐺；翻面看背面" },
-  { kind: "acrylic", label: "透卡／打卡棒", hint: "透明壓克力板貼上拼豆或去背素材，疊在你的照片前；拖四個角讓板子傾斜" },
+  { kind: "omamori", label: "壓克力御守", hint: "御守袋印在一片透明壓克力上，外緣留一圈透明邊，袋口打孔穿繩結；點一下翻面" },
+  { kind: "acrylic", label: "透卡／打卡棒", hint: "壓克力上印你的圖（拼豆或去背圖），先攤平排版，再「放到照片上」和實景合成；拖板子移動、拖四個角傾斜" },
 ];
 
 /** 一張貼紙放在設計上的位置:x、y 是中心點(0–1,相對設計區),size 是寬度佔設計區寬的比例 */
@@ -86,15 +86,34 @@ export type OmamoriDesign = {
   back: string;
   /** 掛在繩結旁的拼豆小鈴鐺(用哪一份圖);null = 不掛 */
   bell: string | null;
+  /** 壓克力御守:質感(本體的透明度、反光、厚度)與邊線,0–1 */
+  clarity: number;
+  edge: number;
 };
 
+/** 透卡的印刷框:相框(四邊一樣寬)、拍立得(下面比較寬)、細線框;都是通用樣式 */
+export type AcrylicFrame = "none" | "photo" | "polaroid" | "line";
+
+/**
+ * 虛擬壓克力:透卡(卡片形)或打卡棒(沿著圖案外緣切 + 卡榫 + 透明棒子)。
+ * 編輯時攤平,放到照片上時用 place 擺位置、大小、旋轉與傾斜。
+ */
 export type AcrylicDesign = {
   mode: "card" | "stick";
-  shape: "rect" | "circle";
-  edge: boolean;
+  frame: AcrylicFrame;
+  frameColor: string;
+  /** 印在框下緣的一行字(相框與拍立得) */
+  caption: string;
+  /** 透卡右上角打孔,掛鍊子與鑰匙圈 */
+  keyring: boolean;
+  /** 打卡棒:圖案外緣留多寬的透明邊(板子單位) */
+  margin: number;
+  /** 壓克力質感:0 幾乎看不到板子,1 反光、厚度都很明顯 */
+  clarity: number;
+  /** 邊線清晰度:0 沒有亮邊(像後製擦掉),1 邊緣發光 */
+  edge: number;
   stickers: Placed[];
-  /** 板子四個角在照片上的位置(0–1,相對照片寬高) */
-  corners: Quad;
+  place: Placement;
 };
 
 export type MerchDesigns = {
@@ -158,21 +177,23 @@ export function defaultDesigns(): MerchDesigns {
       front: "準時下班守",
       back: "願一切順利",
       bell: null,
+      clarity: 0.6,
+      edge: 0.6,
     },
     acrylic: {
-      mode: "card",
-      shape: "rect",
-      edge: true,
+      mode: "stick",
+      frame: "photo",
+      frameColor: "#ffffff",
+      caption: "",
+      keyring: true,
+      margin: 22,
+      clarity: 0.6,
+      edge: 0.7,
       stickers: [
-        { id: newId("sticker"), artId: "tpl:mushroom-7", x: 0.32, y: 0.55, size: 0.36, rotation: -8 },
-        { id: newId("sticker"), artId: "tpl:star-7", x: 0.7, y: 0.42, size: 0.3, rotation: 10 },
+        { id: newId("sticker"), artId: "tpl:cat-9", x: 0.5, y: 0.5, size: 0.62, rotation: 0 },
+        { id: newId("sticker"), artId: "tpl:heart-5", x: 0.8, y: 0.22, size: 0.2, rotation: 14 },
       ],
-      corners: [
-        { x: 0.2, y: 0.24 },
-        { x: 0.82, y: 0.2 },
-        { x: 0.84, y: 0.62 },
-        { x: 0.18, y: 0.66 },
-      ],
+      place: defaultPlacement(),
     },
   };
 }

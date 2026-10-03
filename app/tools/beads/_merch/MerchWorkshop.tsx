@@ -36,19 +36,20 @@ import {
   omamoriSway,
   VIDEO_FPS,
 } from "@/lib/tools/merch/motion";
+import { charmGeometry, drawCard, drawCharm, type CharmPiece } from "@/lib/tools/merch/render";
 import {
-  acrylicBoardSize,
-  charmGeometry,
-  drawAcrylicBoard,
+  buildAcrylic,
+  buildOmamori,
+  drawAcrylicOmamori,
   drawAcrylicScene,
-  drawCard,
-  drawCharm,
-  drawOmamori,
-  type CharmPiece,
-} from "@/lib/tools/merch/render";
+  sceneQuad,
+  sceneSize,
+} from "@/lib/tools/merch/acrylic";
+import { NO_TILT } from "@/lib/tools/merch/acrylic-shape";
+import type { Quad } from "@/lib/tools/merch/perspective";
 import { ActionButton, ColorField, Field, RangeField, Segmented, StationHint, Toggle } from "../../image/_components/controls";
 import { ToolPane } from "../../image/_components/WorkbenchLayout";
-import AcrylicStage from "./AcrylicStage";
+import AcrylicStage, { type AcrylicView } from "./AcrylicStage";
 import ArtLibrary from "./ArtLibrary";
 import { isPieceable, MAX_PIECE_SIDE, useArts, type Cutout } from "./arts";
 import CardStage from "./CardStage";
@@ -105,6 +106,7 @@ export default function MerchWorkshop({
   const [wand, setWand] = useState<{ image: ImageBitmap; name: string } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [side, setSide] = useState<"front" | "back">("front");
+  const [acrylicView, setAcrylicView] = useState<AcrylicView>("edit");
   // 這個元件只在切到「周邊」後才掛上去,不會在伺服器端渲染,可以直接問瀏覽器
   const [motion, setMotion] = useState<"needs" | "on">(() => (needsMotionPermission() ? "needs" : "on"));
   const [busy, setBusy] = useState(false);
@@ -229,6 +231,7 @@ export default function MerchWorkshop({
       setSelected(placed.id);
     } else if (kind === "acrylic") {
       const placed = placeSticker(acrylic.stickers, artId, 0.34);
+      setAcrylicView("edit");
       update("acrylic", { ...acrylic, stickers: [...acrylic.stickers, placed] });
       setSelected(placed.id);
     } else if (kind === "charm") {
@@ -245,8 +248,11 @@ export default function MerchWorkshop({
 
   // ---- 輸出 ----
 
+  /** 這一種周邊的畫面大小;透卡的場景照照片的比例 */
+  const sizeOf = (which: MerchKind) => (which === "acrylic" ? sceneSize(photo) : DESIGN_SIZE[which]);
+
   function renderExport(): HTMLCanvasElement {
-    const { width, height } = DESIGN_SIZE[kind];
+    const { width, height } = sizeOf(kind);
     const canvas = document.createElement("canvas");
     canvas.width = width * EXPORT_SCALE;
     canvas.height = height * EXPORT_SCALE;
@@ -255,18 +261,22 @@ export default function MerchWorkshop({
     ctx.scale(EXPORT_SCALE, EXPORT_SCALE);
     if (kind === "card") drawCard(ctx, width, height, card, { photo, arts: cardArts }, 0.7);
     else if (kind === "charm") drawCharm(ctx, width, height, charm, photo, charmPieces.current);
-    else if (kind === "omamori") drawOmamori(ctx, width, height, omamori, side, 0, bell);
-    else {
-      const size = acrylicBoardSize(acrylic);
-      const board = document.createElement("canvas");
-      board.width = size.width;
-      board.height = size.height;
-      const boardCtx = board.getContext("2d");
-      if (boardCtx) drawAcrylicBoard(boardCtx, acrylic, acrylicArts);
-      drawAcrylicScene(ctx, width, height, acrylic, photo, board);
+    else if (kind === "omamori") {
+      drawAcrylicOmamori(ctx, width, height, omamori, buildOmamori(omamori, side, width, height, EXPORT_SCALE), 0, bell);
+    } else {
+      const piece = buildAcrylic(acrylic, acrylicArts, EXPORT_SCALE);
+      drawAcrylicScene(ctx, width, height, photo, piece, sceneQuad(piece, acrylic.place, width, height), acrylic.clarity);
     }
     return canvas;
   }
+
+  /** 只有壓克力本身、背景透明的 PNG(拿去自己的修圖 App 疊在照片上) */
+  const handleTransparent = () =>
+    run(async () => {
+      const piece = buildAcrylic(acrylic, acrylicArts, EXPORT_SCALE);
+      downloadBlob({ name: `${fileBase()}-透明.png`, blob: await canvasToPng(piece.canvas) });
+      return "已下載透明背景的壓克力。";
+    });
 
   const fileBase = () => `周邊-${MERCH_KINDS.find((item) => item.kind === kind)?.label.replace("／", "-") ?? "周邊"}`;
 
@@ -276,20 +286,22 @@ export default function MerchWorkshop({
 
   /** 錄 GIF/影片用的一圈:照 motion.ts 設計好的路徑畫,最後一格接回第一格(設計單位) */
   function loopDrawer(): LoopDrawer {
-    const { width, height } = DESIGN_SIZE[kind];
+    const { width, height } = sizeOf(kind);
     if (kind === "card") {
       return (ctx, t) => drawCard(ctx, width, height, card, { photo, arts: cardArts }, cardLaserAngle(t));
     }
-    if (kind === "omamori") return (ctx, t) => drawOmamori(ctx, width, height, omamori, side, omamoriSway(t), bell);
+    if (kind === "omamori") {
+      const piece = buildOmamori(omamori, side, width, height, 1.5);
+      return (ctx, t) => drawAcrylicOmamori(ctx, width, height, omamori, piece, omamoriSway(t), bell);
+    }
     if (kind === "acrylic") {
-      const size = acrylicBoardSize(acrylic);
-      const board = document.createElement("canvas");
-      board.width = size.width;
-      board.height = size.height;
-      const boardCtx = board.getContext("2d");
-      if (boardCtx) drawAcrylicBoard(boardCtx, acrylic, acrylicArts);
-      return (ctx, t) =>
-        drawAcrylicScene(ctx, width, height, { ...acrylic, corners: acrylicWobble(acrylic.corners, t) }, photo, board);
+      // 板子做一次,每一格只在照片上微微晃(四個角換成 0–1 再套晃動路徑)
+      const piece = buildAcrylic(acrylic, acrylicArts, 1.25);
+      const base = sceneQuad(piece, acrylic.place, width, height).map((p) => ({ x: p.x / width, y: p.y / height })) as Quad;
+      return (ctx, t) => {
+        const quad = acrylicWobble(base, t).map((p) => ({ x: p.x * width, y: p.y * height })) as Quad;
+        drawAcrylicScene(ctx, width, height, photo, piece, quad, acrylic.clarity);
+      };
     }
     // 吊飾:零件從現在停著的位置開始晃(跟畫面上看到的一樣)
     const pieces = charmPieces.current;
@@ -316,7 +328,7 @@ export default function MerchWorkshop({
   }
 
   function loopSpec(maxSide: number, fps: number, label: string) {
-    const { width, height } = DESIGN_SIZE[kind];
+    const { width, height } = sizeOf(kind);
     const scale = maxSide / Math.max(width, height);
     const draw = loopDrawer();
     return {
@@ -380,7 +392,8 @@ export default function MerchWorkshop({
   // ---- 畫面 ----
 
   const hint = MERCH_KINDS.find((item) => item.kind === kind)?.hint;
-  const stickers: Placed[] | null = kind === "card" ? card.stickers : kind === "acrylic" ? acrylic.stickers : null;
+  const stickers: Placed[] | null =
+    kind === "card" ? card.stickers : kind === "acrylic" && acrylicView === "edit" ? acrylic.stickers : null;
   const setStickers = (next: Placed[]) => {
     if (kind === "card") update("card", { ...card, stickers: next });
     else if (kind === "acrylic") update("acrylic", { ...acrylic, stickers: next });
@@ -415,6 +428,7 @@ export default function MerchWorkshop({
         arts={acrylicArts}
         selected={selected}
         onSelect={setSelected}
+        view={acrylicView}
         active={active}
       />
     );
@@ -461,7 +475,7 @@ export default function MerchWorkshop({
                     ? "底選「照片」時放在框裡。"
                     : kind === "charm"
                       ? "後層選「照片」時放在吊飾裡。"
-                      : "透卡疊在照片前面，像拿在鏡頭前拍。"
+                      : "「放到照片上」時當背景，透明的地方看得到後面的景。"
                 }
                 t={t}
               >
@@ -682,6 +696,26 @@ export default function MerchWorkshop({
                 <Field label="繩結" t={t}>
                   <ColorField value={omamori.knot} onChange={(knot) => update("omamori", { ...omamori, knot })} t={t} />
                 </Field>
+                <RangeField
+                  label="壓克力質感"
+                  display={`${Math.round(omamori.clarity * 100)}%`}
+                  value={omamori.clarity}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  onChange={(clarity) => update("omamori", { ...omamori, clarity })}
+                  t={t}
+                />
+                <RangeField
+                  label="邊線清晰度"
+                  display={omamori.edge < 0.05 ? "無" : `${Math.round(omamori.edge * 100)}%`}
+                  value={omamori.edge}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  onChange={(edge) => update("omamori", { ...omamori, edge })}
+                  t={t}
+                />
                 <div className="flex flex-wrap gap-2">
                   <ActionButton tone="secondary" t={t} onClick={() => setSide((s) => (s === "front" ? "back" : "front"))}>
                     翻面（現在是{side === "front" ? "正面" : "背面"}）
@@ -697,43 +731,124 @@ export default function MerchWorkshop({
 
             {kind === "acrylic" && (
               <>
+                <Segmented
+                  label="檢視"
+                  value={acrylicView}
+                  onChange={setAcrylicView}
+                  options={[
+                    { value: "edit", label: "編輯壓克力" },
+                    { value: "scene", label: "放到照片上" },
+                  ]}
+                  t={t}
+                />
                 <Field label="款式" t={t}>
                   <Segmented
                     label="款式"
                     value={acrylic.mode}
                     onChange={(mode) => update("acrylic", { ...acrylic, mode })}
                     options={[
-                      { value: "card", label: "透卡" },
                       { value: "stick", label: "打卡棒" },
+                      { value: "card", label: "透卡" },
                     ]}
                     t={t}
                   />
                 </Field>
-                <Field label="板子形狀" t={t}>
-                  <Segmented
-                    label="板子形狀"
-                    value={acrylic.shape}
-                    onChange={(shape) => update("acrylic", { ...acrylic, shape })}
-                    options={[
-                      { value: "rect", label: "圓角方形" },
-                      { value: "circle", label: "圓形" },
-                    ]}
+                {acrylic.mode === "stick" ? (
+                  <RangeField
+                    label="圖案外緣留邊"
+                    display={`${acrylic.margin}`}
+                    value={acrylic.margin}
+                    min={6}
+                    max={48}
+                    onChange={(margin) => update("acrylic", { ...acrylic, margin })}
                     t={t}
                   />
-                </Field>
-                <Toggle
-                  label="壓克力邊"
-                  checked={acrylic.edge}
+                ) : (
+                  <>
+                    <Field label="印刷框" t={t}>
+                      <Segmented
+                        label="印刷框"
+                        value={acrylic.frame}
+                        onChange={(frame) => update("acrylic", { ...acrylic, frame })}
+                        options={[
+                          { value: "photo", label: "相框" },
+                          { value: "polaroid", label: "拍立得" },
+                          { value: "line", label: "細線框" },
+                          { value: "none", label: "不加" },
+                        ]}
+                        t={t}
+                      />
+                    </Field>
+                    {acrylic.frame !== "none" && (
+                      <Field label="框的顏色" t={t}>
+                        <ColorField value={acrylic.frameColor} onChange={(frameColor) => update("acrylic", { ...acrylic, frameColor })} t={t} />
+                      </Field>
+                    )}
+                    {(acrylic.frame === "photo" || acrylic.frame === "polaroid") && (
+                      <Field label="框下緣的字" hint="可空" t={t}>
+                        <input
+                          type="text"
+                          value={acrylic.caption}
+                          maxLength={24}
+                          onChange={(event) => update("acrylic", { ...acrylic, caption: event.target.value })}
+                          className={`w-full rounded-xl border px-3 py-2 text-sm ${t.input}`}
+                          aria-label="框下緣的字"
+                        />
+                      </Field>
+                    )}
+                    <Toggle label="打孔掛鑰匙圈" checked={acrylic.keyring} onChange={(keyring) => update("acrylic", { ...acrylic, keyring })} t={t} />
+                  </>
+                )}
+                <RangeField
+                  label="壓克力質感"
+                  display={`${Math.round(acrylic.clarity * 100)}%`}
+                  value={acrylic.clarity}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  onChange={(clarity) => update("acrylic", { ...acrylic, clarity })}
+                  t={t}
+                />
+                <RangeField
+                  label="邊線清晰度"
+                  display={acrylic.edge < 0.05 ? "無" : `${Math.round(acrylic.edge * 100)}%`}
+                  value={acrylic.edge}
+                  min={0}
+                  max={1}
+                  step={0.05}
                   onChange={(edge) => update("acrylic", { ...acrylic, edge })}
                   t={t}
                 />
-                <ActionButton
-                  tone="secondary"
-                  t={t}
-                  onClick={() => update("acrylic", { ...acrylic, corners: defaultDesigns().acrylic.corners })}
-                >
-                  角度歸位
-                </ActionButton>
+                {acrylicView === "scene" && (
+                  <>
+                    <RangeField
+                      label="大小"
+                      display={`${Math.round(acrylic.place.size * 100)}%`}
+                      value={acrylic.place.size}
+                      min={0.15}
+                      max={1.2}
+                      step={0.01}
+                      onChange={(size) => update("acrylic", { ...acrylic, place: { ...acrylic.place, size } })}
+                      t={t}
+                    />
+                    <RangeField
+                      label="旋轉"
+                      display={`${Math.round(acrylic.place.rotation)}°`}
+                      value={acrylic.place.rotation}
+                      min={-45}
+                      max={45}
+                      onChange={(rotation) => update("acrylic", { ...acrylic, place: { ...acrylic.place, rotation } })}
+                      t={t}
+                    />
+                    <ActionButton
+                      tone="secondary"
+                      t={t}
+                      onClick={() => update("acrylic", { ...acrylic, place: { ...acrylic.place, rotation: 0, tilt: NO_TILT } })}
+                    >
+                      角度歸位
+                    </ActionButton>
+                  </>
+                )}
               </>
             )}
 
@@ -792,9 +907,20 @@ export default function MerchWorkshop({
             </Field>
 
             <div className="flex flex-wrap gap-2">
-              <ActionButton t={t} onClick={() => void handleDownload()} disabled={busy}>
-                下載 PNG
-              </ActionButton>
+              {kind === "acrylic" ? (
+                <>
+                  <ActionButton t={t} onClick={() => void handleTransparent()} disabled={busy}>
+                    下載透明壓克力
+                  </ActionButton>
+                  <ActionButton tone="secondary" t={t} onClick={() => void handleDownload()} disabled={busy}>
+                    {photo ? "下載合成照片" : "下載合成圖"}
+                  </ActionButton>
+                </>
+              ) : (
+                <ActionButton t={t} onClick={() => void handleDownload()} disabled={busy}>
+                  下載 PNG
+                </ActionButton>
+              )}
               <ActionButton tone="secondary" t={t} onClick={() => void handleGif()} disabled={busy}>
                 下載 GIF
               </ActionButton>

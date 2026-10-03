@@ -143,3 +143,65 @@ export function drawPerspective(
     }
   }
 }
+
+/**
+ * 逐像素的透視貼圖(沒有三角形接縫):輸出的每一個像素反推回原圖的位置,
+ * 雙線性取樣(在預乘 alpha 的空間裡內插,半透明的邊才不會發黑)。
+ * 半透明的圖(壓克力)用這個;src 是原圖的像素,dst 是要寫進去的 ImageData(整張畫布大小)。
+ */
+export function warpPixels(
+  src: { data: Uint8ClampedArray; width: number; height: number },
+  dst: { data: Uint8ClampedArray; width: number; height: number },
+  quad: Quad
+): void {
+  if (!isConvex(quad)) return;
+  const sw = src.width;
+  const sh = src.height;
+  const inv = homography(quad, rectQuad(0, 0, sw, sh));
+  const xs = quad.map((p) => p.x);
+  const ys = quad.map((p) => p.y);
+  const x0 = Math.max(0, Math.floor(Math.min(...xs)));
+  const x1 = Math.min(dst.width - 1, Math.ceil(Math.max(...xs)));
+  const y0 = Math.max(0, Math.floor(Math.min(...ys)));
+  const y1 = Math.min(dst.height - 1, Math.ceil(Math.max(...ys)));
+  const s = src.data;
+  const out = dst.data;
+  const [a, b, c, d, e, f, g, h, k] = inv;
+  for (let y = y0; y <= y1; y += 1) {
+    const py = y + 0.5;
+    for (let x = x0; x <= x1; x += 1) {
+      const px = x + 0.5;
+      const wgt = g * px + h * py + k;
+      if (wgt <= 0) continue;
+      const u = (a * px + b * py + c) / wgt - 0.5;
+      const v = (d * px + e * py + f) / wgt - 0.5;
+      if (u < -1 || v < -1 || u > sw || v > sh) continue;
+      const ix = Math.floor(u);
+      const iy = Math.floor(v);
+      const fx = u - ix;
+      const fy = v - iy;
+      let r = 0;
+      let gr = 0;
+      let bl = 0;
+      let al = 0;
+      for (let n = 0; n < 4; n += 1) {
+        const sx = ix + (n & 1);
+        const sy = iy + (n >> 1);
+        if (sx < 0 || sy < 0 || sx >= sw || sy >= sh) continue;
+        const wt = ((n & 1) ? fx : 1 - fx) * ((n >> 1) ? fy : 1 - fy);
+        const i = (sy * sw + sx) * 4;
+        const pa = (s[i + 3] / 255) * wt;
+        r += s[i] * pa;
+        gr += s[i + 1] * pa;
+        bl += s[i + 2] * pa;
+        al += pa;
+      }
+      if (al <= 0) continue;
+      const o = (y * dst.width + x) * 4;
+      out[o] = r / al;
+      out[o + 1] = gr / al;
+      out[o + 2] = bl / al;
+      out[o + 3] = al * 255;
+    }
+  }
+}
