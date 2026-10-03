@@ -83,8 +83,29 @@ function bubblePath(ctx: CanvasRenderingContext2D, item: LayoutItem & { kind: "b
   ctx.roundRect(x, y, w, h, corners);
 }
 
-function drawAvatar(ctx: CanvasRenderingContext2D, name: string, cx: number, cy: number, r: number, font: string) {
+/** 上傳的頭像圖(已經載入好的);沒有就畫名字的第一個字 */
+export type ChatAvatars = { left: CanvasImageSource | null; right: CanvasImageSource | null };
+
+const NO_AVATARS: ChatAvatars = { left: null, right: null };
+
+function drawAvatar(
+  ctx: CanvasRenderingContext2D,
+  name: string,
+  cx: number,
+  cy: number,
+  r: number,
+  font: string,
+  image: CanvasImageSource | null = null
+) {
   ctx.save();
+  if (image) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(image, cx - r, cy - r, r * 2, r * 2);
+    ctx.restore();
+    return;
+  }
   ctx.fillStyle = avatarColor(name || "?");
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
@@ -97,7 +118,13 @@ function drawAvatar(ctx: CanvasRenderingContext2D, name: string, cx: number, cy:
   ctx.restore();
 }
 
-function drawHeader(ctx: CanvasRenderingContext2D, settings: ChatSettings, fonts: Fonts, colors: Colors) {
+function drawHeader(
+  ctx: CanvasRenderingContext2D,
+  settings: ChatSettings,
+  fonts: Fonts,
+  colors: Colors,
+  image: CanvasImageSource | null
+) {
   const m = chatMetrics(settings);
   const W = m.width;
   const H = m.header;
@@ -121,7 +148,7 @@ function drawHeader(ctx: CanvasRenderingContext2D, settings: ChatSettings, fonts
 
   const r = m.avatar / 2 + 2;
   const avatarX = m.padX + 22 + r;
-  drawAvatar(ctx, settings.title, avatarX, H / 2, r, fonts.avatar);
+  drawAvatar(ctx, settings.title, avatarX, H / 2, r, fonts.avatar, image);
 
   const textX = avatarX + r + 10;
   ctx.fillStyle = colors.ink;
@@ -191,7 +218,8 @@ export function drawChatPage(
   page: ChatPage,
   settings: ChatSettings,
   fonts: Fonts,
-  selected: string | null = null
+  selected: string | null = null,
+  avatars: ChatAvatars = NO_AVATARS
 ): void {
   const m = chatMetrics(settings);
   const colors = PALETTE[settings.theme];
@@ -203,12 +231,23 @@ export function drawChatPage(
   ctx.save();
   ctx.translate(0, m.header);
   const radius = Math.round(m.body * 1.2);
+  const drawSideAvatar = (side: "left" | "right", top: number) => {
+    const r = m.avatar / 2;
+    const cx = side === "left" ? m.padX + r : W - m.padX - r;
+    const name = side === "left" ? settings.leftName : settings.rightName;
+    drawAvatar(ctx, name, cx, top + r, r, fonts.avatar, avatars[side]);
+  };
   for (const item of page.items) {
     if (item.kind === "center") {
-      ctx.fillStyle = colors.line;
-      ctx.beginPath();
-      ctx.roundRect(item.x, item.y, item.w, item.h, Math.min(12, item.h / 2));
-      ctx.fill();
+      if (item.id === selected) {
+        ctx.beginPath();
+        ctx.roundRect(item.x, item.y, item.w, item.h, 8);
+        ctx.setLineDash([5, 4]);
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = colors.muted;
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
       ctx.fillStyle = colors.muted;
       ctx.font = fonts.small;
       ctx.textAlign = "center";
@@ -220,14 +259,11 @@ export function drawChatPage(
       if (item.name) {
         ctx.fillStyle = colors.muted;
         ctx.font = fonts.name;
-        ctx.textAlign = "left";
+        ctx.textAlign = right ? "right" : "left";
         ctx.textBaseline = "alphabetic";
-        ctx.fillText(item.name, item.x + 4, item.y - 6);
+        ctx.fillText(item.name, right ? item.x + item.w - 4 : item.x + 4, item.y - 6);
       }
-      if (item.avatar) {
-        const r = m.avatar / 2;
-        drawAvatar(ctx, settings.leftName, m.padX + r, item.y + r, r, fonts.avatar);
-      }
+      if (item.avatar) drawSideAvatar(item.side, item.y);
       ctx.save();
       if (!right && settings.theme !== "dark") {
         ctx.shadowColor = "rgba(60, 45, 30, 0.08)";
@@ -255,10 +291,7 @@ export function drawChatPage(
       );
     } else {
       // 正在輸入:一顆泡泡裡三個點,下面一行小字
-      if (item.avatar) {
-        const r = m.avatar / 2;
-        drawAvatar(ctx, settings.leftName, m.padX + r, item.y + r, r, fonts.avatar);
-      }
+      if (item.avatar) drawSideAvatar(item.side, item.y);
       const right = item.side === "right";
       bubblePath(ctx, item, radius, true);
       ctx.fillStyle = right ? settings.accent : colors.left;
@@ -281,6 +314,6 @@ export function drawChatPage(
   }
   ctx.restore();
 
-  drawHeader(ctx, settings, fonts, colors);
+  if (settings.showHeader) drawHeader(ctx, settings, fonts, colors, avatars.left);
   if (page.last && settings.inputBar) drawInputBar(ctx, settings, fonts, colors, m.header + page.bodyHeight);
 }
