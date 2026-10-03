@@ -6,14 +6,13 @@
 
 import type { Quad } from "./perspective";
 
-export type MerchKind = "card" | "charm" | "omamori" | "acrylic" | "beadcharm";
+export type MerchKind = "card" | "charm" | "omamori" | "acrylic";
 
 export const MERCH_KINDS: { kind: MerchKind; label: string; hint: string }[] = [
   { kind: "card", label: "小卡套", hint: "照片＋框、蕾絲邊、貼紙、雷射膜；移動滑鼠或傾斜手機，雷射彩虹會流動" },
   { kind: "charm", label: "搖搖吊飾", hint: "後層照片或底色，前層透明空間裝拼豆小零件；拖動或晃手機，零件照真實形狀碰撞翻滾" },
   { kind: "omamori", label: "御守", hint: "布料與花紋、正面繡字、繩結顏色，可以掛拼豆小鈴鐺；翻面看背面" },
   { kind: "acrylic", label: "透卡／打卡棒", hint: "透明壓克力板貼上拼豆或去背素材，疊在你的照片前；拖四個角讓板子傾斜" },
-  { kind: "beadcharm", label: "拼豆吊飾", hint: "燙好的拼豆作品本身就是吊飾：最上面那顆豆子的洞穿過小圈，掛上鑰匙圈或手機吊繩；拖動或晃手機它會擺" },
 ];
 
 /** 一張貼紙放在設計上的位置:x、y 是中心點(0–1,相對設計區),size 是寬度佔設計區寬的比例 */
@@ -98,22 +97,11 @@ export type AcrylicDesign = {
   corners: Quad;
 };
 
-/** 拼豆吊飾:作品本身打孔掛鍊 */
-export type BeadCharmDesign = {
-  artId: string;
-  recolor?: Recolor;
-  /** ring:鑰匙圈 + 短鍊;strap:手機吊繩 */
-  hardware: "ring" | "strap";
-  metal: string;
-  strap: string;
-};
-
 export type MerchDesigns = {
   card: CardDesign;
   charm: CharmDesign;
   omamori: OmamoriDesign;
   acrylic: AcrylicDesign;
-  beadcharm: BeadCharmDesign;
 };
 
 /** 每種周邊的設計尺寸(設計單位,輸出時再乘倍率) */
@@ -123,7 +111,6 @@ export const DESIGN_SIZE: Record<MerchKind, { width: number; height: number }> =
   charm: { width: 640, height: 820 },
   omamori: { width: 480, height: 820 },
   acrylic: { width: 900, height: 1200 },
-  beadcharm: { width: 560, height: 820 },
 };
 
 /** 搖搖吊飾零件預設的大小:一顆豆子幾個設計單位 */
@@ -187,7 +174,6 @@ export function defaultDesigns(): MerchDesigns {
         { x: 0.18, y: 0.66 },
       ],
     },
-    beadcharm: { artId: "tpl:cat-9", hardware: "ring", metal: "#cfcfd4", strap: "#e95295" },
   };
 }
 

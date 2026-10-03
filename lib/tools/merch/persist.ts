@@ -109,11 +109,9 @@ export function sanitizeDesigns(raw: unknown): MerchDesigns {
   card.mosaic = pair(isRecord(raw.card) ? raw.card.mosaic : null, base.card.mosaic);
   card.frameColors = pair(isRecord(raw.card) ? raw.card.frameColors : null, base.card.frameColors);
 
-  const beadcharm = withRecolor(mergeFlat(base.beadcharm, raw.beadcharm), isRecord(raw.beadcharm) ? raw.beadcharm : {});
-  if (beadcharm.hardware !== "ring" && beadcharm.hardware !== "strap") beadcharm.hardware = base.beadcharm.hardware;
   if (!["none", "lace", "beads", "motif"].includes(card.frame)) card.frame = base.card.frame;
 
-  return { card, charm, omamori, acrylic, beadcharm };
+  return { card, charm, omamori, acrylic };
 }
 
 /** 讀回整份存檔;不是這個格式就回 null(當作第一次來) */

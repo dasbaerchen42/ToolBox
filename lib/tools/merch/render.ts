@@ -1,7 +1,6 @@
 // 周邊工坊的畫法。所有座標都是「設計單位」(DESIGN_SIZE),
 // 輸出時呼叫端先 ctx.scale 放大,線條與拼豆都是算出來的,放大不糊。
 
-import { shade } from "@/lib/tools/beads/color";
 import { beadShades, drawBeads } from "@/lib/tools/beads/draw";
 import type { BeadColor } from "@/lib/tools/beads/palette";
 import type { BeadPattern } from "@/lib/tools/beads/pattern";
@@ -9,7 +8,6 @@ import { meltOf } from "@/lib/tools/beads/finish";
 import {
   artKey,
   type AcrylicDesign,
-  type BeadCharmDesign,
   type CardDesign,
   type CharmDesign,
   type OmamoriDesign,
@@ -805,120 +803,4 @@ export function drawAcrylicScene(
   }
   const quad = design.corners.map((p) => ({ x: p.x * w, y: p.y * h })) as Quad;
   drawPerspective(ctx, board, board.width, board.height, acrylicImageQuad(design, quad) ?? quad);
-}
-
-// ---- 拼豆吊飾:作品本身打孔掛鍊 ----
-
-/**
- * 掛點:最上面一列有豆子的格子裡,離中線最近的那一顆(格為單位的中心)。
- * 真的拼豆吊飾就是讓小圈穿過最上面那顆豆子的洞,掛起來才正。
- */
-export function hangBead(pattern: BeadPattern): { x: number; y: number } | null {
-  const center = (pattern.cols - 1) / 2;
-  for (let row = 0; row < pattern.rows; row += 1) {
-    let best = -1;
-    for (let col = 0; col < pattern.cols; col += 1) {
-      if (pattern.cells[row * pattern.cols + col] < 0) continue;
-      if (best < 0 || Math.abs(col - center) < Math.abs(best - center)) best = col;
-    }
-    if (best >= 0) return { x: best + 0.5, y: row + 0.5 };
-  }
-  return null;
-}
-
-/**
- * 吊飾的版面:作品要畫多大。作品是從掛點那顆豆子吊著的,掛點不一定在正中間,
- * 所以照「掛點往左、往右哪一邊比較寬」來算,兩邊都留擺動的空間,才不會擺出畫面。
- */
-export function beadCharmLayout(w: number, h: number, art: Art, hang: { x: number; y: number }) {
-  const cols = art.pattern?.cols ?? 1;
-  const rows = art.pattern?.rows ?? 1;
-  const reach = Math.max(hang.x, cols - hang.x);
-  const cell = Math.min((w * 0.36) / reach, (h * 0.6) / rows);
-  return { scale: cell / (art.width / cols), cell, drop: h * 0.07 };
-}
-
-function metalStroke(ctx: CanvasRenderingContext2D, color: string, width: number) {
-  ctx.lineWidth = width;
-  ctx.strokeStyle = shade(color, -0.25);
-  ctx.stroke();
-  ctx.lineWidth = width * 0.45;
-  ctx.strokeStyle = shade(color, 0.35);
-  ctx.stroke();
-}
-
-/**
- * 拼豆吊飾。swing 是繞吊點擺動的角度(弧度)。
- * 上面是鑰匙圈加短鍊(或手機吊繩),小圈穿過作品最上面那顆豆子的洞。
- */
-export function drawBeadCharm(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  design: BeadCharmDesign,
-  art: Art | null,
-  swing: number
-) {
-  const pivot = { x: w / 2, y: h * 0.2 };
-
-  // 吊繩或鑰匙圈(不跟著擺)
-  ctx.save();
-  if (design.hardware === "ring") {
-    const r = w * 0.085;
-    ctx.beginPath();
-    ctx.arc(pivot.x, pivot.y - r * 1.05, r, 0, Math.PI * 2);
-    metalStroke(ctx, design.metal, w * 0.016);
-  } else {
-    // 手機吊繩:一條細繩繞成長圈,往上延伸出畫面
-    ctx.lineCap = "round";
-    ctx.strokeStyle = design.strap;
-    ctx.lineWidth = w * 0.013;
-    ctx.beginPath();
-    ctx.moveTo(pivot.x - w * 0.02, pivot.y);
-    ctx.bezierCurveTo(pivot.x - w * 0.09, pivot.y - h * 0.08, pivot.x - w * 0.05, 0, pivot.x - w * 0.03, -4);
-    ctx.moveTo(pivot.x + w * 0.02, pivot.y);
-    ctx.bezierCurveTo(pivot.x + w * 0.09, pivot.y - h * 0.08, pivot.x + w * 0.05, 0, pivot.x + w * 0.03, -4);
-    ctx.stroke();
-    ctx.fillStyle = shade(design.strap, -0.2);
-    ctx.beginPath();
-    ctx.roundRect(pivot.x - w * 0.03, pivot.y - h * 0.012, w * 0.06, h * 0.028, w * 0.01);
-    ctx.fill();
-  }
-  ctx.restore();
-
-  if (!art || !art.pattern) return;
-  const hang = hangBead(art.pattern);
-  if (!hang) return;
-  const { scale, cell, drop } = beadCharmLayout(w, h, art, hang);
-
-  ctx.save();
-  ctx.translate(pivot.x, pivot.y);
-  ctx.rotate(swing);
-
-  // 短鍊:幾個橢圓環一上一下
-  const links = design.hardware === "ring" ? 3 : 1;
-  const linkH = drop / Math.max(1, links);
-  for (let k = 0; k < links; k += 1) {
-    ctx.beginPath();
-    if (k % 2 === 0) ctx.ellipse(0, linkH * (k + 0.5), w * 0.012, linkH * 0.62, 0, 0, Math.PI * 2);
-    else ctx.ellipse(0, linkH * (k + 0.5), w * 0.004, linkH * 0.62, 0, 0, Math.PI * 2);
-    metalStroke(ctx, design.metal, w * 0.008);
-  }
-
-  // 作品:讓掛點那顆豆子的中心剛好在鍊子下面
-  const bead = { x: hang.x * cell, y: hang.y * cell };
-  const top = drop + cell * 0.55;
-  ctx.save();
-  ctx.translate(-bead.x, top - bead.y);
-  ctx.shadowColor = "rgba(0, 0, 0, 0.28)";
-  ctx.shadowBlur = cell * 0.9;
-  ctx.shadowOffsetY = cell * 0.35;
-  ctx.drawImage(art.source, 0, 0, art.width * scale, art.height * scale);
-  ctx.restore();
-
-  // 小圈:從鍊子末端繞過那顆豆子的洞(前半圈畫在豆子上面)
-  ctx.beginPath();
-  ctx.ellipse(0, (drop + top) / 2, cell * 0.2, (top - drop) / 2 + cell * 0.12, 0, 0, Math.PI * 2);
-  metalStroke(ctx, design.metal, Math.max(2, cell * 0.1));
-  ctx.restore();
 }
