@@ -70,7 +70,8 @@ function tokens(text: string): string[] {
 /** 文字換行:照原本的換行,太長再自動折;英文單字太長才從中間斷 */
 export function wrapLines(text: string, maxWidth: number, font: string, measure: Measure): string[] {
   const lines: string[] = [];
-  for (const paragraph of text.split("\n")) {
+  // 舊的訊息裡可能還留著 U+2028 這類換行,畫的時候一樣當換行
+  for (const paragraph of text.split(/\r\n|[\n\r\u2028\u2029\u0085]/)) {
     let line = "";
     for (const token of tokens(paragraph)) {
       const candidate = line + token;

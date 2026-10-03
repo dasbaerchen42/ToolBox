@@ -13,6 +13,7 @@ import {
   moveMessage,
   newMessageId,
   nextSide,
+  PASTE_SPLITS,
   readChatRoom,
   sampleMessages,
   splitPasted,
@@ -189,14 +190,14 @@ export default function ChatPage() {
     setRoom((current) => ({ ...current, messages: update(current.messages) }));
 
   function send(side: ChatSide) {
-    const parts = side === "center" ? [draft.trim()].filter(Boolean) : splitPasted(draft);
+    const parts = splitPasted(draft, side === "center" ? "whole" : settings.pasteSplit);
     if (parts.length === 0) {
       setNotice("先在輸入框貼上或打一段字。");
       return;
     }
     setMessages((list) => [...list, ...parts.map((text) => ({ id: newMessageId(), side, text }))]);
     setDraft("");
-    setNotice(parts.length > 1 ? `分成 ${parts.length} 顆泡泡（空一行就是下一顆）。` : null);
+    setNotice(parts.length > 1 ? `分成 ${parts.length} 顆泡泡。` : null);
   }
 
   function selectMessage(id: string | null) {
@@ -315,8 +316,15 @@ export default function ChatPage() {
                 onChange={(event) => setDraft(event.target.value)}
                 rows={4}
                 aria-label="要送出的訊息"
-                placeholder={"貼上或打一段字，再按下面選誰說的。\n空一行會分成下一顆泡泡；開頭的 > 會自動拿掉。"}
+                placeholder={"貼上或打一段字，再按下面選誰說的。\n開頭的 > 會自動拿掉。"}
                 className={`w-full resize-y rounded-xl border px-3 py-2 text-sm leading-6 ${t.input}`}
+              />
+              <Segmented
+                label="怎麼分泡泡"
+                value={settings.pasteSplit}
+                onChange={(pasteSplit) => updateSettings({ pasteSplit })}
+                options={PASTE_SPLITS}
+                t={t}
               />
               <div className="grid grid-cols-3 gap-2">
                 <button

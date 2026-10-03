@@ -36,6 +36,8 @@ export type ChatSettings = {
   width: 390 | 600;
   /** long:一張長圖(太長才分);screen:照手機一個畫面的高度分成好幾張,像連續截圖 */
   pages: "long" | "screen";
+  /** 貼上送出時怎麼分泡泡 */
+  pasteSplit: PasteSplit;
 };
 
 export type ChatRoom = { settings: ChatSettings; messages: ChatMessage[] };
@@ -62,6 +64,7 @@ export function defaultChatSettings(): ChatSettings {
     font: "sans",
     width: 390,
     pages: "long",
+    pasteSplit: "blank",
   };
 }
 
@@ -81,24 +84,56 @@ export function sampleMessages(): ChatMessage[] {
   ];
 }
 
+/** 貼上時怎麼分泡泡:空一行換一顆、每一行一顆、整段一顆 */
+export type PasteSplit = "blank" | "line" | "whole";
+
+export const PASTE_SPLITS: { value: PasteSplit; label: string }[] = [
+  { value: "blank", label: "空一行換一顆" },
+  { value: "line", label: "每行一顆" },
+  { value: "whole", label: "整段一顆" },
+];
+
+/**
+ * 各種換行統一成 \n。手機從 App 或網頁複製時,換行常常是 U+2028(行分隔)
+ * 或 U+2029(段落分隔),不轉的話整段會黏成一行。段落分隔當成空一行。
+ */
+export function normalizeNewlines(text: string): string {
+  return text
+    .replace(/\r\n?/g, "\n")
+    .replace(/\u2029/g, "\n\n")
+    .replace(/[\u2028\u0085\v\f]/g, "\n");
+}
+
+/** 看不見的字(零寬空白、BOM) */
+const INVISIBLE = /[\u200b-\u200d\u2060\ufeff]/g;
+
 /**
  * 貼上的文字 → 一顆一顆泡泡的內容。
- * 拿掉 Markdown 引用的「>」與前後空白;空一行就是下一顆泡泡,同一段裡的換行照留。
+ * 拿掉 Markdown 引用的「>」(全形「＞」也算)與前後空白;
+ * blank:空一行就是下一顆,同一段裡的換行照留;line:每一行一顆;whole:整段一顆。
  */
-export function splitPasted(text: string): string[] {
-  const lines = text
-    .replace(/\r\n?/g, "\n")
+export function splitPasted(text: string, mode: PasteSplit = "blank"): string[] {
+  const lines = normalizeNewlines(text)
     .split("\n")
-    .map((line) => line.replace(/^\s*(>\s?)+/, "").replace(/\s+$/, ""));
+    .map((line) =>
+      line
+        .replace(INVISIBLE, "")
+        .replace(/^[\s\u3000]*([>＞][\s\u3000]?)+/, "")
+        .replace(/[\s\u3000]+$/, "")
+        .replace(/^[\s\u3000]+/, "")
+    );
+  if (mode === "line") return lines.filter((line) => line !== "");
+  if (mode === "whole") {
+    const joined = lines.join("\n").replace(/^\n+|\n+$/g, "").replace(/\n{3,}/g, "\n\n");
+    return joined ? [joined] : [];
+  }
   const bubbles: string[] = [];
   let current: string[] = [];
   for (const line of lines) {
-    if (line.trim() === "") {
+    if (line === "") {
       if (current.length > 0) bubbles.push(current.join("\n"));
       current = [];
-    } else {
-      current.push(line.trimStart());
-    }
+    } else current.push(line);
   }
   if (current.length > 0) bubbles.push(current.join("\n"));
   return bubbles;
@@ -148,6 +183,7 @@ export function readChatRoom(raw: unknown): ChatRoom | null {
   if (settings.width !== 390 && settings.width !== 600) settings.width = base.width;
   if (!["paper", "light", "dark"].includes(settings.theme as string)) settings.theme = base.theme;
   if (settings.pages !== "long" && settings.pages !== "screen") settings.pages = base.pages;
+  if (!["blank", "line", "whole"].includes(settings.pasteSplit as string)) settings.pasteSplit = base.pasteSplit;
   if (settings.typingSide !== "left" && settings.typingSide !== "right") settings.typingSide = base.typingSide;
   const messages = Array.isArray(raw.messages)
     ? raw.messages.filter(

@@ -121,3 +121,23 @@ describe("chat:版面", () => {
     expect(paginate(layout, 1e9)).toHaveLength(1);
   });
 });
+
+describe("chat:手機複製來的換行", () => {
+  it("U+2028/U+2029 當成換行與空行;零寬字、全形＞也清掉", () => {
+    expect(splitPasted("強制微波 妳是想  不過說真的")).toEqual(["強制微波\n妳是想", "不過說真的"]);
+    expect(splitPasted("強制微波 不過說真的")).toEqual(["強制微波", "不過說真的"]);
+    expect(splitPasted("強制微波\n​\n不過說真的")).toEqual(["強制微波", "不過說真的"]);
+    expect(splitPasted("＞ 強制微波\n＞\n＞ 不過說真的")).toEqual(["強制微波", "不過說真的"]);
+  });
+
+  it("每行一顆、整段一顆", () => {
+    const text = "一\n二\n\n三";
+    expect(splitPasted(text, "line")).toEqual(["一", "二", "三"]);
+    expect(splitPasted(text, "whole")).toEqual(["一\n二\n\n三"]);
+    expect(splitPasted("\n\n", "whole")).toEqual([]);
+  });
+
+  it("畫的時候 U+2028 也會換行", () => {
+    expect(wrapLines("一 二", 100, "400 10px x", measure)).toEqual(["一", "二"]);
+  });
+});
