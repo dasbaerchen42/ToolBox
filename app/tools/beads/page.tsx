@@ -14,6 +14,7 @@ import {
   storeAlbum,
   toSavedWork,
   fromSavedWork,
+  ALBUM_KIND_LABELS,
   type AlbumKind,
   type SavedWork,
 } from "@/lib/tools/beads/album";
@@ -69,7 +70,7 @@ import EditPanel, { type EditTool } from "./_components/EditPanel";
 import ColorList from "./_components/ColorList";
 import AlbumPanel from "./_components/AlbumPanel";
 import { useDarkBackground } from "./_components/useDarkBackground";
-import MerchWorkshop from "./_merch/MerchWorkshop";
+import MerchWorkshop, { type MerchRequest } from "./_merch/MerchWorkshop";
 import SortBoxGame from "./_sort/SortBoxGame";
 import {
   addBoxPalette,
@@ -217,6 +218,7 @@ export default function BeadsPage() {
   const [view, setView] = useState<"beads" | "merch" | "sort">("beads");
   const [merchOpened, setMerchOpened] = useState(false);
   const [sortOpened, setSortOpened] = useState(false);
+  const [merchRequest, setMerchRequest] = useState<MerchRequest | null>(null);
   // 整理豆盒收進來的色盤:接在預設色盤後面,預設色的索引不變
   const [boxStore, setBoxStore] = useState<BoxStore>({ lastCode: 0, boxes: [] });
   const palette = useMemo(() => extendedPalette(DEFAULT_PALETTE, boxStore.boxes), [boxStore.boxes]);
@@ -375,6 +377,18 @@ export default function BeadsPage() {
     setDirty(true);
     loadPattern(next, "album");
     showNotice(`套用了「${template.name}」。在下方色位清單按「換色」就能整個換顏色。`);
+  }
+
+  /** 套用自己存的模板:開一張新的(不連到模板本身),色位一樣用色位清單換色 */
+  function applyCustomTemplate(work: SavedWork) {
+    if (!confirmDiscard("套用模板")) return;
+    const next = fromSavedWork(work, palette);
+    setName(work.name);
+    setSavedAs(null);
+    setSaveKind(defaultKind(next.cols, next.rows));
+    setDirty(true);
+    loadPattern(next, "album");
+    showNotice(`套用了「${work.name}」。在下方色位清單按「換色」就能整個換顏色；模板本身不會被改到。`);
   }
 
   function startBlank(nextSize: BoardSize) {
@@ -592,8 +606,8 @@ export default function BeadsPage() {
     else showNotice("瀏覽器不讓存（空間滿了或是無痕模式），請先用「匯出備份」帶走。", "error");
   }
 
-  function saveWork(asNew: boolean) {
-    if (!pattern) return;
+  function saveWork(asNew: boolean): SavedWork | null {
+    if (!pattern) return null;
     const target = asNew ? undefined : (savedAs ?? undefined);
     const work = toSavedWork(pattern, palette, name, target, undefined, saveKind);
     setSavedAs({ id: work.id, createdAt: work.createdAt });
@@ -603,8 +617,19 @@ export default function BeadsPage() {
       [work, ...album.filter((item) => item.id !== work.id)],
       target
         ? `已更新「${work.name}」。`
-        : `已收進收藏冊的${saveKind === "material" ? "素材" : "作品"}：「${work.name}」。`
+        : `已收進收藏冊的${ALBUM_KIND_LABELS[saveKind]}：「${work.name}」。`
     );
+    return work;
+  }
+
+  /** 做成拼豆吊飾:先收進收藏冊(還沒收或有改過的話),再帶去周邊的「拼豆吊飾」 */
+  function sendToCharm() {
+    if (!pattern) return;
+    const id = savedAs && !dirty ? savedAs.id : saveWork(false)?.id;
+    if (!id) return;
+    setMerchRequest({ artId: `album:${id}`, nonce: Date.now() });
+    setMerchOpened(true);
+    setView("merch");
   }
 
   function openWork(work: SavedWork) {
@@ -827,7 +852,7 @@ export default function BeadsPage() {
 
         {merchOpened && (
           <div hidden={view !== "merch"}>
-            <MerchWorkshop album={album} palette={palette} active={view === "merch"} t={t} />
+            <MerchWorkshop album={album} palette={palette} active={view === "merch"} request={merchRequest} t={t} />
           </div>
         )}
 
@@ -996,6 +1021,20 @@ export default function BeadsPage() {
                         {template.name}
                       </button>
                     ))}
+                    {album
+                      .filter((work) => work.kind === "template")
+                      .map((work) => (
+                        <button
+                          key={work.id}
+                          type="button"
+                          onClick={() => applyCustomTemplate(work)}
+                          disabled={busy || animating}
+                          title="自己存的模板"
+                          className={`rounded-xl border border-dashed px-2.5 py-1 text-xs transition disabled:opacity-40 ${t.unselected}`}
+                        >
+                          {work.name}
+                        </button>
+                      ))}
                   </div>
                 </div>
 
@@ -1286,6 +1325,7 @@ export default function BeadsPage() {
                         options={[
                           { value: "work", label: "作品" },
                           { value: "material", label: "素材（小零件）" },
+                          { value: "template", label: "模板（之後只換色重複用）" },
                         ]}
                       />
                     </Field>
@@ -1308,6 +1348,14 @@ export default function BeadsPage() {
                           另存一份
                         </ActionButton>
                       )}
+                      <ActionButton
+                        t={t}
+                        tone="secondary"
+                        onClick={sendToCharm}
+                        disabled={busy || animating || total === 0}
+                      >
+                        做成吊飾
+                      </ActionButton>
                     </div>
                     <ActionButton
                       t={t}
@@ -1352,6 +1400,7 @@ export default function BeadsPage() {
                   busy={busy || animating}
                   t={t}
                   onOpen={openWork}
+                  onApply={applyCustomTemplate}
                   onDelete={deleteWork}
                   onExport={exportAlbum}
                   onImport={(file) => void importAlbum(file)}

@@ -40,6 +40,8 @@ type Props = {
   busy: boolean;
   t: ThemeClasses;
   onOpen: (work: SavedWork) => void;
+  /** 模板:開一張新的套用(不會改到模板本身) */
+  onApply: (work: SavedWork) => void;
   onDelete: (work: SavedWork) => void;
   onExport: () => void;
   onImport: (file: File) => void;
@@ -52,6 +54,7 @@ export default function AlbumPanel({
   busy,
   t,
   onOpen,
+  onApply,
   onDelete,
   onExport,
   onImport,
@@ -105,6 +108,7 @@ export default function AlbumPanel({
           [
             ["work", "作品"],
             ["material", "素材"],
+            ["template", "模板"],
           ] as const
         ).map(([kind, label]) => (
           <button
@@ -126,7 +130,9 @@ export default function AlbumPanel({
         <p className={`text-xs ${t.muted}`}>
           {tab === "work"
             ? "還沒有收藏的作品。"
-            : "還沒有素材。用迷你板拼星星、愛心這類小零件，收藏時選「素材」就會放在這裡。"}
+            : tab === "material"
+              ? "還沒有素材。用迷你板拼星星、愛心這類小零件，收藏時選「素材」就會放在這裡。"
+              : "還沒有自己的模板。拼好一張圖，收藏時選「模板」，之後就能套用、只換顏色重複使用。"}
         </p>
       ) : (
         <ul className="space-y-2">
@@ -144,13 +150,23 @@ export default function AlbumPanel({
                   {work.cols}×{work.rows}・{new Date(work.updatedAt).toLocaleDateString("zh-TW")}
                 </p>
               </div>
+              {work.kind === "template" && (
+                <button
+                  type="button"
+                  onClick={() => onApply(work)}
+                  disabled={busy}
+                  className={`shrink-0 rounded-lg border px-2 py-0.5 text-[11px] transition disabled:opacity-40 ${t.primary}`}
+                >
+                  套用
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => onOpen(work)}
                 disabled={busy}
                 className={`shrink-0 rounded-lg border px-2 py-0.5 text-[11px] transition disabled:opacity-40 ${t.secondary}`}
               >
-                打開
+                {work.kind === "template" ? "修改" : "打開"}
               </button>
               <button
                 type="button"

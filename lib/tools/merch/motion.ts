@@ -100,3 +100,8 @@ function safeAmplitude(body: Body, container: Container, k: number): number {
   }
   return 0;
 }
+
+/** 拼豆吊飾:繞吊點擺,比搖搖吊飾大一點(它比較輕) */
+export function beadCharmSwing(t: number): number {
+  return 0.13 * Math.sin(TAU * t);
+}

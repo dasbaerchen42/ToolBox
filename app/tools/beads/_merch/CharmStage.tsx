@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
-import { DESIGN_SIZE, type CharmDesign } from "@/lib/tools/merch/design";
+import { artKey, DESIGN_SIZE, type CharmDesign } from "@/lib/tools/merch/design";
 import { bodyFromCells, kineticEnergy, step, type Container, type Vec } from "@/lib/tools/merch/physics";
 import { charmGeometry, drawCharm, patternCentroid, type Art, type CharmPiece } from "@/lib/tools/merch/render";
 import { useDesignCanvas } from "./useDesignCanvas";
@@ -61,7 +61,7 @@ export default function CharmStage({
     const kept = new Map(piecesRef.current.map((piece) => [piece.id, piece]));
     const next: CharmPiece[] = [];
     design.pieces.forEach((spec, k) => {
-      const art = arts.get(spec.artId);
+      const art = arts.get(artKey(spec));
       const pattern = art?.pattern;
       if (!art || !pattern) return;
       const old = kept.get(spec.id);

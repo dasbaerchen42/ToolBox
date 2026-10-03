@@ -4,7 +4,7 @@
 // 讀回來的東西一律當作不可信(可能是舊版存的、被改壞的):
 // 每一種周邊跟預設值逐欄合併,型別不對的欄位用預設值,不讓一筆壞資料把整頁弄壞。
 
-import { defaultDesigns, MERCH_KINDS, type MerchDesigns, type MerchKind, type Placed } from "./design";
+import { defaultDesigns, MERCH_KINDS, type MerchDesigns, type MerchKind, type Placed, type Recolor } from "./design";
 
 export const MERCH_STORE_KEY = "merch-workshop";
 
@@ -39,18 +39,36 @@ function mergeFlat<T extends Record<string, unknown>>(base: T, raw: unknown): T 
 
 const isNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
+/** 換色表:色號 → 色號,都是短字串;不對的整張換色表丟掉(貼紙本身留著) */
+function readRecolor(raw: unknown): Recolor | undefined {
+  if (!isRecord(raw)) return undefined;
+  const entries = Object.entries(raw).filter(
+    ([from, to]) => from.length <= 12 && typeof to === "string" && to.length <= 12 && !/[#,>]/.test(from + to)
+  );
+  return entries.length > 0 ? (Object.fromEntries(entries) as Recolor) : undefined;
+}
+
+function withRecolor<T extends { recolor?: Recolor }>(item: T, raw: Record<string, unknown>): T {
+  const recolor = readRecolor(raw.recolor);
+  const { recolor: _dropped, ...rest } = item;
+  void _dropped;
+  return (recolor ? { ...rest, recolor } : rest) as T;
+}
+
 function readPlaced(raw: unknown): Placed[] {
   if (!Array.isArray(raw)) return [];
-  return raw.filter(
-    (item): item is Placed =>
-      isRecord(item) &&
-      typeof item.id === "string" &&
-      typeof item.artId === "string" &&
-      isNumber(item.x) &&
-      isNumber(item.y) &&
-      isNumber(item.size) &&
-      isNumber(item.rotation)
-  );
+  return raw
+    .filter(
+      (item): item is Placed =>
+        isRecord(item) &&
+        typeof item.id === "string" &&
+        typeof item.artId === "string" &&
+        isNumber(item.x) &&
+        isNumber(item.y) &&
+        isNumber(item.size) &&
+        isNumber(item.rotation)
+    )
+    .map((item) => withRecolor(item, item as unknown as Record<string, unknown>));
 }
 
 /** 讀回來的設計 → 一定完整、型別正確的設計 */
@@ -67,7 +85,7 @@ export function sanitizeDesigns(raw: unknown): MerchDesigns {
       ? raw.charm.pieces.filter(
           (piece): piece is MerchDesigns["charm"]["pieces"][number] =>
             isRecord(piece) && typeof piece.id === "string" && typeof piece.artId === "string" && isNumber(piece.cell)
-        )
+        ).map((piece) => withRecolor(piece, piece as unknown as Record<string, unknown>))
       : base.charm.pieces;
 
   const omamori = mergeFlat(base.omamori, raw.omamori);
@@ -91,7 +109,11 @@ export function sanitizeDesigns(raw: unknown): MerchDesigns {
   card.mosaic = pair(isRecord(raw.card) ? raw.card.mosaic : null, base.card.mosaic);
   card.frameColors = pair(isRecord(raw.card) ? raw.card.frameColors : null, base.card.frameColors);
 
-  return { card, charm, omamori, acrylic };
+  const beadcharm = withRecolor(mergeFlat(base.beadcharm, raw.beadcharm), isRecord(raw.beadcharm) ? raw.beadcharm : {});
+  if (beadcharm.hardware !== "ring" && beadcharm.hardware !== "strap") beadcharm.hardware = base.beadcharm.hardware;
+  if (!["none", "lace", "beads", "motif"].includes(card.frame)) card.frame = base.card.frame;
+
+  return { card, charm, omamori, acrylic, beadcharm };
 }
 
 /** 讀回整份存檔;不是這個格式就回 null(當作第一次來) */
