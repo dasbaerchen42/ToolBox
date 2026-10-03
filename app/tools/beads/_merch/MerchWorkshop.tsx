@@ -117,6 +117,7 @@ export default function MerchWorkshop({
 
   const photoInput = useRef<HTMLInputElement>(null);
   const wandInput = useRef<HTMLInputElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const charmPieces = useRef<CharmPiece[]>([]);
   const shake = useRef<Vec | null>(null);
 
@@ -433,7 +434,8 @@ export default function MerchWorkshop({
       />
     );
 
-  const usesPhoto = kind !== "omamori";
+  // 透卡的照片只是「放到照片上」的背景,攤平編輯時不會出現,那裡就不擺這個按鈕(免得以為是要印上去的圖)
+  const usesPhoto = kind !== "omamori" && !(kind === "acrylic" && acrylicView === "edit");
 
   return (
     <div className="flex flex-col gap-4">
@@ -457,6 +459,7 @@ export default function MerchWorkshop({
         workspace={
           <div className="flex flex-col gap-3">
             <div
+              ref={stageRef}
               data-testid="merch-stage"
               className="flex justify-center overflow-hidden rounded-2xl border border-(--border-light) bg-(--paper-bg-3) p-4"
             >
@@ -467,15 +470,40 @@ export default function MerchWorkshop({
         }
         controls={
           <>
+            {kind === "acrylic" && (
+              <Segmented
+                label="檢視"
+                value={acrylicView}
+                onChange={setAcrylicView}
+                options={[
+                  { value: "edit", label: "編輯壓克力" },
+                  { value: "scene", label: "放到照片上" },
+                ]}
+                t={t}
+              />
+            )}
+
+            {kind === "acrylic" && acrylicView === "edit" && (
+              <Field
+                label="印在壓克力上的圖"
+                hint="上傳的圖會先去背，再印到壓克力上；也可以從下面的素材挑拼豆作品。"
+                t={t}
+              >
+                <ActionButton t={t} onClick={() => wandInput.current?.click()}>
+                  上傳圖片（自動去背）
+                </ActionButton>
+              </Field>
+            )}
+
             {usesPhoto && (
               <Field
-                label="你的照片"
+                label={kind === "acrylic" ? "背景實景照片" : "你的照片"}
                 hint={
                   kind === "card"
                     ? "底選「照片」時放在框裡。"
                     : kind === "charm"
                       ? "後層選「照片」時放在吊飾裡。"
-                      : "「放到照片上」時當背景，透明的地方看得到後面的景。"
+                      : "放在壓克力後面當背景（不會印上去），透明的地方看得到後面的景。"
                 }
                 t={t}
               >
@@ -731,16 +759,6 @@ export default function MerchWorkshop({
 
             {kind === "acrylic" && (
               <>
-                <Segmented
-                  label="檢視"
-                  value={acrylicView}
-                  onChange={setAcrylicView}
-                  options={[
-                    { value: "edit", label: "編輯壓克力" },
-                    { value: "scene", label: "放到照片上" },
-                  ]}
-                  t={t}
-                />
                 <Field label="款式" t={t}>
                   <Segmented
                     label="款式"
@@ -964,6 +982,10 @@ export default function MerchWorkshop({
           if (!image) return;
           setPhoto(image);
           setPhotoBlob(file);
+          if (kind === "acrylic") {
+            setAcrylicView("scene");
+            showNotice("照片放在壓克力後面當背景了。要印在壓克力上的圖，請到「編輯壓克力」按「上傳圖片（自動去背）」。");
+          }
           if (kind === "card") update("card", { ...card, background: "photo" });
           if (kind === "charm") update("charm", { ...charm, background: "photo" });
         }}
@@ -998,6 +1020,8 @@ export default function MerchWorkshop({
             setWand(null);
             addSticker(id);
             showNotice("去背好了，已經貼上去。");
+            // 手機上去背完回到的是下面的設定區,捲回預覽才看得到剛貼上去的圖
+            requestAnimationFrame(() => stageRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }));
           }}
         />
       )}
