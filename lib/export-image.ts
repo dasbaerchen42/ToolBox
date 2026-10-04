@@ -1,5 +1,5 @@
 import { getFontFamily } from "@/lib/editor-font";
-import { ensureWebFont } from "@/lib/web-fonts";
+import { ensureWebFont, loadableFamilies } from "@/lib/web-fonts";
 import { type EditorPreferences } from "@/lib/preferences";
 import { DEVICE_MAX_AREA, DEVICE_MAX_SIDE } from "@/lib/canvas-limits";
 import {
@@ -96,17 +96,21 @@ async function loadFontsFor(page: HTMLElement, doc: Document = document): Promis
     const parent = node.parentElement;
     if (!parent || !text.trim()) continue;
     const style = view.getComputedStyle(parent);
-    const font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-    const entry = variants.get(font);
-    if (entry) entry.text += text;
-    else variants.set(font, { font, text });
+    // 一套字一套字分開要:清單裡有一套載不到時,其他的照樣載得到
+    for (const family of loadableFamilies(style.fontFamily)) {
+      const font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${family}`;
+      const entry = variants.get(font);
+      if (entry) entry.text += text;
+      else variants.set(font, { font, text });
+    }
   }
+  const results = await Promise.allSettled(Array.from(variants.values(), ({ font, text }) => doc.fonts.load(font, text)));
+  // 字載不到就用備援字體截,不要讓整張圖失敗
+  for (const result of results) if (result.status === "rejected") console.warn("字體載入失敗:", result.reason);
   try {
-    await Promise.all(Array.from(variants.values(), ({ font, text }) => doc.fonts.load(font, text)));
     if (doc.fonts.ready) await doc.fonts.ready;
-  } catch (error) {
-    // 字載不到就用備援字體截,不要讓整張圖失敗
-    console.warn("字體載入失敗:", error);
+  } catch {
+    // 同上
   }
 }
 
@@ -176,25 +180,8 @@ function splitUnitsAt(units: Unit[], cuts: Set<number>): Unit[][] {
   return pages;
 }
 
-/**
- * 把內容畫成 PNG。
- *
- * 刻意不截畫面上那塊預覽區:預覽會跟著視窗寬度變,手機永遠截不出 1080 寬的圖。
- * 這裡另外在畫面外組一個固定寬度的節點來截,輸出結果跟裝置無關。
- * 顏色一律讀當下主題的 CSS 變數,所以深色主題匯出就是深底淺字。
- *
- * 每一張是把不屬於這張的區塊 display:none 之後整塊截圖,而不是把長圖裁開,
- * 所以邊界永遠是完整的區塊。
- */
-export async function exportContentToImages({
-  html,
-  title,
-  fileTitle,
-  width,
-  paginate,
-  cuts,
-  preferences,
-}: ExportImageOptions): Promise<ExportedImage[]> {
+/** 轉圖用的暫存節點:固定寬度、照當下主題上色、放在畫面外。量高度與截圖都用這一份 */
+function buildStage(html: string, title: string | null, width: number, preferences: EditorPreferences) {
   const background = readThemeColor("--paper-bg", "#ffffff");
   const color = readThemeColor("--ink-primary", "#000000");
   const padding = Math.round(width * 0.06);
@@ -252,6 +239,82 @@ export async function exportContentToImages({
   page.appendChild(viewport);
   stage.appendChild(page);
   document.body.appendChild(stage);
+  return { stage, page, viewport, shift, content, background, padding };
+}
+
+/**
+ * 只量不截:照轉圖時一模一樣的排版,量出每個區塊有多高(含標題時標題是第 0 個)。
+ * 手動分頁時用它告訴使用者每一張切出來多長、有沒有超過上限。
+ */
+export async function measureExport({
+  html,
+  title,
+  width,
+  preferences,
+}: Pick<ExportImageOptions, "html" | "title" | "width" | "preferences">): Promise<{ heights: number[]; padding: number; maxHeight: number }> {
+  const { stage, page, content, padding } = buildStage(html, title, width, preferences);
+  try {
+    await ensureWebFont(preferences.fontFamily);
+    await loadFontsFor(page);
+    return { heights: collectUnits(content).map((unit) => unit.height), padding, maxHeight: maxContentHeight(width, padding) };
+  } finally {
+    stage.remove();
+  }
+}
+
+/** 手動分頁:每一張的區塊高度加總(cuts 是「在第幾個區塊之後切」),換成輸出圖片的像素 */
+export function pageSizes(heights: number[], cuts: Set<number>, width: number, padding: number): { width: number; height: number; content: number }[] {
+  const pages: number[] = [];
+  let current = 0;
+  heights.forEach((height, index) => {
+    current += height;
+    if (cuts.has(index) && index < heights.length - 1) {
+      pages.push(current);
+      current = 0;
+    }
+  });
+  pages.push(current);
+  return pages.map((content) => ({
+    width: Math.round(width * EXPORT_IMAGE_SCALE),
+    height: Math.round((content + padding * 2) * EXPORT_IMAGE_SCALE),
+    content,
+  }));
+}
+
+/** 照自動分頁的規則排一次,回傳要在哪幾個區塊之後切(給手動分頁當起點) */
+export function autoCuts(heights: number[], maxHeight: number): Set<number> {
+  const cuts = new Set<number>();
+  let used = 0;
+  heights.forEach((height, index) => {
+    if (index > 0 && used + height > maxHeight) {
+      cuts.add(index - 1);
+      used = 0;
+    }
+    used += height;
+  });
+  return cuts;
+}
+
+/**
+ * 把內容畫成 PNG。
+ *
+ * 刻意不截畫面上那塊預覽區:預覽會跟著視窗寬度變,手機永遠截不出 1080 寬的圖。
+ * 這裡另外在畫面外組一個固定寬度的節點來截,輸出結果跟裝置無關。
+ * 顏色一律讀當下主題的 CSS 變數,所以深色主題匯出就是深底淺字。
+ *
+ * 每一張是把不屬於這張的區塊 display:none 之後整塊截圖,而不是把長圖裁開,
+ * 所以邊界永遠是完整的區塊。
+ */
+export async function exportContentToImages({
+  html,
+  title,
+  fileTitle,
+  width,
+  paginate,
+  cuts,
+  preferences,
+}: ExportImageOptions): Promise<ExportedImage[]> {
+  const { stage, page, viewport, shift, content, background, padding } = buildStage(html, title, width, preferences);
 
   /**
    * 截一張。height 給了才是「在區塊內硬切」:只截 start 起的那一段。
