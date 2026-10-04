@@ -114,6 +114,24 @@ async function loadFontsFor(page: HTMLElement, doc: Document = document): Promis
   }
 }
 
+/**
+ * 目前頁面已經載好的所有 CSS 規則,串成一段文字。
+ * html2canvas 截圖時會把頁面複製到一個隱藏的 iframe,那邊的 <link> 要重新下載 CSS;
+ * 手機或網路慢的時候,它常常在 CSS 到之前就截了——引用框、淡色正體、粗體全部不見,
+ * 只剩瀏覽器預設的樣子。把這段文字直接塞進複製頁,就不必等網路。
+ */
+function collectPageCss(): string {
+  const parts: string[] = [];
+  for (const sheet of Array.from(document.styleSheets)) {
+    try {
+      for (const rule of Array.from(sheet.cssRules)) parts.push(rule.cssText);
+    } catch {
+      // 別的網域的樣式表讀不到規則,略過(那種本來就不歸我們管)
+    }
+  }
+  return parts.join("\n");
+}
+
 /** 一頁內容區(不含留白)最多能有多高,超過就得換頁 */
 function maxContentHeight(width: number, padding: number): number {
   const scale = EXPORT_IMAGE_SCALE;
@@ -321,6 +339,7 @@ export async function exportContentToImages({
    * 一般的一頁不設高度,讓 html2canvas 照它複製出來那份文件實際排出來的高度截——
    * 先量好高度再截的話,複製文件裡字型晚一步載入、換行多一行,最後幾行就會被切掉。
    */
+  const pageCss = collectPageCss();
   const capture = async (start: number, height: number | null) => {
     viewport.style.height = height === null ? "" : `${height}px`;
     shift.style.transform = start ? `translateY(${-start}px)` : "";
@@ -334,6 +353,10 @@ export async function exportContentToImages({
       ...(height === null ? {} : { height: height + padding * 2 }),
       // html2canvas 在另一份複製的文件裡排版,那邊的網路字型要自己再等一次
       onclone: async (clonedDoc: Document) => {
+        // 樣式直接內嵌,不等複製頁自己去下載 CSS
+        const style = clonedDoc.createElement("style");
+        style.textContent = pageCss;
+        clonedDoc.head.appendChild(style);
         const clonedPage = clonedDoc.body.querySelector<HTMLElement>("[data-export-page]");
         if (clonedPage) await loadFontsFor(clonedPage, clonedDoc);
       },
