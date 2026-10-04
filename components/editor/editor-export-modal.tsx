@@ -17,15 +17,24 @@ import { downloadEach, shareImages } from "@/lib/download";
 import { useCanShareImages } from "@/hooks/useCanShareImages";
 import { type WritingMode } from "@/lib/storage";
 import {
+  applyBlockStyle,
+  BLOCK_FILLS,
+  isPlainBlock,
   isRenderableMode,
+  PLAIN_BLOCK,
   renderToSafeHtml,
   splitBlocks,
   toPlainHtml,
+  type BlockFill,
+  type BlockStyle,
 } from "@/lib/markdown";
 import {
+  autoCuts,
   contentClassFor,
   downloadBlob,
   exportContentToImages,
+  measureExport,
+  pageSizes,
   ExportPageTooLongError,
   ExportTooLongError,
   zipImages,
@@ -55,6 +64,60 @@ const PAGINATE_OPTIONS: { value: ExportPaginate; label: string }[] = [
   { value: "none", label: "一律單張" },
 ];
 
+/** 一段的樣式列:對齊、底色、底線 */
+function BlockStyleBar({
+  style,
+  onChange,
+  theme,
+}: {
+  style: BlockStyle;
+  onChange: (patch: Partial<BlockStyle>) => void;
+  theme: EditorThemeConfig;
+}) {
+  const chip = (active: boolean) =>
+    `rounded-xl border px-2.5 py-1 text-xs ${theme.border} ${
+      active ? `${theme.primaryButton} ${theme.primaryButtonText}` : `${theme.secondaryButton} ${theme.secondaryButtonText}`
+    }`;
+  return (
+    <div
+      className="mx-2 mb-2 mt-1 flex flex-wrap items-center gap-1.5 rounded-2xl border px-2 py-1.5"
+      style={{ borderColor: "var(--border-light)" }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {(
+        [
+          ["left", "靠左"],
+          ["center", "置中"],
+          ["right", "置右"],
+        ] as const
+      ).map(([value, label]) => (
+        <button key={value} type="button" aria-pressed={style.align === value} onClick={() => onChange({ align: value })} className={chip(style.align === value)}>
+          {label}
+        </button>
+      ))}
+      <span className="mx-1 h-4 w-px" style={{ background: "var(--border-light)" }} />
+      <button type="button" aria-pressed={style.fill === "none"} onClick={() => onChange({ fill: "none" })} className={chip(style.fill === "none")}>
+        無底色
+      </button>
+      {(Object.entries(BLOCK_FILLS) as [Exclude<BlockFill, "none">, { label: string; color: string }][]).map(([value, fill]) => (
+        <button
+          key={value}
+          type="button"
+          aria-label={`${fill.label}色底`}
+          aria-pressed={style.fill === value}
+          onClick={() => onChange({ fill: value })}
+          className={`h-7 w-7 rounded-full border-2 ${style.fill === value ? "" : "border-transparent"}`}
+          style={{ background: fill.color, borderColor: style.fill === value ? "var(--accent)" : undefined }}
+        />
+      ))}
+      <span className="mx-1 h-4 w-px" style={{ background: "var(--border-light)" }} />
+      <button type="button" aria-pressed={style.underline} onClick={() => onChange({ underline: !style.underline })} className={chip(style.underline)}>
+        <span className="underline underline-offset-2">底線</span>
+      </button>
+    </div>
+  );
+}
+
 export default function EditorExportModal({
   open,
   onClose,
@@ -72,6 +135,12 @@ export default function EditorExportModal({
   const [pickedPages, setPickedPages] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  /** 個別段落的樣式(置中、置右、底色、底線),用段落內容當鑰匙:關掉再開、內容沒改就還在 */
+  const [blockStyles, setBlockStyles] = useState<Map<string, BlockStyle>>(() => new Map());
+  /** 正在調哪一段的樣式(那一段下面展開一條樣式列) */
+  const [styling, setStyling] = useState<number | null>(null);
+  /** 手動分頁時,照實際轉圖的排版量出來的每個區塊高度(含標題時標題是第 0 個) */
+  const [measured, setMeasured] = useState<{ key: string; heights: number[]; padding: number; maxHeight: number } | null>(null);
   const anchorRef = useRef<number | null>(null);
   const urlsRef = useRef<string[]>([]);
   const canShare = useCanShareImages();
@@ -128,10 +197,27 @@ export default function EditorExportModal({
     [blocks, selected]
   );
 
-  const selectedHtml = useMemo(
-    () => selectedIndexes.map((index) => blocks[index]).join(""),
-    [blocks, selectedIndexes]
+  const styledBlocks = useMemo(
+    () => blocks.map((block) => applyBlockStyle(block, blockStyles.get(block))),
+    [blocks, blockStyles]
   );
+
+  const selectedHtml = useMemo(
+    () => selectedIndexes.map((index) => styledBlocks[index]).join(""),
+    [styledBlocks, selectedIndexes]
+  );
+
+  function updateBlockStyle(index: number, patch: Partial<BlockStyle>) {
+    dropImages();
+    const key = blocks[index];
+    setBlockStyles((prev) => {
+      const next = new Map(prev);
+      const style = { ...(prev.get(key) ?? PLAIN_BLOCK), ...patch };
+      if (isPlainBlock(style)) next.delete(key);
+      else next.set(key, style);
+      return next;
+    });
+  }
 
   // 畫面上的分頁點是「第幾個區塊」,匯出時的內容只有選取的區塊(而且含標題時
   // 標題會排在最前面),所以要換算成匯出內容裡的位置。最後一段之後切沒有意義。
@@ -148,6 +234,57 @@ export default function EditorExportModal({
 
   const pageCount = exportCuts.size + 1;
   const isManual = preferences.exportPaginate === "manual";
+  const exportTitle = preferences.exportImageTitle && title ? title : null;
+  const titleOffset = exportTitle ? 1 : 0;
+
+  // 手動分頁:在畫面外照轉圖的寬度、字體排一次,量每一段多高(停下來 0.3 秒才量)
+  const measureKey = [
+    selectedHtml,
+    exportTitle,
+    preferences.exportImageWidth,
+    preferences.fontFamily,
+    preferences.fontSize,
+    preferences.lineHeight,
+    preferences.letterSpacing,
+    preferences.softItalic,
+  ].join("\u0000");
+  useEffect(() => {
+    if (!open || !isManual || !selectedHtml) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void measureExport({ html: selectedHtml, title: exportTitle, width: preferences.exportImageWidth, preferences })
+        .then((result) => {
+          if (!cancelled) setMeasured({ key: measureKey, ...result });
+        })
+        .catch((error: unknown) => console.warn("量高度失敗：", error));
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [open, isManual, selectedHtml, exportTitle, preferences, measureKey]);
+
+  // 量到的是現在這份內容才用(內容一變,舊的高度就不準了)
+  const heights = measured && measured.key === measureKey && measured.heights.length === selectedIndexes.length + titleOffset ? measured : null;
+  const sizes = heights ? pageSizes(heights.heights, exportCuts, preferences.exportImageWidth, heights.padding) : null;
+  const overLimit = (page: number) => !!(heights && sizes && sizes[page].content > heights.maxHeight);
+  /** 選取的第 position 段是第幾張(從 0 數)、是不是那一張的第一段 */
+  const pageOf = (position: number) => {
+    const unit = position + titleOffset;
+    let page = 0;
+    for (const cut of exportCuts) if (cut < unit) page += 1;
+    return page;
+  };
+
+  function seedAutoCuts() {
+    if (!heights) return;
+    dropImages();
+    const next = new Set<number>();
+    for (const unit of autoCuts(heights.heights, heights.maxHeight)) {
+      if (unit >= titleOffset) next.add(selectedIndexes[unit - titleOffset]);
+    }
+    setCuts(next);
+  }
 
   function toggleBlock(index: number, shiftKey: boolean) {
     dropImages();
@@ -414,6 +551,14 @@ export default function EditorExportModal({
               點一下段落 = 在它後面切一刀（再點一次取消）。目前切成{" "}
               <b className={theme.text}>{pageCount}</b> 張。
             </span>
+            <button
+              type="button"
+              onClick={seedAutoCuts}
+              disabled={!heights}
+              className={`rounded-2xl border px-3 py-1 disabled:opacity-40 ${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}
+            >
+              照自動分頁先排一次
+            </button>
             {cuts.size > 0 && (
               <button
                 type="button"
@@ -426,6 +571,21 @@ export default function EditorExportModal({
                 清除分頁點
               </button>
             )}
+            <div className="basis-full">
+              {sizes ? (
+                <span className="flex flex-wrap gap-x-3 gap-y-0.5">
+                  <span className={theme.text}>切出來的尺寸：</span>
+                  {sizes.map((size, page) => (
+                    <span key={page} style={overLimit(page) ? { color: "var(--danger, #c0392b)" } : undefined}>
+                      {page + 1}：{size.width} × {size.height}
+                      {overLimit(page) ? "（太長）" : ""}
+                    </span>
+                  ))}
+                </span>
+              ) : (
+                <span>量每一張的長度中……</span>
+              )}
+            </div>
           </div>
         )}
 
@@ -437,8 +597,27 @@ export default function EditorExportModal({
               className={contentClassFor(preferences)}
               style={{ fontFamily: getFontFamily(preferences.fontFamily) }}
             >
-              {blocks.map((block, index) => (
+              {blocks.map((block, index) => {
+                const position = selectedIndexes.indexOf(index);
+                const page = position >= 0 ? pageOf(position) : -1;
+                const startsPage = isManual && position >= 0 && (position === 0 || pageOf(position - 1) !== page);
+                return (
                 <div key={index}>
+                  {startsPage && (
+                    <div
+                      className="mb-1 flex items-center gap-2 px-2 pt-1 text-[11px] leading-none"
+                      style={{ color: overLimit(page) ? "var(--danger, #c0392b)" : "var(--ink-tertiary)" }}
+                    >
+                      <span className="font-semibold">第 {page + 1} 張</span>
+                      {sizes?.[page] && (
+                        <span>
+                          {sizes[page].width} × {sizes[page].height} px
+                          {overLimit(page) ? "・太長，再切一刀" : ""}
+                        </span>
+                      )}
+                      <span className="h-0 flex-1 border-t" style={{ borderColor: "currentColor", opacity: 0.35 }} />
+                    </div>
+                  )}
                   <div
                     className={`flex gap-2 rounded-2xl px-2 py-1 transition ${
                       selected.has(index) ? "" : "opacity-35"
@@ -458,9 +637,34 @@ export default function EditorExportModal({
                     />
                     <div
                       className="min-w-0 flex-1"
-                      dangerouslySetInnerHTML={{ __html: block }}
+                      dangerouslySetInnerHTML={{ __html: styledBlocks[index] }}
                     />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation(); // 調樣式不要順便切一刀
+                        setStyling((current) => (current === index ? null : index));
+                      }}
+                      aria-label={`第 ${index + 1} 段的樣式`}
+                      aria-expanded={styling === index}
+                      title="這一段置中、置右、加底色或底線"
+                      className={`mt-1 h-7 shrink-0 self-start rounded-xl border px-2 text-[11px] ${theme.border} ${
+                        styling === index || !isPlainBlock(blockStyles.get(block))
+                          ? `${theme.primaryButton} ${theme.primaryButtonText}`
+                          : `${theme.secondaryButton} ${theme.secondaryButtonText}`
+                      }`}
+                    >
+                      Aa
+                    </button>
                   </div>
+
+                  {styling === index && (
+                    <BlockStyleBar
+                      style={blockStyles.get(block) ?? PLAIN_BLOCK}
+                      onChange={(patch) => updateBlockStyle(index, patch)}
+                      theme={theme}
+                    />
+                  )}
 
                   {isManual && cuts.has(index) && selected.has(index) && (
                     <div className="my-1 flex items-center gap-2 px-2">
@@ -477,7 +681,8 @@ export default function EditorExportModal({
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

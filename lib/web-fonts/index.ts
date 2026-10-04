@@ -44,6 +44,22 @@ export function ensureWebFont(font: FontFamilyName): Promise<void> {
   return task;
 }
 
+/** font-family 清單裡真正要下載的字體:去掉通用字族與 next/font 產生的「Fallback」別名 */
+export function loadableFamilies(fontFamily: string): string[] {
+  return fontFamily
+    .split(",")
+    .map((name) => name.trim())
+    .filter((name) => {
+      const bare = name.replace(/^["']|["']$/g, "");
+      if (!bare) return false;
+      if (/^(serif|sans-serif|monospace|cursive|fantasy|system-ui|math|emoji|fangsong|ui-[a-z-]+)$/i.test(bare)) return false;
+      // next/font 為每套字產生一個「XXX Fallback」:指向系統字(local)調整大小用。
+      // 系統裡沒有那套字時(很多手機)載入會失敗,一起丟進 load 的話整批都失敗、粗體就沒載到
+      return !/ fallback$/i.test(bare);
+    })
+    .filter((name, index, list) => list.indexOf(name) === index);
+}
+
 /**
  * canvas 的 ctx.font 不認 CSS 變數,要先換成真正的字體名稱。
  * 順便把這段文字要用到的字抓下來,畫的當下才不會用到備援字體。
@@ -59,10 +75,10 @@ export async function canvasFontFamily(
     /var\((--[\w-]+)\)/g,
     (_, name: string) => root.getPropertyValue(name).trim() || "sans-serif"
   );
-  try {
-    await document.fonts?.load(`${weight} 48px ${family}`, sample);
-  } catch (error) {
-    console.warn("字體載入失敗:", error);
-  }
+  // 一套一套分開載:清單裡的「Fallback」別名載不到時,不會連真正的字體都沒載
+  const results = await Promise.allSettled(
+    loadableFamilies(family).map((name) => document.fonts?.load(`${weight} 48px ${name}`, sample))
+  );
+  for (const result of results) if (result.status === "rejected") console.warn("字體載入失敗:", result.reason);
   return family;
 }
