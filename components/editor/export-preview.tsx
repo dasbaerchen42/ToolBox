@@ -87,8 +87,8 @@ type SheetProps = {
   /** 這張是第幾張(從 1 數)、總共幾張:頁碼用 */
   number: number;
   total: number;
-  /** 圖片配色(主題 id;site 是跟著網站) */
-  palette: string;
+  /** 圖片配色:內建主題的 id,或自選配色的整組顏色變數 */
+  palette: { theme?: string; vars?: Record<string, string> };
   signature: string;
   pageNumbers: boolean;
   layout: ExportLayout;
@@ -168,13 +168,14 @@ function PageSheet({
         ref={innerRef}
         className={`${contentClass} export-sheet absolute left-0 top-0 rounded-[24px] shadow-md`}
         data-cutting={cutting ? "" : undefined}
-        data-theme={palette !== "site" ? palette : undefined}
+        data-theme={palette.theme}
         style={{
           width: layout.width,
           minHeight: layout.pageHeight ?? undefined,
           padding: layout.padding,
           transform: `scale(${scale})`,
           transformOrigin: "0 0",
+          ...palette.vars,
           background: "var(--paper-bg)",
           color: "var(--ink-primary)",
           // 用 outline 不用 border:border 會吃掉內容寬度,換行就跟圖片不一樣了
@@ -201,13 +202,14 @@ function PageSheet({
       {(signature || (pageNumbers && total > 1)) && (
         <div
           aria-hidden
-          data-theme={palette !== "site" ? palette : undefined}
+          data-theme={palette.theme}
           className="pointer-events-none absolute flex justify-between gap-4"
           style={{
             left: layout.padding * scale,
             right: layout.padding * scale,
             bottom: layout.footerBottom * scale,
             fontSize: layout.footerSize * scale,
+            ...palette.vars,
             fontFamily: getFontFamily(fontFamily),
             lineHeight: 1.4,
             color: "var(--ink-tertiary)",

@@ -3,6 +3,7 @@
 
 import { DEVICE_MAX_AREA, DEVICE_MAX_SIDE } from "@/lib/canvas-limits";
 import type { EditorPreferences } from "@/lib/preferences";
+import { blend, deriveVars } from "@/lib/theme-core";
 
 /** 輸出時的像素密度:1080 CSS px 會變成 2160 px 的圖 */
 export const EXPORT_IMAGE_SCALE = 2;
@@ -172,4 +173,19 @@ export function planSlices(height: number, maxHeight: number, lineGaps: number[]
   }
   slices.push([start, height - start]);
   return slices;
+}
+
+/**
+ * 圖片配色要掛到紙上的東西:內建主題掛 data-theme(主題的 CSS 變數是 [data-theme] 選擇器),
+ * 自選配色直接給一整組 CSS 變數(次要字色、引用線、分隔線都從底色和字色推出來)。
+ */
+export function exportPalette(
+  preferences: Pick<EditorPreferences, "exportPalette" | "exportCustomBg" | "exportCustomInk">
+): { theme?: string; vars?: Record<string, string> } {
+  const palette = preferences.exportPalette;
+  if (!palette || palette === "site") return {};
+  if (palette !== "custom") return { theme: palette };
+  const bg = preferences.exportCustomBg || "#ffffff";
+  const ink = preferences.exportCustomInk || "#000000";
+  return { vars: deriveVars({ bg, bg2: blend(bg, ink, 0.06), ink, accent: blend(ink, bg, 0.35) }) };
 }

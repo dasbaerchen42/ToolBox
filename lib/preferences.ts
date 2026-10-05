@@ -31,8 +31,11 @@ export type EditorPreferences = {
   exportTextSize: "s" | "m" | "l" | "xl";
   /** 每張圖的比例:free 是照內容長度,其他是固定比例(社群輪播) */
   exportRatio: "free" | "1:1" | "4:5" | "3:4" | "9:16";
-  /** 圖片配色:site 跟著網站目前的主題,其他是主題的 id */
+  /** 圖片配色:site 跟著網站目前的主題,custom 是自選的底色與字色,其他是主題的 id */
   exportPalette: string;
+  /** 自選配色的底色與字色 */
+  exportCustomBg: string;
+  exportCustomInk: string;
   /** 每張右下角標「1/5」 */
   exportPageNumbers: boolean;
   /** 每張左下角的署名(空字串就不放) */
@@ -59,6 +62,8 @@ export const defaultPreferences: EditorPreferences = {
   exportTextSize: "m",
   exportRatio: "free",
   exportPalette: "site",
+  exportCustomBg: "#fdf6ec",
+  exportCustomInk: "#4a3a32",
   exportPageNumbers: false,
   exportSignature: "",
   exportMargin: "normal",
