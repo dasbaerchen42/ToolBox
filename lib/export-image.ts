@@ -1,7 +1,16 @@
 import { getFontFamily } from "@/lib/editor-font";
 import { ensureWebFont, loadableFamilies } from "@/lib/web-fonts";
 import { type EditorPreferences } from "@/lib/preferences";
-import { DEVICE_MAX_AREA, DEVICE_MAX_SIDE } from "@/lib/canvas-limits";
+import {
+  autoCuts,
+  EXPORT_IMAGE_SCALE,
+  exportLayout,
+  maxContentHeight,
+  pageRanges,
+  spanHeight,
+  type ExportLayout,
+  type UnitBox,
+} from "@/lib/export-layout";
 import {
   downloadBlob,
   sanitizeFileName,
@@ -14,8 +23,7 @@ import {
 export { downloadBlob, sanitizeFileName, zipImages };
 export type { ExportedImage };
 
-/** 輸出時的像素密度:1080 CSS px 會變成 2160 px 的圖 */
-export const EXPORT_IMAGE_SCALE = 2;
+export { autoCuts, EXPORT_IMAGE_SCALE, exportLayout, pageSizes } from "@/lib/export-layout";
 
 export type PaginateMode = "auto" | "manual" | "none";
 
@@ -132,77 +140,28 @@ function collectPageCss(): string {
   return parts.join("\n");
 }
 
-/** 一頁內容區(不含留白)最多能有多高,超過就得換頁 */
-function maxContentHeight(width: number, padding: number): number {
-  const scale = EXPORT_IMAGE_SCALE;
-  const bySide = DEVICE_MAX_SIDE / scale;
-  const byArea = DEVICE_MAX_AREA / (width * scale * scale);
-  return Math.max(200, Math.floor(Math.min(bySide, byArea)) - padding * 2);
-}
-
 /**
  * 分頁的最小單位就是一個頂層區塊(段落、清單、表格……),
  * 所以換頁點永遠落在區塊之間,不會從一行字中間切開。
  */
-type Unit = { el: HTMLElement; index: number; height: number };
-
-function collectUnits(content: HTMLElement): Unit[] {
+function collectUnits(content: HTMLElement): { els: HTMLElement[]; boxes: UnitBox[] } {
   const els = Array.from(content.children) as HTMLElement[];
-  if (els.length === 0) return [];
-
-  const contentRect = content.getBoundingClientRect();
-  const tops = els.map((el) => el.getBoundingClientRect().top - contentRect.top);
-
-  return els.map((el, i) => ({
-    el,
-    index: i,
-    // 用下一個單元的起點當這個單元的終點,中間的間距才不會被算丟
-    height: (i + 1 < tops.length ? tops[i + 1] : contentRect.height) - tops[i],
-  }));
-}
-
-/** 自動分頁:照順序塞,塞不下就換一張 */
-function packUnits(units: Unit[], pageHeight: number): Unit[][] {
-  const pages: Unit[][] = [];
-  let current: Unit[] = [];
-  let used = 0;
-
-  for (const unit of units) {
-    if (current.length > 0 && used + unit.height > pageHeight) {
-      pages.push(current);
-      current = [];
-      used = 0;
-    }
-    current.push(unit);
-    used += unit.height;
-  }
-
-  if (current.length > 0) pages.push(current);
-  return pages;
-}
-
-/** 手動分頁:在使用者點過的區塊之後切開 */
-function splitUnitsAt(units: Unit[], cuts: Set<number>): Unit[][] {
-  const pages: Unit[][] = [];
-  let current: Unit[] = [];
-
-  for (const unit of units) {
-    current.push(unit);
-    if (cuts.has(unit.index)) {
-      pages.push(current);
-      current = [];
-    }
-  }
-
-  if (current.length > 0) pages.push(current);
-  return pages;
+  const top = content.getBoundingClientRect().top;
+  return {
+    els,
+    boxes: els.map((el) => {
+      const rect = el.getBoundingClientRect();
+      return { top: rect.top - top, bottom: rect.bottom - top };
+    }),
+  };
 }
 
 /** 轉圖用的暫存節點:固定寬度、照當下主題上色、放在畫面外。量高度與截圖都用這一份 */
 function buildStage(html: string, title: string | null, width: number, preferences: EditorPreferences) {
   const background = readThemeColor("--paper-bg", "#ffffff");
   const color = readThemeColor("--ink-primary", "#000000");
-  const padding = Math.round(width * 0.06);
+  const layout = exportLayout(width, preferences);
+  const { padding } = layout;
 
   const stage = document.createElement("div");
   stage.style.cssText = [
@@ -223,9 +182,9 @@ function buildStage(html: string, title: string | null, width: number, preferenc
     `background: ${background}`,
     `color: ${color}`,
     `font-family: ${getFontFamily(preferences.fontFamily)}`,
-    `font-size: ${preferences.fontSize}px`,
-    `line-height: ${preferences.lineHeight}`,
-    `letter-spacing: ${preferences.letterSpacing}px`,
+    `font-size: ${layout.fontSize}px`,
+    `line-height: ${layout.lineHeight}`,
+    `letter-spacing: ${layout.letterSpacing}px`,
     // 新版 Chrome 會把相鄰的全形標點(「。「」)擠成半格,html2canvas 量到的寬度變 0,
     // 那個「就整個不見。轉圖時關掉擠壓,每個標點都是完整一格
     "text-spacing-trim: space-all",
@@ -257,60 +216,29 @@ function buildStage(html: string, title: string | null, width: number, preferenc
   page.appendChild(viewport);
   stage.appendChild(page);
   document.body.appendChild(stage);
-  return { stage, page, viewport, shift, content, background, padding };
+  return { stage, page, viewport, shift, content, background, padding, layout };
 }
 
+export type ExportMeasure = { units: UnitBox[]; padding: number; maxHeight: number; layout: ExportLayout };
+
 /**
- * 只量不截:照轉圖時一模一樣的排版,量出每個區塊有多高(含標題時標題是第 0 個)。
- * 手動分頁時用它告訴使用者每一張切出來多長、有沒有超過上限。
+ * 只量不截:照轉圖時一模一樣的排版,量出每個區塊的上下緣(含標題時標題是第 0 個)。
+ * 轉圖視窗用它預告每一張切出來多長、會不會太長。
  */
 export async function measureExport({
   html,
   title,
   width,
   preferences,
-}: Pick<ExportImageOptions, "html" | "title" | "width" | "preferences">): Promise<{ heights: number[]; padding: number; maxHeight: number }> {
-  const { stage, page, content, padding } = buildStage(html, title, width, preferences);
+}: Pick<ExportImageOptions, "html" | "title" | "width" | "preferences">): Promise<ExportMeasure> {
+  const { stage, page, content, padding, layout } = buildStage(html, title, width, preferences);
   try {
     await ensureWebFont(preferences.fontFamily);
     await loadFontsFor(page);
-    return { heights: collectUnits(content).map((unit) => unit.height), padding, maxHeight: maxContentHeight(width, padding) };
+    return { units: collectUnits(content).boxes, padding, maxHeight: maxContentHeight(width, padding), layout };
   } finally {
     stage.remove();
   }
-}
-
-/** 手動分頁:每一張的區塊高度加總(cuts 是「在第幾個區塊之後切」),換成輸出圖片的像素 */
-export function pageSizes(heights: number[], cuts: Set<number>, width: number, padding: number): { width: number; height: number; content: number }[] {
-  const pages: number[] = [];
-  let current = 0;
-  heights.forEach((height, index) => {
-    current += height;
-    if (cuts.has(index) && index < heights.length - 1) {
-      pages.push(current);
-      current = 0;
-    }
-  });
-  pages.push(current);
-  return pages.map((content) => ({
-    width: Math.round(width * EXPORT_IMAGE_SCALE),
-    height: Math.round((content + padding * 2) * EXPORT_IMAGE_SCALE),
-    content,
-  }));
-}
-
-/** 照自動分頁的規則排一次,回傳要在哪幾個區塊之後切(給手動分頁當起點) */
-export function autoCuts(heights: number[], maxHeight: number): Set<number> {
-  const cuts = new Set<number>();
-  let used = 0;
-  heights.forEach((height, index) => {
-    if (index > 0 && used + height > maxHeight) {
-      cuts.add(index - 1);
-      used = 0;
-    }
-    used += height;
-  });
-  return cuts;
 }
 
 /**
@@ -370,35 +298,33 @@ export async function exportContentToImages({
     if (document.fonts?.ready) await document.fonts.ready;
 
     const maxHeight = maxContentHeight(width, padding);
-    const units = collectUnits(content);
-    const totalHeight = content.getBoundingClientRect().height;
+    const { els, boxes } = collectUnits(content);
 
-    if (paginate === "none" && totalHeight > maxHeight) {
-      throw new ExportTooLongError(Math.round(totalHeight), maxHeight);
-    }
-
-    let pages: Unit[][];
-    if (paginate === "none" || units.length === 0) {
-      pages = units.length > 0 ? [units] : [];
-    } else if (paginate === "manual") {
-      pages = splitUnitsAt(units, cuts ?? new Set<number>());
-    } else {
-      pages = packUnits(units, maxHeight);
-    }
-
-    if (pages.length === 0) {
+    if (els.length === 0) {
       const canvas = await capture(0, null);
       return [{ name: `${sanitizeFileName(fileTitle)}.png`, blob: await toBlob(canvas) }];
     }
 
-    const images: ExportedImage[] = [];
-    const allUnits = units.map((unit) => unit.el);
+    if (paginate === "none" && spanHeight(boxes, 0, boxes.length - 1) > maxHeight) {
+      throw new ExportTooLongError(Math.round(spanHeight(boxes, 0, boxes.length - 1)), maxHeight);
+    }
 
-    for (const [index, pageUnits] of pages.entries()) {
-      // 只留這一頁的區塊,其餘 display:none。被藏起來的完全不佔空間,
-      // 所以每一張的高度就是它自己內容的高度。
-      const keep = new Set(pageUnits.map((unit) => unit.el));
-      for (const el of allUnits) el.style.display = keep.has(el) ? "" : "none";
+    const ranges =
+      paginate === "none"
+        ? [[0, els.length - 1] as [number, number]]
+        : pageRanges(els.length, paginate === "manual" ? (cuts ?? new Set<number>()) : autoCuts(boxes, maxHeight));
+
+    const images: ExportedImage[] = [];
+
+    for (const [index, [from, to]] of ranges.entries()) {
+      // 只留這一張的區塊,其餘 display:none。被藏起來的完全不佔空間,
+      // 所以每一張的高度就是它自己內容的高度。第一段不留上外距、最後一段不留下外距,
+      // 上下留白才會一樣寬(預覽也是這樣排的)。
+      els.forEach((el, i) => {
+        el.style.display = i >= from && i <= to ? "" : "none";
+        el.style.marginTop = i === from ? "0" : "";
+        el.style.marginBottom = i === to ? "0" : "";
+      });
 
       const height = content.getBoundingClientRect().height;
 
