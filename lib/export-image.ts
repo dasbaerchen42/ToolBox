@@ -7,6 +7,7 @@ import {
   exportLayout,
   maxContentHeight,
   pageRanges,
+  planSlices,
   spanHeight,
   type ExportLayout,
   type UnitBox,
@@ -61,6 +62,8 @@ export type ExportImageOptions = {
   /** 手動分頁時,要在第幾個區塊之後切開(含標題時標題算第 0 個) */
   cuts?: Set<number>;
   preferences: EditorPreferences;
+  /** 每產生完一張就回報一次(第幾張、總共幾張) */
+  onProgress?: (done: number, total: number) => void;
 };
 
 /** 內容區要加的 class(例如斜體改淡色正體) */
@@ -76,6 +79,10 @@ function readThemeColor(name: string, fallback: string): string {
   return value || fallback;
 }
 
+/**
+ * 一律 PNG。實測過 JPG(品質 0.92):純色底的文字圖 JPG 反而比 PNG 大三成,
+ * 字邊還會糊,所以不提供。
+ */
 function toBlob(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -83,6 +90,34 @@ function toBlob(canvas: HTMLCanvasElement): Promise<Blob> {
       else reject(new Error("無法產生圖片檔"));
     }, "image/png");
   });
+}
+
+/**
+ * 段落裡每兩行字之間的位置(從 content 頂端量):超長段落只能在段落裡切時,切在這些地方。
+ * 用 Range 量每個文字節點排出來的每一行,同一高度的併成一列,兩列中間就是行縫。
+ */
+function lineGaps(content: HTMLElement): number[] {
+  const top = content.getBoundingClientRect().top;
+  const rows: { top: number; bottom: number }[] = [];
+  const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!(node.textContent ?? "").trim()) continue;
+    range.selectNodeContents(node);
+    for (const rect of Array.from(range.getClientRects())) {
+      if (rect.height > 0) rows.push({ top: rect.top - top, bottom: rect.bottom - top });
+    }
+  }
+  rows.sort((a, b) => a.top - b.top);
+  const merged: { top: number; bottom: number }[] = [];
+  for (const row of rows) {
+    const last = merged[merged.length - 1];
+    if (last && row.top < last.bottom - 1) last.bottom = Math.max(last.bottom, row.bottom);
+    else merged.push({ ...row });
+  }
+  const gaps: number[] = [];
+  for (let i = 1; i < merged.length; i += 1) gaps.push((merged[i - 1].bottom + merged[i].top) / 2);
+  return gaps;
 }
 
 /**
@@ -299,6 +334,7 @@ export async function exportContentToImages({
   paginate,
   cuts,
   preferences,
+  onProgress,
 }: ExportImageOptions): Promise<ExportedImage[]> {
   const { stage, page, viewport, shift, content, background, padding, layout, footer } = buildStage(html, title, width, preferences);
 
@@ -355,42 +391,41 @@ export async function exportContentToImages({
         ? [[0, els.length - 1] as [number, number]]
         : pageRanges(els.length, paginate === "manual" ? (cuts ?? new Set<number>()) : autoCuts(boxes, maxHeight));
 
-    const images: ExportedImage[] = [];
-    // 頁碼要先知道總共幾張:自動分頁時太長的那張會在段落中間再切開
-    const slicesOf = ([from, to]: [number, number]) =>
-      paginate === "auto" ? Math.max(1, Math.ceil(spanHeight(boxes, from, to) / maxHeight)) : 1;
-    const total = ranges.reduce((sum, range) => sum + slicesOf(range), 0);
-    const shoot = async (start: number, height: number | null) => {
-      footer?.set(images.length + 1, total);
-      const canvas = await capture(start, height);
-      images.push({ name: "", blob: await toBlob(canvas) });
-    };
-
-    for (const [index, [from, to]] of ranges.entries()) {
-      // 只留這一張的區塊,其餘 display:none。被藏起來的完全不佔空間,
-      // 所以每一張的高度就是它自己內容的高度。第一段不留上外距、最後一段不留下外距,
-      // 上下留白才會一樣寬(預覽也是這樣排的)。
+    // 只留這一張的區塊,其餘 display:none。被藏起來的完全不佔空間,
+    // 所以每一張的高度就是它自己內容的高度。第一段不留上外距、最後一段不留下外距,
+    // 上下留白才會一樣寬(預覽也是這樣排的)。
+    const showOnly = ([from, to]: [number, number]) =>
       els.forEach((el, i) => {
         el.style.display = i >= from && i <= to ? "" : "none";
         el.style.marginTop = i === from ? "0" : "";
         el.style.marginBottom = i === to ? "0" : "";
       });
 
+    // 先排好每一張要怎麼截:頁碼要先知道總共幾張。
+    // null = 整張照內容截;陣列 = 單一段落超過一張,在段落裡切成好幾段(切在兩行之間)
+    const plans = ranges.map((range, index) => {
+      showOnly(range);
       const height = content.getBoundingClientRect().height;
+      if (height <= maxHeight) return null;
+      // 手動分頁時使用者切得不夠細,直接說是第幾張太長
+      if (paginate === "manual") throw new ExportPageTooLongError(index + 1, Math.round(height), maxHeight);
+      return planSlices(height, maxHeight, lineGaps(content));
+    });
+    const total = plans.reduce((sum, plan) => sum + (plan?.length ?? 1), 0);
 
-      if (height > maxHeight) {
-        // 手動分頁時使用者切得不夠細,直接說是第幾張太長
-        if (paginate === "manual") {
-          throw new ExportPageTooLongError(index + 1, Math.round(height), maxHeight);
-        }
-        // 自動分頁遇到「單一區塊自己就超過一頁」,只能在區塊內硬切
-        for (let offset = 0; offset < height; offset += maxHeight) {
-          await shoot(offset, Math.min(maxHeight, height - offset));
-        }
-        continue;
-      }
+    const images: ExportedImage[] = [];
+    const shoot = async (start: number, height: number | null) => {
+      footer?.set(images.length + 1, total);
+      const canvas = await capture(start, height);
+      images.push({ name: "", blob: await toBlob(canvas) });
+      onProgress?.(images.length, total);
+    };
 
-      await shoot(0, null);
+    for (const [index, range] of ranges.entries()) {
+      showOnly(range);
+      const plan = plans[index];
+      if (!plan) await shoot(0, null);
+      else for (const [start, height] of plan) await shoot(start, height);
     }
 
     // 檔名等全部產生完才編號,中途硬切多出來的張數才數得對

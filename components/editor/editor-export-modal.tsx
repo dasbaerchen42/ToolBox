@@ -44,10 +44,12 @@ import {
 } from "@/lib/export-image";
 import {
   autoCuts,
+  EXPORT_MARGINS,
   EXPORT_RATIOS,
   EXPORT_TEXT_SIZES,
   exportLayout,
   pageSizes,
+  type ExportMargin,
   type ExportRatio,
   type ExportTextSize,
 } from "@/lib/export-layout";
@@ -109,6 +111,8 @@ export default function EditorExportModal({
   /** 照實際轉圖的排版量出來的每個區塊位置(含標題時標題是第 0 個) */
   const [measured, setMeasured] = useState<(ExportMeasure & { key: string }) | null>(null);
   const anchorRef = useRef<number | null>(null);
+  /** 連選:手機沒有 Shift,開了以後點起點、再點終點,中間全部一起選或一起取消 */
+  const [rangeMode, setRangeMode] = useState(false);
   const urlsRef = useRef<string[]>([]);
   const canShare = useCanShareImages();
 
@@ -209,6 +213,7 @@ export default function EditorExportModal({
     preferences.exportImageWidth,
     preferences.exportTextSize,
     preferences.exportRatio,
+    preferences.exportMargin,
     preferences.fontFamily,
     preferences.fontSize,
     preferences.lineHeight,
@@ -294,6 +299,10 @@ export default function EditorExportModal({
 
   function toggleBlock(index: number, shiftKey: boolean) {
     dropImages();
+    // 連選模式:第一下是起點(照常切換),第二下把起點到這裡全部設成一樣,然後結束連選
+    const ranged = rangeMode && anchorRef.current !== null;
+    if (ranged) setRangeMode(false);
+    shiftKey = shiftKey || ranged;
     setSelected((prev) => {
       const next = new Set(prev);
       // Shift 點第二下 = 選一整段範圍,跟檔案總管一樣
@@ -352,7 +361,7 @@ export default function EditorExportModal({
     }
 
     setBusy(true);
-    setStatus("產生中……");
+    setStatus("準備中……");
     setStyling(null);
     revokeUrls();
 
@@ -365,6 +374,7 @@ export default function EditorExportModal({
         paginate: preferences.exportPaginate,
         cuts: exportCuts,
         preferences,
+        onProgress: (done, total) => setStatus(total > 1 ? `產生中…… 第 ${done} / ${total} 張` : "產生中……"),
       });
 
       urlsRef.current = next.map((image) => URL.createObjectURL(image.blob));
@@ -379,7 +389,7 @@ export default function EditorExportModal({
           ? `第 ${error.pageIndex} 張約 ${error.pageHeight} px，超過單張上限 ${error.maxHeight} px，請在那一張中間再切一刀。`
           : error instanceof ExportTooLongError
             ? `內容約 ${error.contentHeight} px，超過單張上限 ${error.maxHeight} px。改用分頁，或少選幾段。`
-            : "轉圖失敗，請按 F12 查看 Console 錯誤。"
+            : "轉圖失敗了。可能是內容太長或手機記憶體不夠：試試少選幾段、改用分頁，或把寬度調窄一點再按一次。"
       );
     } finally {
       setBusy(false);
@@ -398,7 +408,7 @@ export default function EditorExportModal({
     try {
       if (picked.length === 1) {
         downloadBlob(picked[0]);
-        setStatus("已下載 1 張 PNG。");
+        setStatus(`已下載 1 張 PNG。`);
       } else if (mode === "each") {
         await downloadEach(picked);
         setStatus(`已逐張下載 ${picked.length} 張 PNG。`);
@@ -408,7 +418,7 @@ export default function EditorExportModal({
       }
     } catch (error) {
       console.error("下載失敗：", error);
-      setStatus("下載失敗，請按 F12 查看 Console 錯誤。");
+      setStatus(canShare ? "下載失敗，請再按一次，或改用「存到相簿／分享」。" : "下載失敗，請再按一次；一次下載很多張時可以改用打包 ZIP。");
     } finally {
       setBusy(false);
     }
@@ -582,6 +592,19 @@ export default function EditorExportModal({
               ))}
             </select>
 
+            <select
+              value={preferences.exportMargin}
+              onChange={(e) => updatePreference({ exportMargin: e.target.value as ExportMargin })}
+              className={select}
+              aria-label="留白"
+            >
+              {(Object.entries(EXPORT_MARGINS) as [ExportMargin, { label: string }][]).map(([value, margin]) => (
+                <option key={value} value={value}>
+                  {margin.label}
+                </option>
+              ))}
+            </select>
+
             <label className={`flex items-center gap-2 ${theme.mutedText}`}>
               <input type="checkbox" checked={preferences.exportImageTitle} onChange={(e) => updatePreference({ exportImageTitle: e.target.checked })} />
               含標題
@@ -619,6 +642,22 @@ export default function EditorExportModal({
             <button type="button" onClick={() => setAll(false)} className={smallButton}>
               全不選
             </button>
+            <button
+              type="button"
+              aria-pressed={rangeMode}
+              onClick={() => {
+                anchorRef.current = null;
+                setRangeMode((value) => !value);
+              }}
+              className={
+                rangeMode
+                  ? `rounded-2xl border px-3 py-1 text-xs ${theme.border} ${theme.primaryButton} ${theme.primaryButtonText}`
+                  : smallButton
+              }
+            >
+              連選
+            </button>
+            {rangeMode && <span>{anchorRef.current === null ? "點起點那一段的勾選框" : "再點終點那一段"}</span>}
             {isManual && (
               <>
                 <button type="button" onClick={seedAutoCuts} disabled={!fresh} className={smallButton}>

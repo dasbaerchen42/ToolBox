@@ -29,7 +29,13 @@ export const EXPORT_RATIOS: Record<ExportRatio, { label: string; ratio: number |
 };
 
 /** 四周留白佔寬度的比例 */
-export const EXPORT_PADDING_RATIO = 0.06;
+export type ExportMargin = "narrow" | "normal" | "wide";
+
+export const EXPORT_MARGINS: Record<ExportMargin, { label: string; ratio: number }> = {
+  narrow: { label: "留白窄", ratio: 0.04 },
+  normal: { label: "留白標準", ratio: 0.06 },
+  wide: { label: "留白寬", ratio: 0.09 },
+};
 
 export type ExportLayout = {
   width: number;
@@ -54,9 +60,10 @@ export type ExportLayout = {
  */
 export function exportLayout(
   width: number,
-  preferences: Pick<EditorPreferences, "fontSize" | "letterSpacing" | "lineHeight" | "exportTextSize"> & Partial<Pick<EditorPreferences, "exportRatio">>
+  preferences: Pick<EditorPreferences, "fontSize" | "letterSpacing" | "lineHeight" | "exportTextSize"> &
+    Partial<Pick<EditorPreferences, "exportRatio" | "exportMargin">>
 ): ExportLayout {
-  const padding = Math.round(width * EXPORT_PADDING_RATIO);
+  const padding = Math.round(width * (EXPORT_MARGINS[preferences.exportMargin ?? "normal"] ?? EXPORT_MARGINS.normal).ratio);
   const contentWidth = width - padding * 2;
   const perLine = (EXPORT_TEXT_SIZES[preferences.exportTextSize] ?? EXPORT_TEXT_SIZES.m).perLine;
   const spacingEm = preferences.fontSize > 0 ? preferences.letterSpacing / preferences.fontSize : 0;
@@ -140,4 +147,29 @@ export function pageSizes(units: UnitBox[], cuts: Set<number>, width: number, pa
       content,
     };
   });
+}
+
+/**
+ * 單一段落自己就比一張還長時,要在段落裡面切。切點挑在「兩行字之間」:
+ * lineGaps 是每兩行之間的位置(從段落頂端量),每一刀挑放得下的最後一個行縫,
+ * 一行字都不會被切成兩半。真的一個行縫都沒有(例如一張超大的圖)才照高度硬切。
+ * 回傳每一張的 [起點, 高度]。
+ */
+export function planSlices(height: number, maxHeight: number, lineGaps: number[]): [number, number][] {
+  const gaps = [...lineGaps].sort((a, b) => a - b);
+  const slices: [number, number][] = [];
+  let start = 0;
+  while (height - start > maxHeight) {
+    const limit = start + maxHeight;
+    let cut = -1;
+    for (const gap of gaps) {
+      if (gap > start + 1 && gap <= limit) cut = gap;
+      if (gap > limit) break;
+    }
+    if (cut < 0) cut = limit;
+    slices.push([start, cut - start]);
+    start = cut;
+  }
+  slices.push([start, height - start]);
+  return slices;
 }
