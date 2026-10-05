@@ -27,6 +27,8 @@ export type EditorPreferences = {
   exportImageWidth: ExportImageWidth;
   exportImageTitle: boolean;
   exportPaginate: ExportPaginate;
+  /** 圖片上的字級(一行大約幾個字),見 lib/export-layout */
+  exportTextSize: "s" | "m" | "l" | "xl";
   /** 斜體改成淡色的正體(預覽與轉圖都適用) */
   softItalic: boolean;
 };
@@ -44,5 +46,6 @@ export const defaultPreferences: EditorPreferences = {
   exportImageWidth: 1080,
   exportImageTitle: false,
   exportPaginate: "auto",
+  exportTextSize: "m",
   softItalic: false,
 };

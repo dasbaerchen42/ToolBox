@@ -3,6 +3,7 @@
 // 匯出圖片視窗:挑段落 → 產生 → 挑張數 → 下載。
 // 「裁切」刻意做在內容層而不是像素層:選段落的邊界永遠是乾淨的,
 // 在圖片上拖框一定會切到半行字。
+// 預覽照真正轉圖的排版縮小顯示(export-preview),看到的就是下載到的。
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EditorThemeConfig } from "@/lib/theme";
@@ -12,34 +13,33 @@ import {
   type ExportPaginate,
   type FontFamilyName,
 } from "@/lib/preferences";
-import { FONT_OPTIONS, getFontFamily } from "@/lib/editor-font";
+import { FONT_OPTIONS } from "@/lib/editor-font";
 import { downloadEach, shareImages } from "@/lib/download";
 import { useCanShareImages } from "@/hooks/useCanShareImages";
 import { type WritingMode } from "@/lib/storage";
 import {
   applyBlockStyle,
-  BLOCK_FILLS,
   isPlainBlock,
   isRenderableMode,
   PLAIN_BLOCK,
   renderToSafeHtml,
   splitBlocks,
   toPlainHtml,
-  type BlockFill,
   type BlockStyle,
 } from "@/lib/markdown";
 import {
-  autoCuts,
   contentClassFor,
   downloadBlob,
   exportContentToImages,
   measureExport,
-  pageSizes,
   ExportPageTooLongError,
   ExportTooLongError,
   zipImages,
   type ExportedImage,
+  type ExportMeasure,
 } from "@/lib/export-image";
+import { autoCuts, EXPORT_TEXT_SIZES, exportLayout, pageSizes, type ExportTextSize } from "@/lib/export-layout";
+import ExportPreview, { BlockStyleBar, type PreviewPage, type SheetItem } from "./export-preview";
 
 type EditorExportModalProps = {
   open: boolean;
@@ -53,9 +53,9 @@ type EditorExportModalProps = {
 };
 
 const WIDTH_OPTIONS: { value: ExportImageWidth; label: string }[] = [
-  { value: 600, label: "600 窄" },
-  { value: 800, label: "800 中" },
-  { value: 1080, label: "1080 社群" },
+  { value: 600, label: "寬 600" },
+  { value: 800, label: "寬 800" },
+  { value: 1080, label: "寬 1080（社群）" },
 ];
 
 const PAGINATE_OPTIONS: { value: ExportPaginate; label: string }[] = [
@@ -64,58 +64,8 @@ const PAGINATE_OPTIONS: { value: ExportPaginate; label: string }[] = [
   { value: "none", label: "一律單張" },
 ];
 
-/** 一段的樣式列:對齊、底色、底線 */
-function BlockStyleBar({
-  style,
-  onChange,
-  theme,
-}: {
-  style: BlockStyle;
-  onChange: (patch: Partial<BlockStyle>) => void;
-  theme: EditorThemeConfig;
-}) {
-  const chip = (active: boolean) =>
-    `rounded-xl border px-2.5 py-1 text-xs ${theme.border} ${
-      active ? `${theme.primaryButton} ${theme.primaryButtonText}` : `${theme.secondaryButton} ${theme.secondaryButtonText}`
-    }`;
-  return (
-    <div
-      className="mx-2 mb-2 mt-1 flex flex-wrap items-center gap-1.5 rounded-2xl border px-2 py-1.5"
-      style={{ borderColor: "var(--border-light)" }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {(
-        [
-          ["left", "靠左"],
-          ["center", "置中"],
-          ["right", "置右"],
-        ] as const
-      ).map(([value, label]) => (
-        <button key={value} type="button" aria-pressed={style.align === value} onClick={() => onChange({ align: value })} className={chip(style.align === value)}>
-          {label}
-        </button>
-      ))}
-      <span className="mx-1 h-4 w-px" style={{ background: "var(--border-light)" }} />
-      <button type="button" aria-pressed={style.fill === "none"} onClick={() => onChange({ fill: "none" })} className={chip(style.fill === "none")}>
-        無底色
-      </button>
-      {(Object.entries(BLOCK_FILLS) as [Exclude<BlockFill, "none">, { label: string; color: string }][]).map(([value, fill]) => (
-        <button
-          key={value}
-          type="button"
-          aria-label={`${fill.label}色底`}
-          aria-pressed={style.fill === value}
-          onClick={() => onChange({ fill: value })}
-          className={`h-7 w-7 rounded-full border-2 ${style.fill === value ? "" : "border-transparent"}`}
-          style={{ background: fill.color, borderColor: style.fill === value ? "var(--accent)" : undefined }}
-        />
-      ))}
-      <span className="mx-1 h-4 w-px" style={{ background: "var(--border-light)" }} />
-      <button type="button" aria-pressed={style.underline} onClick={() => onChange({ underline: !style.underline })} className={chip(style.underline)}>
-        <span className="underline underline-offset-2">底線</span>
-      </button>
-    </div>
-  );
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 export default function EditorExportModal({
@@ -135,12 +85,14 @@ export default function EditorExportModal({
   const [pickedPages, setPickedPages] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  /** 設定列展開了沒:手機上預設收起來,把高度留給預覽 */
+  const [settingsOpen, setSettingsOpen] = useState(() => typeof window === "undefined" || window.matchMedia("(min-width: 768px)").matches);
   /** 個別段落的樣式(置中、置右、底色、底線),用段落內容當鑰匙:關掉再開、內容沒改就還在 */
   const [blockStyles, setBlockStyles] = useState<Map<string, BlockStyle>>(() => new Map());
-  /** 正在調哪一段的樣式(那一段下面展開一條樣式列) */
+  /** 正在調哪一段的樣式(那一段下面浮出一條樣式列) */
   const [styling, setStyling] = useState<number | null>(null);
-  /** 手動分頁時,照實際轉圖的排版量出來的每個區塊高度(含標題時標題是第 0 個) */
-  const [measured, setMeasured] = useState<{ key: string; heights: number[]; padding: number; maxHeight: number } | null>(null);
+  /** 照實際轉圖的排版量出來的每個區塊位置(含標題時標題是第 0 個) */
+  const [measured, setMeasured] = useState<(ExportMeasure & { key: string }) | null>(null);
   const anchorRef = useRef<number | null>(null);
   const urlsRef = useRef<string[]>([]);
   const canShare = useCanShareImages();
@@ -170,6 +122,7 @@ export default function EditorExportModal({
       setBlocks(next);
       setSelected(new Set(next.map((_, i) => i)));
       setCuts(new Set());
+      setStyling(null);
       anchorRef.current = null;
     })().catch((error: unknown) => {
       console.error("渲染失敗：", error);
@@ -219,29 +172,29 @@ export default function EditorExportModal({
     });
   }
 
-  // 畫面上的分頁點是「第幾個區塊」,匯出時的內容只有選取的區塊(而且含標題時
-  // 標題會排在最前面),所以要換算成匯出內容裡的位置。最後一段之後切沒有意義。
-  const exportCuts = useMemo(() => {
-    const offset = preferences.exportImageTitle && title ? 1 : 0;
-    const mapped = new Set<number>();
-    selectedIndexes.forEach((blockIndex, position) => {
-      if (cuts.has(blockIndex) && position < selectedIndexes.length - 1) {
-        mapped.add(position + offset);
-      }
-    });
-    return mapped;
-  }, [cuts, selectedIndexes, preferences.exportImageTitle, title]);
-
-  const pageCount = exportCuts.size + 1;
   const isManual = preferences.exportPaginate === "manual";
   const exportTitle = preferences.exportImageTitle && title ? title : null;
   const titleOffset = exportTitle ? 1 : 0;
+  const unitCount = selectedIndexes.length + titleOffset;
 
-  // 手動分頁:在畫面外照轉圖的寬度、字體排一次,量每一段多高(停下來 0.3 秒才量)
+  // 畫面上的分頁點是「第幾個區塊」,匯出時的內容只有選取的區塊(而且含標題時
+  // 標題會排在最前面),所以要換算成匯出內容裡的位置。最後一段之後切沒有意義。
+  const exportCuts = useMemo(() => {
+    const mapped = new Set<number>();
+    selectedIndexes.forEach((blockIndex, position) => {
+      if (cuts.has(blockIndex) && position < selectedIndexes.length - 1) {
+        mapped.add(position + titleOffset);
+      }
+    });
+    return mapped;
+  }, [cuts, selectedIndexes, titleOffset]);
+
+  // 在畫面外照轉圖的寬度、字體排一次,量每一段的位置(停下來 0.3 秒才量)
   const measureKey = [
     selectedHtml,
     exportTitle,
     preferences.exportImageWidth,
+    preferences.exportTextSize,
     preferences.fontFamily,
     preferences.fontSize,
     preferences.lineHeight,
@@ -249,7 +202,7 @@ export default function EditorExportModal({
     preferences.softItalic,
   ].join("\u0000");
   useEffect(() => {
-    if (!open || !isManual || !selectedHtml) return;
+    if (!open || !selectedHtml) return;
     let cancelled = false;
     const timer = setTimeout(() => {
       void measureExport({ html: selectedHtml, title: exportTitle, width: preferences.exportImageWidth, preferences })
@@ -262,25 +215,64 @@ export default function EditorExportModal({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [open, isManual, selectedHtml, exportTitle, preferences, measureKey]);
+  }, [open, selectedHtml, exportTitle, preferences, measureKey]);
 
-  // 量到的是現在這份內容才用(內容一變,舊的高度就不準了)
-  const heights = measured && measured.key === measureKey && measured.heights.length === selectedIndexes.length + titleOffset ? measured : null;
-  const sizes = heights ? pageSizes(heights.heights, exportCuts, preferences.exportImageWidth, heights.padding) : null;
-  const overLimit = (page: number) => !!(heights && sizes && sizes[page].content > heights.maxHeight);
-  /** 選取的第 position 段是第幾張(從 0 數)、是不是那一張的第一段 */
-  const pageOf = (position: number) => {
-    const unit = position + titleOffset;
-    let page = 0;
-    for (const cut of exportCuts) if (cut < unit) page += 1;
-    return page;
-  };
+  // 量到的是現在這份內容才用(內容一變,舊的位置就不準了)
+  const fresh = measured && measured.key === measureKey && measured.units.length === unitCount ? measured : null;
+  const layout = useMemo(() => exportLayout(preferences.exportImageWidth, preferences), [preferences]);
+
+  /** 實際會在哪幾個匯出區塊之後切 */
+  const effectiveCuts = useMemo(() => {
+    if (preferences.exportPaginate === "manual") return exportCuts;
+    if (preferences.exportPaginate === "auto" && fresh) return autoCuts(fresh.units, fresh.maxHeight);
+    return new Set<number>();
+  }, [preferences.exportPaginate, exportCuts, fresh]);
+
+  const sizes = useMemo(
+    () => (fresh && unitCount > 0 ? pageSizes(fresh.units, effectiveCuts, preferences.exportImageWidth, fresh.padding) : null),
+    [fresh, unitCount, effectiveCuts, preferences.exportImageWidth]
+  );
+
+  /** 預覽的每一張:沒勾的段落跟著前一段,放在同一張裡(縮成一行) */
+  const previewPages = useMemo<PreviewPage[]>(() => {
+    const pageOfUnit = (unit: number) => {
+      let page = 0;
+      for (const cut of effectiveCuts) if (cut < unit) page += 1;
+      return page;
+    };
+    const pageCount = unitCount > 0 ? pageOfUnit(unitCount - 1) + 1 : 1;
+    const pages: PreviewPage[] = Array.from({ length: pageCount }, (_, page) => {
+      const size = sizes?.[page];
+      const slices = size && fresh ? Math.ceil(size.content / fresh.maxHeight) : 1;
+      return { items: [], size: size ? { ...size, over: slices > 1, slices } : null, cutBefore: null };
+    });
+    // 手動分頁:每張前面那一刀是使用者切的,可以按掉;換回畫面上的段落編號
+    if (isManual) {
+      selectedIndexes.forEach((blockIndex, position) => {
+        const unit = position + titleOffset;
+        if (effectiveCuts.has(unit)) pages[pageOfUnit(unit) + 1].cutBefore = blockIndex;
+      });
+    }
+    if (exportTitle) pages[0].items.push({ kind: "title", html: `<div class="md-preview-title">${escapeHtml(exportTitle)}</div>` });
+    let current = 0;
+    let position = 0;
+    blocks.forEach((block, index) => {
+      const isSelected = selected.has(index);
+      if (isSelected) {
+        current = pageOfUnit(position + titleOffset);
+        position += 1;
+      }
+      const item: SheetItem = { kind: "block", index, html: styledBlocks[index], selected: isSelected, styled: !isPlainBlock(blockStyles.get(block)) };
+      pages[Math.min(current, pages.length - 1)].items.push(item);
+    });
+    return pages;
+  }, [effectiveCuts, unitCount, sizes, fresh, isManual, titleOffset, selectedIndexes, exportTitle, blocks, selected, styledBlocks, blockStyles]);
 
   function seedAutoCuts() {
-    if (!heights) return;
+    if (!fresh) return;
     dropImages();
     const next = new Set<number>();
-    for (const unit of autoCuts(heights.heights, heights.maxHeight)) {
+    for (const unit of autoCuts(fresh.units, fresh.maxHeight)) {
       if (unit >= titleOffset) next.add(selectedIndexes[unit - titleOffset]);
     }
     setCuts(next);
@@ -312,6 +304,7 @@ export default function EditorExportModal({
       next.delete(index);
       return next;
     });
+    if (styling === index) setStyling(null);
   }
 
   // 手動分頁:點區塊本身 = 在它後面切一刀(勾選框仍然是選取/不選取)
@@ -346,12 +339,13 @@ export default function EditorExportModal({
 
     setBusy(true);
     setStatus("產生中……");
+    setStyling(null);
     revokeUrls();
 
     try {
       const next = await exportContentToImages({
         html: selectedHtml,
-        title: preferences.exportImageTitle ? title : null,
+        title: exportTitle,
         fileTitle: title,
         width: preferences.exportImageWidth,
         paginate: preferences.exportPaginate,
@@ -436,9 +430,26 @@ export default function EditorExportModal({
 
   if (!open) return null;
 
+  const select = `rounded-2xl border px-3 py-1.5 outline-none ${theme.border} ${theme.inputBg}`;
+  const smallButton = `rounded-2xl border px-3 py-1 text-xs disabled:opacity-40 ${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`;
+  const bigButton = (primary: boolean) =>
+    `rounded-2xl border px-4 py-2 text-sm transition disabled:opacity-50 ${theme.border} ${
+      primary ? `${theme.primaryButton} ${theme.primaryButtonText}` : `${theme.secondaryButton} ${theme.secondaryButtonText}`
+    }`;
+  const fontLabel = FONT_OPTIONS.find((font) => font.key === preferences.fontFamily)?.label ?? "";
+  const summary = [
+    preferences.exportImageWidth,
+    EXPORT_TEXT_SIZES[preferences.exportTextSize]?.label,
+    PAGINATE_OPTIONS.find((option) => option.value === preferences.exportPaginate)?.label,
+    fontLabel,
+  ].join("・");
+  // 自動分頁時,太長的那張會在段落中間再切開,算張數時要一起算;手動分頁則要使用者自己再切
+  const pageCount = isManual ? previewPages.length : previewPages.reduce((sum, page) => sum + (page.size?.slices ?? 1), 0);
+  const tooLong = isManual || preferences.exportPaginate === "none" ? previewPages.findIndex((page) => page.size?.over) : -1;
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/60 md:items-center md:p-4"
       role="dialog"
       aria-modal="true"
       aria-label="匯出圖片"
@@ -447,266 +458,140 @@ export default function EditorExportModal({
       }}
     >
       <div
-        className={`flex max-h-[90vh] w-full max-w-3xl flex-col rounded-3xl border p-4 shadow-lg md:p-5 ${theme.border} ${theme.panelBg} ${theme.text}`}
+        className={`flex h-dvh w-full max-w-3xl flex-col border p-3 shadow-lg md:h-auto md:max-h-[90vh] md:rounded-3xl md:p-5 ${theme.border} ${theme.panelBg} ${theme.text}`}
       >
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-2 flex items-center justify-between gap-2">
           <b className="tracking-[0.06em]">匯出圖片</b>
-          <button
-            type="button"
-            onClick={onClose}
-            className={`rounded-2xl border px-3 py-1.5 text-sm ${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}
-          >
+          <button type="button" onClick={onClose} className={`rounded-2xl border px-3 py-1.5 text-sm ${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}>
             ✕ 關閉
           </button>
         </div>
 
-        <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-          <select
-            value={preferences.exportImageWidth}
-            onChange={(e) =>
-              updatePreference({
-                exportImageWidth: Number(e.target.value) as ExportImageWidth,
-              })
-            }
-            className={`rounded-2xl border px-3 py-1.5 outline-none ${theme.border} ${theme.inputBg}`}
-            aria-label="圖片寬度"
-          >
-            {WIDTH_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={preferences.exportPaginate}
-            onChange={(e) =>
-              updatePreference({ exportPaginate: e.target.value as ExportPaginate })
-            }
-            className={`rounded-2xl border px-3 py-1.5 outline-none ${theme.border} ${theme.inputBg}`}
-            aria-label="分頁方式"
-          >
-            {PAGINATE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={preferences.fontFamily}
-            onChange={(e) =>
-              updatePreference({ fontFamily: e.target.value as FontFamilyName })
-            }
-            className={`rounded-2xl border px-3 py-1.5 outline-none ${theme.border} ${theme.inputBg}`}
-            aria-label="字體"
-          >
-            {FONT_OPTIONS.map((font) => (
-              <option key={font.key} value={font.key}>
-                {font.label}
-              </option>
-            ))}
-          </select>
-
-          <label className={`flex items-center gap-2 ${theme.mutedText}`}>
-            <input
-              type="checkbox"
-              checked={preferences.exportImageTitle}
-              onChange={(e) => updatePreference({ exportImageTitle: e.target.checked })}
-            />
-            含標題
-          </label>
-
-          <label className={`flex items-center gap-2 ${theme.mutedText}`}>
-            <input
-              type="checkbox"
-              checked={preferences.softItalic}
-              onChange={(e) => updatePreference({ softItalic: e.target.checked })}
-            />
-            斜體改淡色正體
-          </label>
-
-          <span className={`ml-auto text-xs ${theme.subtleText}`}>
-            已選 {selected.size} / {blocks.length} 段
+        {/* 設定:手機上收成一行摘要,點開才展開 */}
+        <button
+          type="button"
+          onClick={() => setSettingsOpen((value) => !value)}
+          aria-expanded={settingsOpen}
+          className={`mb-2 flex items-center gap-2 rounded-2xl border px-3 py-1.5 text-left text-sm ${theme.border} ${theme.cardBg}`}
+        >
+          <span className={theme.mutedText}>設定</span>
+          <span className="min-w-0 flex-1 truncate">{summary}</span>
+          <span aria-hidden className={theme.subtleText}>
+            {settingsOpen ? "▴" : "▾"}
           </span>
-          <button
-            type="button"
-            onClick={() => setAll(true)}
-            className={`rounded-2xl border px-3 py-1 text-xs ${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}
-          >
-            全選
-          </button>
-          <button
-            type="button"
-            onClick={() => setAll(false)}
-            className={`rounded-2xl border px-3 py-1 text-xs ${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}
-          >
-            全不選
-          </button>
-        </div>
+        </button>
 
-        {isManual && (
-          <div className={`mb-2 flex flex-wrap items-center gap-2 text-xs ${theme.mutedText}`}>
-            <span>
-              點一下段落 = 在它後面切一刀（再點一次取消）。目前切成{" "}
-              <b className={theme.text}>{pageCount}</b> 張。
-            </span>
-            <button
-              type="button"
-              onClick={seedAutoCuts}
-              disabled={!heights}
-              className={`rounded-2xl border px-3 py-1 disabled:opacity-40 ${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}
+        {settingsOpen && (
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <select
+              value={preferences.exportImageWidth}
+              onChange={(e) => updatePreference({ exportImageWidth: Number(e.target.value) as ExportImageWidth })}
+              className={select}
+              aria-label="圖片寬度"
             >
-              照自動分頁先排一次
-            </button>
-            {cuts.size > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  dropImages();
-                  setCuts(new Set());
-                }}
-                className={`rounded-2xl border px-3 py-1 ${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}
-              >
-                清除分頁點
-              </button>
-            )}
-            <div className="basis-full">
-              {sizes ? (
-                <span className="flex flex-wrap gap-x-3 gap-y-0.5">
-                  <span className={theme.text}>切出來的尺寸：</span>
-                  {sizes.map((size, page) => (
-                    <span key={page} style={overLimit(page) ? { color: "var(--danger, #c0392b)" } : undefined}>
-                      {page + 1}：{size.width} × {size.height}
-                      {overLimit(page) ? "（太長）" : ""}
-                    </span>
-                  ))}
-                </span>
-              ) : (
-                <span>量每一張的長度中……</span>
-              )}
-            </div>
+              {WIDTH_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={preferences.exportTextSize}
+              onChange={(e) => updatePreference({ exportTextSize: e.target.value as ExportTextSize })}
+              className={select}
+              aria-label="字級"
+            >
+              {(Object.entries(EXPORT_TEXT_SIZES) as [ExportTextSize, { label: string; perLine: number }][]).map(([value, size]) => (
+                <option key={value} value={value}>
+                  {size.label}（一行約 {size.perLine} 字）
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={preferences.exportPaginate}
+              onChange={(e) => updatePreference({ exportPaginate: e.target.value as ExportPaginate })}
+              className={select}
+              aria-label="分頁方式"
+            >
+              {PAGINATE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={preferences.fontFamily}
+              onChange={(e) => updatePreference({ fontFamily: e.target.value as FontFamilyName })}
+              className={select}
+              aria-label="字體"
+            >
+              {FONT_OPTIONS.map((font) => (
+                <option key={font.key} value={font.key}>
+                  {font.label}
+                </option>
+              ))}
+            </select>
+
+            <label className={`flex items-center gap-2 ${theme.mutedText}`}>
+              <input type="checkbox" checked={preferences.exportImageTitle} onChange={(e) => updatePreference({ exportImageTitle: e.target.checked })} />
+              含標題
+            </label>
+
+            <label className={`flex items-center gap-2 ${theme.mutedText}`}>
+              <input type="checkbox" checked={preferences.softItalic} onChange={(e) => updatePreference({ softItalic: e.target.checked })} />
+              斜體改淡色正體
+            </label>
           </div>
         )}
 
-        <div className={`min-h-0 flex-1 overflow-auto rounded-2xl border p-3 ${theme.border} ${theme.cardBg}`}>
-          {blocks.length === 0 ? (
-            <p className={`text-sm ${theme.mutedText}`}>沒有內容可以轉圖。</p>
-          ) : (
-            <div
-              className={contentClassFor(preferences)}
-              style={{ fontFamily: getFontFamily(preferences.fontFamily) }}
-            >
-              {blocks.map((block, index) => {
-                const position = selectedIndexes.indexOf(index);
-                const page = position >= 0 ? pageOf(position) : -1;
-                const startsPage = isManual && position >= 0 && (position === 0 || pageOf(position - 1) !== page);
-                return (
-                <div key={index}>
-                  {startsPage && (
-                    <div
-                      className="mb-1 flex items-center gap-2 px-2 pt-1 text-[11px] leading-none"
-                      style={{ color: overLimit(page) ? "var(--danger, #c0392b)" : "var(--ink-tertiary)" }}
-                    >
-                      <span className="font-semibold">第 {page + 1} 張</span>
-                      {sizes?.[page] && (
-                        <span>
-                          {sizes[page].width} × {sizes[page].height} px
-                          {overLimit(page) ? "・太長，再切一刀" : ""}
-                        </span>
-                      )}
-                      <span className="h-0 flex-1 border-t" style={{ borderColor: "currentColor", opacity: 0.35 }} />
-                    </div>
-                  )}
-                  <div
-                    className={`flex gap-2 rounded-2xl px-2 py-1 transition ${
-                      selected.has(index) ? "" : "opacity-35"
-                    } ${isManual && selected.has(index) ? "cursor-pointer hover:bg-black/10" : ""}`}
-                    onClick={() => toggleCut(index)}
+        {!images && (
+          <div className={`mb-2 flex flex-wrap items-center gap-2 text-xs ${theme.mutedText}`}>
+            <span>
+              已選 {selected.size} / {blocks.length} 段・共 <b className={theme.text}>{pageCount}</b> 張
+            </span>
+            <button type="button" onClick={() => setAll(true)} className={smallButton}>
+              全選
+            </button>
+            <button type="button" onClick={() => setAll(false)} className={smallButton}>
+              全不選
+            </button>
+            {isManual && (
+              <>
+                <button type="button" onClick={seedAutoCuts} disabled={!fresh} className={smallButton}>
+                  照自動分頁先排一次
+                </button>
+                {cuts.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      dropImages();
+                      setCuts(new Set());
+                    }}
+                    className={smallButton}
                   >
-                    <input
-                      type="checkbox"
-                      className="mt-2 shrink-0 self-start"
-                      checked={selected.has(index)}
-                      onChange={() => undefined}
-                      onClick={(e) => {
-                        e.stopPropagation(); // 勾選框只管選不選,不要順便切一刀
-                        toggleBlock(index, e.shiftKey);
-                      }}
-                      aria-label={`第 ${index + 1} 段`}
-                    />
-                    <div
-                      className="min-w-0 flex-1"
-                      dangerouslySetInnerHTML={{ __html: styledBlocks[index] }}
-                    />
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation(); // 調樣式不要順便切一刀
-                        setStyling((current) => (current === index ? null : index));
-                      }}
-                      aria-label={`第 ${index + 1} 段的樣式`}
-                      aria-expanded={styling === index}
-                      title="這一段置中、置右、加底色或底線"
-                      className={`mt-1 h-7 shrink-0 self-start rounded-xl border px-2 text-[11px] ${theme.border} ${
-                        styling === index || !isPlainBlock(blockStyles.get(block))
-                          ? `${theme.primaryButton} ${theme.primaryButtonText}`
-                          : `${theme.secondaryButton} ${theme.secondaryButtonText}`
-                      }`}
-                    >
-                      Aa
-                    </button>
-                  </div>
+                    清除分頁點
+                  </button>
+                )}
+                <span className="basis-full">點一下段落 = 在它後面切一刀，再點一次取消。</span>
+              </>
+            )}
+          </div>
+        )}
 
-                  {styling === index && (
-                    <BlockStyleBar
-                      style={blockStyles.get(block) ?? PLAIN_BLOCK}
-                      onChange={(patch) => updateBlockStyle(index, patch)}
-                      theme={theme}
-                    />
-                  )}
-
-                  {isManual && cuts.has(index) && selected.has(index) && (
-                    <div className="my-1 flex items-center gap-2 px-2">
-                      <span
-                        className="h-0 flex-1 border-t-2 border-dashed"
-                        style={{ borderColor: "var(--accent)" }}
-                      />
-                      <span
-                        className="rounded-xl px-2 py-0.5 text-[10px] leading-none"
-                        style={{ background: "var(--accent)", color: "var(--on-accent)" }}
-                      >
-                        ✂ 這裡分頁
-                      </span>
-                    </div>
-                  )}
-                </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {images && (
-          <div className="mt-3">
-            <div className={`mb-2 text-xs ${theme.subtleText}`}>
-              產生了 {images.length} 張，勾選要下載的
-            </div>
-            <div className="flex gap-3 overflow-x-auto pb-1">
+        <div className={`min-h-0 flex-1 overflow-auto rounded-2xl border p-2 md:p-3 ${theme.border} ${theme.cardBg}`}>
+          {images ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {images.map((image, index) => (
                 <label
                   key={image.name}
-                  className={`shrink-0 cursor-pointer rounded-2xl border p-2 text-center text-xs transition ${
-                    pickedPages.has(index) ? theme.activeItem : theme.inactiveItem
-                  }`}
+                  className={`cursor-pointer rounded-2xl border p-2 text-center text-xs transition ${pickedPages.has(index) ? theme.activeItem : theme.inactiveItem}`}
                 >
                   {/* blob: URL 沒有 next/image 可以最佳化的餘地 */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={urlsRef.current[index]}
-                    alt={`第 ${index + 1} 張`}
-                    className="mb-1 h-32 w-auto rounded-xl object-contain object-top"
-                  />
+                  <img src={urlsRef.current[index]} alt={`第 ${index + 1} 張`} className="mb-1 max-h-[60vh] w-full rounded-xl object-contain object-top" />
                   <input
                     type="checkbox"
                     className="mr-1"
@@ -724,59 +609,72 @@ export default function EditorExportModal({
                 </label>
               ))}
             </div>
-          </div>
-        )}
+          ) : blocks.length === 0 ? (
+            <p className={`text-sm ${theme.mutedText}`}>沒有內容可以轉圖。</p>
+          ) : (
+            <ExportPreview
+              pages={previewPages}
+              layout={fresh?.layout ?? layout}
+              contentClass={contentClassFor(preferences)}
+              fontFamily={preferences.fontFamily}
+              cutting={isManual}
+              styling={styling}
+              theme={theme}
+              onToggleSelect={toggleBlock}
+              onToggleCut={toggleCut}
+              onRemoveCut={toggleCut}
+              onStyle={setStyling}
+              overLabel={(slices) =>
+                isManual ? "太長，在中間再切一刀" : preferences.exportPaginate === "none" ? "超過單張上限" : `太長，會在段落中間切成 ${slices} 張`
+              }
+              renderStyleBar={(index) => (
+                <BlockStyleBar
+                  style={blockStyles.get(blocks[index]) ?? PLAIN_BLOCK}
+                  onChange={(patch) => updateBlockStyle(index, patch)}
+                  onClose={() => setStyling(null)}
+                  theme={theme}
+                />
+              )}
+            />
+          )}
+        </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {status && <span className={`text-xs ${theme.subtleText}`}>{status}</span>}
-          <button
-            type="button"
-            onClick={generate}
-            disabled={busy}
-            className={`ml-auto rounded-2xl border px-4 py-2 text-sm transition disabled:opacity-50 ${theme.border} ${
-              images ? `${theme.secondaryButton} ${theme.secondaryButtonText}` : `${theme.primaryButton} ${theme.primaryButtonText}`
-            }`}
-          >
-            {busy ? "處理中……" : images ? "重新產生" : "產生圖片"}
-          </button>
-          {images && pickedPages.size <= 1 && (
-            <button
-              type="button"
-              onClick={() => void download()}
-              disabled={busy}
-              className={`rounded-2xl border px-4 py-2 text-sm transition disabled:opacity-50 ${theme.border} ${theme.primaryButton} ${theme.primaryButtonText}`}
-            >
-              下載選取的（{pickedPages.size}）
-            </button>
-          )}
-          {images && pickedPages.size > 1 && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {status && <span className={`basis-full text-xs sm:basis-auto ${theme.subtleText}`}>{status}</span>}
+          {images ? (
             <>
-              <button
-                type="button"
-                onClick={() => void download("each")}
-                disabled={busy}
-                className={`rounded-2xl border px-4 py-2 text-sm transition disabled:opacity-50 ${theme.border} ${theme.primaryButton} ${theme.primaryButtonText}`}
-              >
-                逐張下載（{pickedPages.size}）
+              <button type="button" onClick={dropImages} disabled={busy} className={`sm:ml-auto ${bigButton(false)}`}>
+                ← 回去調整
               </button>
-              <button
-                type="button"
-                onClick={() => void download("zip")}
-                disabled={busy}
-                className={`rounded-2xl border px-4 py-2 text-sm transition disabled:opacity-50 ${theme.border} ${theme.primaryButton} ${theme.primaryButtonText}`}
-              >
-                打包 ZIP
-              </button>
+              {pickedPages.size <= 1 ? (
+                <button type="button" onClick={() => void download()} disabled={busy} className={bigButton(true)}>
+                  下載選取的（{pickedPages.size}）
+                </button>
+              ) : (
+                <>
+                  <button type="button" onClick={() => void download("each")} disabled={busy} className={bigButton(true)}>
+                    逐張下載（{pickedPages.size}）
+                  </button>
+                  <button type="button" onClick={() => void download("zip")} disabled={busy} className={bigButton(true)}>
+                    打包 ZIP
+                  </button>
+                </>
+              )}
+              {canShare && (
+                <button type="button" onClick={share} disabled={busy} className={bigButton(true)}>
+                  存到相簿／分享（{pickedPages.size}）
+                </button>
+              )}
             </>
-          )}
-          {images && canShare && (
-            <button
-              type="button"
-              onClick={share}
-              disabled={busy}
-              className={`rounded-2xl border px-4 py-2 text-sm transition disabled:opacity-50 ${theme.border} ${theme.primaryButton} ${theme.primaryButtonText}`}
-            >
-              存到相簿／分享（{pickedPages.size}）
+          ) : (
+            <button type="button" onClick={generate} disabled={busy || tooLong >= 0} className={`ml-auto ${bigButton(true)}`}>
+              {busy
+                ? "處理中……"
+                : tooLong >= 0
+                  ? isManual
+                    ? `第 ${tooLong + 1} 張太長，先在中間再切一刀`
+                    : "太長了，改用分頁或少選幾段"
+                  : `產生圖片（${pageCount} 張）`}
             </button>
           )}
         </div>

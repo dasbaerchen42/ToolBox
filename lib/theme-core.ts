@@ -221,8 +221,13 @@ export function deleteRandomScheme(i: number): BaseInput[] {
 }
 
 // ── 無閃爍 bootstrap(注入 <head>,繪製前執行;custom 用存好的 vars 不重算)──
+// 第二段:iPhone/iPad 點進字小於 16px 的輸入框會自動放大畫面、而且放大後不會縮回來。
+// 只對 iOS 加 maximum-scale=1:iOS 照樣能雙指縮放,只是不會自己放大;
+// Android 沒有這個問題,加了反而會擋掉縮放,所以不加。
 export const BOOTSTRAP_SCRIPT = `(function(){try{
 var id=localStorage.getItem('${K_ID}')||'${PRESETS[0].id}';
 if(id==='custom'){var v=JSON.parse(localStorage.getItem('${K_VARS}')||'{}');var s=document.documentElement.style;for(var k in v)s.setProperty(k,v[k]);document.documentElement.setAttribute('data-theme','custom');}
 else{document.documentElement.setAttribute('data-theme',id);}
-}catch(e){}})();`;
+}catch(e){}
+try{var ua=navigator.userAgent;if(/iPad|iPhone|iPod/.test(ua)||(/Macintosh/.test(ua)&&navigator.maxTouchPoints>1)){var m=document.querySelector('meta[name=viewport]');if(m&&!/maximum-scale/.test(m.content))m.content+=', maximum-scale=1';}}catch(e){}
+})();`;

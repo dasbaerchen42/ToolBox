@@ -33,7 +33,7 @@ body {
   line-height: 1.4;
   margin-bottom: 0.8em;
   padding-bottom: 0.4em;
-  border-bottom: 1px solid var(--border-light);
+  border-bottom: max(1px, 0.05em) solid var(--border-light);
 }
 
 .md-preview h1,
@@ -80,7 +80,8 @@ body {
 .md-preview blockquote {
   margin: 1em 0;
   padding: 0.2em 0 0.2em 1em;
-  border-left: 3px solid var(--accent-soft, var(--accent));
+  /* 粗細跟著字級:轉圖的字放大了,引用線也要一起變粗 */
+  border-left: max(3px, 0.18em) solid var(--accent-soft, var(--accent));
   color: var(--ink-secondary);
 }
 
@@ -129,7 +130,7 @@ body {
 .md-preview hr {
   margin: 1.6em 0;
   border: 0;
-  border-top: 1px solid var(--border-light);
+  border-top: max(1px, 0.05em) solid var(--border-light);
 }
 
 .md-preview table {
@@ -155,4 +156,23 @@ body {
   max-width: 100%;
   height: auto;
   border-radius: calc(var(--radius) * 2);
+}
+
+/* ── 轉圖視窗的預覽紙 ── */
+/* 沒勾的段落縮成一行淡淡的,點一下就加回來 */
+.export-sheet > .export-skip {
+  max-height: 1.8em;
+  overflow: hidden;
+  opacity: 0.28;
+  cursor: pointer;
+  -webkit-mask-image: linear-gradient(to bottom, #000 40%, transparent);
+  mask-image: linear-gradient(to bottom, #000 40%, transparent);
+}
+/* 手動分頁:指到哪一段就框起來,點了就在它後面切 */
+.export-sheet[data-cutting] > :not(.export-skip) {
+  cursor: pointer;
+}
+.export-sheet[data-cutting] > :not(.export-skip):hover {
+  outline: calc(2px / var(--sheet-scale, 1)) dashed var(--accent);
+  outline-offset: calc(4px / var(--sheet-scale, 1));
 }
