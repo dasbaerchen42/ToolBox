@@ -37,6 +37,8 @@ export type EditorPreferences = {
   exportPageNumbers: boolean;
   /** 每張左下角的署名(空字串就不放) */
   exportSignature: string;
+  /** 四周留白:窄、標準、寬 */
+  exportMargin: "narrow" | "normal" | "wide";
   /** 斜體改成淡色的正體(預覽與轉圖都適用) */
   softItalic: boolean;
 };
@@ -59,5 +61,6 @@ export const defaultPreferences: EditorPreferences = {
   exportPalette: "site",
   exportPageNumbers: false,
   exportSignature: "",
+  exportMargin: "normal",
   softItalic: false,
 };

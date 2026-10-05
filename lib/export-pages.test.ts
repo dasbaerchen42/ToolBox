@@ -5,6 +5,7 @@ import {
   exportLayout,
   maxContentHeight,
   pageRanges,
+  planSlices,
   pageSizes,
   type UnitBox,
 } from "./export-layout";
@@ -83,5 +84,37 @@ describe("轉圖:固定比例", () => {
 
   it("照內容長度時沒有固定高度", () => {
     expect(exportLayout(1080, defaultPreferences).pageHeight).toBeNull();
+  });
+});
+
+describe("轉圖:超長段落切在兩行之間", () => {
+  it("每一刀挑放得下的最後一個行縫", () => {
+    // 每行 50 高,行縫在 50、100、150……;一張最多 120 → 切在 100、200
+    const gaps = Array.from({ length: 5 }, (_, i) => (i + 1) * 50);
+    expect(planSlices(280, 120, gaps)).toEqual([
+      [0, 100],
+      [100, 100],
+      [200, 80],
+    ]);
+  });
+
+  it("沒有行縫可以切就照高度硬切", () => {
+    expect(planSlices(250, 100, [])).toEqual([
+      [0, 100],
+      [100, 100],
+      [200, 50],
+    ]);
+  });
+
+  it("放得下就不切", () => {
+    expect(planSlices(90, 100, [30, 60])).toEqual([[0, 90]]);
+  });
+
+  it("留白可以調寬窄", () => {
+    const narrow = exportLayout(1080, { ...defaultPreferences, exportMargin: "narrow" });
+    const wide = exportLayout(1080, { ...defaultPreferences, exportMargin: "wide" });
+    expect(narrow.padding).toBeLessThan(wide.padding);
+    // 留白變寬,一行的字數不變,字會跟著變小
+    expect(wide.fontSize).toBeLessThan(narrow.fontSize);
   });
 });
