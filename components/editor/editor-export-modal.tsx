@@ -30,7 +30,7 @@ import {
   type BlockStyle,
   type StoredBlockStyle,
 } from "@/lib/markdown";
-import { PRESETS } from "@/lib/theme-core";
+import { contrastRatio, PRESETS } from "@/lib/theme-core";
 import {
   contentClassFor,
   downloadBlob,
@@ -48,6 +48,7 @@ import {
   EXPORT_RATIOS,
   EXPORT_TEXT_SIZES,
   exportLayout,
+  exportPalette,
   pageSizes,
   type ExportMargin,
   type ExportRatio,
@@ -462,7 +463,19 @@ export default function EditorExportModal({
     }`;
   const fontLabel = FONT_OPTIONS.find((font) => font.key === preferences.fontFamily)?.label ?? "";
   const palettePreset = PRESETS.find((preset) => preset.id === preferences.exportPalette);
-  const paletteLabel = palettePreset ? `${palettePreset.emoji}${palettePreset.name}` : null;
+  const paletteLabel = palettePreset ? palettePreset.name : preferences.exportPalette === "custom" ? "自選配色" : null;
+  // 「跟網站主題」那顆圈圈要畫網站現在的顏色
+  const rootStyle = getComputedStyle(document.documentElement);
+  const siteColors = {
+    bg: rootStyle.getPropertyValue("--paper-bg").trim() || "#ffffff",
+    ink: rootStyle.getPropertyValue("--ink-primary").trim() || "#000000",
+  };
+  const paletteChoices = [
+    { id: "site", name: "跟網站", ...siteColors },
+    ...PRESETS.map((preset) => ({ id: preset.id, name: preset.name, bg: preset.input.bg, ink: preset.input.ink })),
+    { id: "custom", name: "自選", bg: preferences.exportCustomBg, ink: preferences.exportCustomInk },
+  ];
+  const customContrast = contrastRatio(preferences.exportCustomBg, preferences.exportCustomInk);
   const summary = [
     preferences.exportImageWidth,
     preferences.exportRatio !== "free" ? preferences.exportRatio : null,
@@ -579,20 +592,6 @@ export default function EditorExportModal({
             </select>
 
             <select
-              value={preferences.exportPalette}
-              onChange={(e) => updatePreference({ exportPalette: e.target.value })}
-              className={select}
-              aria-label="配色"
-            >
-              <option value="site">配色：跟網站主題</option>
-              {PRESETS.map((preset) => (
-                <option key={preset.id} value={preset.id}>
-                  配色：{preset.emoji} {preset.name}
-                </option>
-              ))}
-            </select>
-
-            <select
               value={preferences.exportMargin}
               onChange={(e) => updatePreference({ exportMargin: e.target.value as ExportMargin })}
               className={select}
@@ -619,6 +618,56 @@ export default function EditorExportModal({
               <input type="checkbox" checked={preferences.exportPageNumbers} onChange={(e) => updatePreference({ exportPageNumbers: e.target.checked })} />
               頁碼
             </label>
+
+            {/* 配色:每個選項畫兩個圈圈,大的是底色、小的是字色 */}
+            <div className="flex basis-full flex-wrap items-center gap-1.5" role="radiogroup" aria-label="配色">
+              <span className={`mr-1 text-xs ${theme.mutedText}`}>配色</span>
+              {paletteChoices.map((choice) => {
+                const active = preferences.exportPalette === choice.id;
+                return (
+                  <button
+                    key={choice.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => updatePreference({ exportPalette: choice.id })}
+                    className={`flex items-center gap-1.5 rounded-2xl border py-1 pl-1.5 pr-2.5 text-xs ${
+                      active ? `${theme.primaryButton} ${theme.primaryButtonText}` : `${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`
+                    }`}
+                  >
+                    <span className="relative inline-block h-5 w-7 shrink-0" aria-hidden>
+                      <span className="absolute left-0 top-0 h-5 w-5 rounded-full" style={{ background: choice.bg, boxShadow: "0 0 0 1px rgba(128, 128, 128, 0.6)" }} />
+                      <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full" style={{ background: choice.ink, boxShadow: "0 0 0 1.5px rgba(128, 128, 128, 0.6)" }} />
+                    </span>
+                    {choice.name}
+                  </button>
+                );
+              })}
+            </div>
+
+            {preferences.exportPalette === "custom" && (
+              <div className={`flex basis-full flex-wrap items-center gap-3 text-xs ${theme.mutedText}`}>
+                <label className="flex items-center gap-1.5">
+                  底色
+                  <input
+                    type="color"
+                    value={preferences.exportCustomBg}
+                    onChange={(e) => updatePreference({ exportCustomBg: e.target.value })}
+                    className="h-8 w-10 cursor-pointer rounded-lg border-0 bg-transparent p-0"
+                  />
+                </label>
+                <label className="flex items-center gap-1.5">
+                  文字
+                  <input
+                    type="color"
+                    value={preferences.exportCustomInk}
+                    onChange={(e) => updatePreference({ exportCustomInk: e.target.value })}
+                    className="h-8 w-10 cursor-pointer rounded-lg border-0 bg-transparent p-0"
+                  />
+                </label>
+                {customContrast < 3 && <span style={{ color: "var(--danger, #c0392b)" }}>兩個顏色太接近，字會看不清楚</span>}
+              </div>
+            )}
 
             <input
               type="text"
@@ -718,7 +767,7 @@ export default function EditorExportModal({
               contentClass={contentClassFor(preferences)}
               fontFamily={preferences.fontFamily}
               cutting={isManual}
-              palette={preferences.exportPalette}
+              palette={exportPalette(preferences)}
               signature={preferences.exportSignature.trim()}
               pageNumbers={preferences.exportPageNumbers}
               styling={styling}

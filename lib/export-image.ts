@@ -5,6 +5,7 @@ import {
   autoCuts,
   EXPORT_IMAGE_SCALE,
   exportLayout,
+  exportPalette,
   maxContentHeight,
   pageRanges,
   planSlices,
@@ -209,7 +210,8 @@ function buildStage(html: string, title: string | null, width: number, preferenc
   const page = document.createElement("div");
   page.dataset.exportPage = "";
   // 另外挑了配色就把主題掛在這張紙上:主題的 CSS 變數是 [data-theme] 選擇器,掛在哪個元素都吃得到
-  if (preferences.exportPalette && preferences.exportPalette !== "site") page.dataset.theme = preferences.exportPalette;
+  const palette = exportPalette(preferences);
+  if (palette.theme) page.dataset.theme = palette.theme;
   page.style.cssText = [
     "position: relative",
     `width: ${width}px`,
@@ -228,6 +230,9 @@ function buildStage(html: string, title: string | null, width: number, preferenc
   ].join("; ");
 
   // 裁切視窗:單一區塊本身就超過一頁時,只能在它內部硬切
+  // 自選配色:直接把整組顏色變數寫在紙上
+  for (const [name, value] of Object.entries(palette.vars ?? {})) page.style.setProperty(name, value);
+
   const viewport = document.createElement("div");
   viewport.style.cssText = "overflow: hidden; position: relative";
 
