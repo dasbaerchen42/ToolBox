@@ -29,6 +29,14 @@ export type EditorPreferences = {
   exportPaginate: ExportPaginate;
   /** 圖片上的字級(一行大約幾個字),見 lib/export-layout */
   exportTextSize: "s" | "m" | "l" | "xl";
+  /** 每張圖的比例:free 是照內容長度,其他是固定比例(社群輪播) */
+  exportRatio: "free" | "1:1" | "4:5" | "3:4" | "9:16";
+  /** 圖片配色:site 跟著網站目前的主題,其他是主題的 id */
+  exportPalette: string;
+  /** 每張右下角標「1/5」 */
+  exportPageNumbers: boolean;
+  /** 每張左下角的署名(空字串就不放) */
+  exportSignature: string;
   /** 斜體改成淡色的正體(預覽與轉圖都適用) */
   softItalic: boolean;
 };
@@ -47,5 +55,9 @@ export const defaultPreferences: EditorPreferences = {
   exportImageTitle: false,
   exportPaginate: "auto",
   exportTextSize: "m",
+  exportRatio: "free",
+  exportPalette: "site",
+  exportPageNumbers: false,
+  exportSignature: "",
   softItalic: false,
 };

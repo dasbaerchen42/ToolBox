@@ -17,6 +17,17 @@ export const EXPORT_TEXT_SIZES: Record<ExportTextSize, { label: string; perLine:
   xl: { label: "特大", perLine: 16 },
 };
 
+/** 每張圖的比例(高/寬);free 是照內容多長就多長 */
+export type ExportRatio = "free" | "1:1" | "4:5" | "3:4" | "9:16";
+
+export const EXPORT_RATIOS: Record<ExportRatio, { label: string; ratio: number | null }> = {
+  free: { label: "照內容長度", ratio: null },
+  "1:1": { label: "1:1 方形", ratio: 1 },
+  "4:5": { label: "4:5 IG 貼文", ratio: 5 / 4 },
+  "3:4": { label: "3:4 直式", ratio: 4 / 3 },
+  "9:16": { label: "9:16 限動", ratio: 16 / 9 },
+};
+
 /** 四周留白佔寬度的比例 */
 export const EXPORT_PADDING_RATIO = 0.06;
 
@@ -29,6 +40,11 @@ export type ExportLayout = {
   /** 字距(CSS px) */
   letterSpacing: number;
   lineHeight: number;
+  /** 固定比例時每張的高度(CSS px);照內容長度時是 null */
+  pageHeight: number | null;
+  /** 頁碼、署名的字級與離底邊的距離(放在下方留白裡,不佔內容的位置) */
+  footerSize: number;
+  footerBottom: number;
 };
 
 /**
@@ -38,7 +54,7 @@ export type ExportLayout = {
  */
 export function exportLayout(
   width: number,
-  preferences: Pick<EditorPreferences, "fontSize" | "letterSpacing" | "lineHeight" | "exportTextSize">
+  preferences: Pick<EditorPreferences, "fontSize" | "letterSpacing" | "lineHeight" | "exportTextSize"> & Partial<Pick<EditorPreferences, "exportRatio">>
 ): ExportLayout {
   const padding = Math.round(width * EXPORT_PADDING_RATIO);
   const contentWidth = width - padding * 2;
@@ -53,11 +69,20 @@ export function exportLayout(
     fontSize,
     letterSpacing: Math.round(fontSize * spacingEm * 100) / 100,
     lineHeight: preferences.lineHeight,
+    pageHeight: ratioHeight(width, preferences.exportRatio ?? "free"),
+    footerSize: Math.max(11, Math.round(fontSize * 0.5)),
+    footerBottom: Math.round(padding * 0.3),
   };
 }
 
-/** 一頁內容區(不含留白)最多能有多高,超過就得換頁 */
-export function maxContentHeight(width: number, padding: number): number {
+function ratioHeight(width: number, ratio: ExportRatio): number | null {
+  const value = EXPORT_RATIOS[ratio]?.ratio;
+  return value ? Math.round(width * value) : null;
+}
+
+/** 一頁內容區(不含留白)最多能有多高,超過就得換頁;固定比例時就是那個比例扣掉留白 */
+export function maxContentHeight(width: number, padding: number, pageHeight: number | null = null): number {
+  if (pageHeight) return Math.max(100, pageHeight - padding * 2);
   const scale = EXPORT_IMAGE_SCALE;
   const bySide = DEVICE_MAX_SIDE / scale;
   const byArea = DEVICE_MAX_AREA / (width * scale * scale);
@@ -104,14 +129,14 @@ export function autoCuts(units: UnitBox[], maxHeight: number): Set<number> {
 export type PageSize = { from: number; to: number; width: number; height: number; content: number };
 
 /** 每一張的範圍與輸出尺寸(像素) */
-export function pageSizes(units: UnitBox[], cuts: Set<number>, width: number, padding: number): PageSize[] {
+export function pageSizes(units: UnitBox[], cuts: Set<number>, width: number, padding: number, pageHeight: number | null = null): PageSize[] {
   return pageRanges(units.length, cuts).map(([from, to]) => {
     const content = spanHeight(units, from, to);
     return {
       from,
       to,
       width: Math.round(width * EXPORT_IMAGE_SCALE),
-      height: Math.round((content + padding * 2) * EXPORT_IMAGE_SCALE),
+      height: Math.round((pageHeight ?? content + padding * 2) * EXPORT_IMAGE_SCALE),
       content,
     };
   });

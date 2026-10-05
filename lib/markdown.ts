@@ -169,3 +169,70 @@ export function applyBlockStyle(html: string, style: BlockStyle | undefined): st
     : `${attrs} style="${css}"`;
   return `<${tag}${nextAttrs}>${html.slice(open.length)}`;
 }
+
+// ---- 段落樣式存進文件 ----
+// 用段落內容的雜湊對回是哪一段;內容改過(雜湊對不到)就退而求其次用原本的位置,
+// 改個錯字樣式不會不見,前面插了新段落也不會套錯段。
+
+/** i:原本第幾段;h:那一段內容的雜湊;p、n:前一段、後一段的雜湊(沒有就是空字串) */
+export type StoredBlockStyle = { i: number; h: string; p?: string; n?: string; s: BlockStyle };
+
+/** FNV-1a,32 位元就夠分辨同一份文件裡的段落 */
+export function hashBlock(html: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < html.length; i += 1) {
+    hash ^= html.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+/** 存起來的樣式 → 每一段的樣式(沒有就是 undefined) */
+export function resolveBlockStyles(blocks: string[], stored: StoredBlockStyle[] | undefined): (BlockStyle | undefined)[] {
+  const out: (BlockStyle | undefined)[] = new Array(blocks.length).fill(undefined);
+  if (!stored?.length) return out;
+  const hashes = blocks.map(hashBlock);
+  const used = new Set<number>();
+  const taken = new Set<number>();
+  // 先照內容對:同樣內容出現好幾次時,離原本位置近的先配
+  const pairs: { k: number; index: number; distance: number }[] = [];
+  stored.forEach((entry, k) => {
+    hashes.forEach((hash, index) => {
+      if (hash === entry.h) pairs.push({ k, index, distance: Math.abs(entry.i - index) });
+    });
+  });
+  pairs.sort((a, b) => a.distance - b.distance);
+  for (const { k, index } of pairs) {
+    if (used.has(k) || taken.has(index)) continue;
+    used.add(k);
+    taken.add(index);
+    out[index] = stored[k].s;
+  }
+  // 對不到的(那一段改過字):原本位置上的段落還沒配到,而且前後段都跟當初一樣,才算是同一段
+  stored.forEach((entry, k) => {
+    const index = entry.i;
+    if (used.has(k) || index >= blocks.length || taken.has(index)) return;
+    if ((hashes[index - 1] ?? "") !== (entry.p ?? "") || (hashes[index + 1] ?? "") !== (entry.n ?? "")) return;
+    taken.add(index);
+    out[index] = entry.s;
+  });
+  return out;
+}
+
+/** 每一段的樣式 → 要存的樣子(沒樣式的段落不存) */
+export function storeBlockStyles(blocks: string[], styles: (BlockStyle | undefined)[]): StoredBlockStyle[] {
+  const hashes = blocks.map(hashBlock);
+  return blocks.flatMap((_, index) => {
+    const style = styles[index];
+    return style && !isPlainBlock(style)
+      ? [{ i: index, h: hashes[index], p: hashes[index - 1] ?? "", n: hashes[index + 1] ?? "", s: style }]
+      : [];
+  });
+}
+/** 整篇 HTML 套上存起來的段落樣式(編輯器預覽用) */
+export function applyStoredStyles(html: string, stored: StoredBlockStyle[] | undefined): string {
+  if (!stored?.length) return html;
+  const blocks = splitBlocks(html);
+  const styles = resolveBlockStyles(blocks, stored);
+  return blocks.map((block, index) => applyBlockStyle(block, styles[index])).join("");
+}
