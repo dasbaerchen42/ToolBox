@@ -329,6 +329,7 @@ export default function EditorPage() {
                   {showPreview && previewMode && (
                     <EditorPreview
                       content={activeDoc.content}
+                      blockStyles={activeDoc.blockStyles}
                       mode={previewMode}
                       preferences={preferences}
                       theme={theme}
@@ -364,6 +365,8 @@ export default function EditorPage() {
               preferences={preferences}
               setPreferences={setPreferences}
               theme={theme}
+              blockStyles={activeDoc.blockStyles}
+              onBlockStylesChange={(blockStyles) => updateActiveDoc({ blockStyles })}
             />
           )}
 

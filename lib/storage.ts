@@ -1,3 +1,5 @@
+import type { StoredBlockStyle } from "@/lib/markdown";
+
 export type WritingMode =
   | "plain"
   | "markdown"
@@ -15,6 +17,8 @@ export type WritingDoc = {
   createdAt: string;
   updatedAt: string;
   googleDocId?: string;
+  /** 文轉圖時個別段落的樣式(置中、底色……),見 lib/markdown */
+  blockStyles?: StoredBlockStyle[];
 };
 
 export const STORAGE_KEY = "orange-writing-documents";

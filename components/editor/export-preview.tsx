@@ -84,6 +84,13 @@ export function BlockStyleBar({
 
 type SheetProps = {
   page: PreviewPage;
+  /** 這張是第幾張(從 1 數)、總共幾張:頁碼用 */
+  number: number;
+  total: number;
+  /** 圖片配色(主題 id;site 是跟著網站) */
+  palette: string;
+  signature: string;
+  pageNumbers: boolean;
   layout: ExportLayout;
   scale: number;
   contentClass: string;
@@ -97,7 +104,25 @@ type SheetProps = {
   renderStyleBar: (index: number) => React.ReactNode;
 };
 
-function PageSheet({ page, layout, scale, contentClass, fontFamily, cutting, styling, theme, onToggleSelect, onToggleCut, onStyle, renderStyleBar }: SheetProps) {
+function PageSheet({
+  page,
+  number,
+  total,
+  palette,
+  signature,
+  pageNumbers,
+  layout,
+  scale,
+  contentClass,
+  fontFamily,
+  cutting,
+  styling,
+  theme,
+  onToggleSelect,
+  onToggleCut,
+  onStyle,
+  renderStyleBar,
+}: SheetProps) {
   const innerRef = useRef<HTMLDivElement>(null);
   const [boxes, setBoxes] = useState<{ top: number; height: number }[]>([]);
   const [height, setHeight] = useState(0);
@@ -143,8 +168,10 @@ function PageSheet({ page, layout, scale, contentClass, fontFamily, cutting, sty
         ref={innerRef}
         className={`${contentClass} export-sheet absolute left-0 top-0 rounded-[24px] shadow-md`}
         data-cutting={cutting ? "" : undefined}
+        data-theme={palette !== "site" ? palette : undefined}
         style={{
           width: layout.width,
+          minHeight: layout.pageHeight ?? undefined,
           padding: layout.padding,
           transform: `scale(${scale})`,
           transformOrigin: "0 0",
@@ -170,6 +197,27 @@ function PageSheet({ page, layout, scale, contentClass, fontFamily, cutting, sty
         }}
         dangerouslySetInnerHTML={markup}
       />
+
+      {(signature || (pageNumbers && total > 1)) && (
+        <div
+          aria-hidden
+          data-theme={palette !== "site" ? palette : undefined}
+          className="pointer-events-none absolute flex justify-between gap-4"
+          style={{
+            left: layout.padding * scale,
+            right: layout.padding * scale,
+            bottom: layout.footerBottom * scale,
+            fontSize: layout.footerSize * scale,
+            fontFamily: getFontFamily(fontFamily),
+            lineHeight: 1.4,
+            color: "var(--ink-tertiary)",
+            background: "transparent",
+          }}
+        >
+          <span>{signature}</span>
+          <span>{pageNumbers && total > 1 ? `${number} / ${total}` : ""}</span>
+        </div>
+      )}
 
       {page.items.map((item, i) => {
         if (item.kind !== "block" || !boxes[i]) return null;
@@ -228,7 +276,10 @@ export default function ExportPreview({
   onStyle,
   renderStyleBar,
   overLabel,
-}: Omit<SheetProps, "page" | "scale"> & {
+  palette,
+  signature,
+  pageNumbers,
+}: Omit<SheetProps, "page" | "scale" | "number" | "total"> & {
   pages: PreviewPage[];
   onRemoveCut: (index: number) => void;
   /** 某一張超過單張上限時,標題列上的說明 */
@@ -251,6 +302,9 @@ export default function ExportPreview({
   const sheetWidth = Math.min(560, Math.max(120, boxWidth - GUTTER_LEFT - GUTTER_RIGHT));
   const scale = sheetWidth / layout.width;
   const many = pages.length > 1;
+  // 每張從第幾號開始(太長、會在段落中間再切開的那張佔好幾號)
+  const firstNumbers = pages.map((_, index) => 1 + pages.slice(0, index).reduce((sum, page) => sum + (page.size?.slices ?? 1), 0));
+  const total = pages.reduce((sum, page) => sum + (page.size?.slices ?? 1), 0);
 
   return (
     <div ref={boxRef} className="mx-auto flex w-full flex-col gap-2" style={{ maxWidth: 560 + GUTTER_LEFT + GUTTER_RIGHT }}>
@@ -282,6 +336,11 @@ export default function ExportPreview({
             )}
             <PageSheet
               page={page}
+              number={firstNumbers[index]}
+              total={total}
+              palette={palette}
+              signature={signature}
+              pageNumbers={pageNumbers}
               layout={layout}
               scale={scale}
               contentClass={contentClass}

@@ -3,6 +3,7 @@ import {
   EXPORT_IMAGE_SCALE,
   EXPORT_TEXT_SIZES,
   exportLayout,
+  maxContentHeight,
   pageRanges,
   pageSizes,
   type UnitBox,
@@ -68,5 +69,19 @@ describe("轉圖:字級", () => {
   it("字越大一行越少字", () => {
     const sizes = (["s", "m", "l", "xl"] as const).map((size) => exportLayout(1080, { ...defaultPreferences, exportTextSize: size }).fontSize);
     expect([...sizes].sort((a, b) => a - b)).toEqual(sizes);
+  });
+});
+
+describe("轉圖:固定比例", () => {
+  it("4:5 每張都一樣高,內容區扣掉上下留白", () => {
+    const layout = exportLayout(1080, { ...defaultPreferences, exportRatio: "4:5" });
+    expect(layout.pageHeight).toBe(1350);
+    expect(maxContentHeight(1080, layout.padding, layout.pageHeight)).toBe(1350 - layout.padding * 2);
+    const sizes = pageSizes(stack([100, 900]), new Set([0]), 1080, layout.padding, layout.pageHeight);
+    expect(sizes.map((size) => size.height)).toEqual([1350 * EXPORT_IMAGE_SCALE, 1350 * EXPORT_IMAGE_SCALE]);
+  });
+
+  it("照內容長度時沒有固定高度", () => {
+    expect(exportLayout(1080, defaultPreferences).pageHeight).toBeNull();
   });
 });

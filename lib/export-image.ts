@@ -158,8 +158,6 @@ function collectUnits(content: HTMLElement): { els: HTMLElement[]; boxes: UnitBo
 
 /** 轉圖用的暫存節點:固定寬度、照當下主題上色、放在畫面外。量高度與截圖都用這一份 */
 function buildStage(html: string, title: string | null, width: number, preferences: EditorPreferences) {
-  const background = readThemeColor("--paper-bg", "#ffffff");
-  const color = readThemeColor("--ink-primary", "#000000");
   const layout = exportLayout(width, preferences);
   const { padding } = layout;
 
@@ -175,12 +173,16 @@ function buildStage(html: string, title: string | null, width: number, preferenc
 
   const page = document.createElement("div");
   page.dataset.exportPage = "";
+  // 另外挑了配色就把主題掛在這張紙上:主題的 CSS 變數是 [data-theme] 選擇器,掛在哪個元素都吃得到
+  if (preferences.exportPalette && preferences.exportPalette !== "site") page.dataset.theme = preferences.exportPalette;
   page.style.cssText = [
+    "position: relative",
     `width: ${width}px`,
+    ...(layout.pageHeight ? [`height: ${layout.pageHeight}px`, "overflow: hidden"] : []),
     `padding: ${padding}px`,
     "box-sizing: border-box",
-    `background: ${background}`,
-    `color: ${color}`,
+    "background: var(--paper-bg)",
+    "color: var(--ink-primary)",
     `font-family: ${getFontFamily(preferences.fontFamily)}`,
     `font-size: ${layout.fontSize}px`,
     `line-height: ${layout.lineHeight}`,
@@ -214,9 +216,47 @@ function buildStage(html: string, title: string | null, width: number, preferenc
   shift.appendChild(content);
   viewport.appendChild(shift);
   page.appendChild(viewport);
+
+  // 頁碼與署名:放在下方留白裡,不佔內容的位置
+  const footer = buildFooter(layout, preferences);
+  if (footer) page.appendChild(footer.el);
+
   stage.appendChild(page);
   document.body.appendChild(stage);
-  return { stage, page, viewport, shift, content, background, padding, layout };
+  const colors = getComputedStyle(page);
+  const background = colors.getPropertyValue("--paper-bg").trim() || readThemeColor("--paper-bg", "#ffffff");
+  return { stage, page, viewport, shift, content, background, padding, layout, footer };
+}
+
+/** 頁碼、署名那一列(兩個都沒開就是 null) */
+function buildFooter(layout: ExportLayout, preferences: EditorPreferences) {
+  const signature = preferences.exportSignature?.trim() ?? "";
+  if (!signature && !preferences.exportPageNumbers) return null;
+  const el = document.createElement("div");
+  el.style.cssText = [
+    "position: absolute",
+    `left: ${layout.padding}px`,
+    `right: ${layout.padding}px`,
+    `bottom: ${layout.footerBottom}px`,
+    "display: flex",
+    "justify-content: space-between",
+    "gap: 1em",
+    `font-size: ${layout.footerSize}px`,
+    "line-height: 1.4",
+    "letter-spacing: 0.05em",
+    "color: var(--ink-tertiary)",
+  ].join("; ");
+  const left = document.createElement("span");
+  left.textContent = signature;
+  const number = document.createElement("span");
+  el.append(left, number);
+  return {
+    el,
+    /** 換到第 n 張(共 total 張);只有一張時不標頁碼 */
+    set(n: number, total: number) {
+      number.textContent = preferences.exportPageNumbers && total > 1 ? `${n} / ${total}` : "";
+    },
+  };
 }
 
 export type ExportMeasure = { units: UnitBox[]; padding: number; maxHeight: number; layout: ExportLayout };
@@ -235,7 +275,7 @@ export async function measureExport({
   try {
     await ensureWebFont(preferences.fontFamily);
     await loadFontsFor(page);
-    return { units: collectUnits(content).boxes, padding, maxHeight: maxContentHeight(width, padding), layout };
+    return { units: collectUnits(content).boxes, padding, maxHeight: maxContentHeight(width, padding, layout.pageHeight), layout };
   } finally {
     stage.remove();
   }
@@ -260,7 +300,7 @@ export async function exportContentToImages({
   cuts,
   preferences,
 }: ExportImageOptions): Promise<ExportedImage[]> {
-  const { stage, page, viewport, shift, content, background, padding } = buildStage(html, title, width, preferences);
+  const { stage, page, viewport, shift, content, background, padding, layout, footer } = buildStage(html, title, width, preferences);
 
   /**
    * 截一張。height 給了才是「在區塊內硬切」:只截 start 起的那一段。
@@ -278,7 +318,7 @@ export async function exportContentToImages({
       useCORS: true,
       logging: false,
       width,
-      ...(height === null ? {} : { height: height + padding * 2 }),
+      ...(height === null ? {} : { height: layout.pageHeight ?? height + padding * 2 }),
       // html2canvas 在另一份複製的文件裡排版,那邊的網路字型要自己再等一次
       onclone: async (clonedDoc: Document) => {
         // 樣式直接內嵌,不等複製頁自己去下載 CSS
@@ -297,10 +337,11 @@ export async function exportContentToImages({
     await loadFontsFor(page);
     if (document.fonts?.ready) await document.fonts.ready;
 
-    const maxHeight = maxContentHeight(width, padding);
+    const maxHeight = maxContentHeight(width, padding, layout.pageHeight);
     const { els, boxes } = collectUnits(content);
 
     if (els.length === 0) {
+      footer?.set(1, 1);
       const canvas = await capture(0, null);
       return [{ name: `${sanitizeFileName(fileTitle)}.png`, blob: await toBlob(canvas) }];
     }
@@ -315,6 +356,15 @@ export async function exportContentToImages({
         : pageRanges(els.length, paginate === "manual" ? (cuts ?? new Set<number>()) : autoCuts(boxes, maxHeight));
 
     const images: ExportedImage[] = [];
+    // 頁碼要先知道總共幾張:自動分頁時太長的那張會在段落中間再切開
+    const slicesOf = ([from, to]: [number, number]) =>
+      paginate === "auto" ? Math.max(1, Math.ceil(spanHeight(boxes, from, to) / maxHeight)) : 1;
+    const total = ranges.reduce((sum, range) => sum + slicesOf(range), 0);
+    const shoot = async (start: number, height: number | null) => {
+      footer?.set(images.length + 1, total);
+      const canvas = await capture(start, height);
+      images.push({ name: "", blob: await toBlob(canvas) });
+    };
 
     for (const [index, [from, to]] of ranges.entries()) {
       // 只留這一張的區塊,其餘 display:none。被藏起來的完全不佔空間,
@@ -335,15 +385,12 @@ export async function exportContentToImages({
         }
         // 自動分頁遇到「單一區塊自己就超過一頁」,只能在區塊內硬切
         for (let offset = 0; offset < height; offset += maxHeight) {
-          const slice = Math.min(maxHeight, height - offset);
-          const canvas = await capture(offset, slice);
-          images.push({ name: "", blob: await toBlob(canvas) });
+          await shoot(offset, Math.min(maxHeight, height - offset));
         }
         continue;
       }
 
-      const canvas = await capture(0, null);
-      images.push({ name: "", blob: await toBlob(canvas) });
+      await shoot(0, null);
     }
 
     // 檔名等全部產生完才編號,中途硬切多出來的張數才數得對

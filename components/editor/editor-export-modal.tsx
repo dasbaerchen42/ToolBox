@@ -23,10 +23,14 @@ import {
   isRenderableMode,
   PLAIN_BLOCK,
   renderToSafeHtml,
+  resolveBlockStyles,
   splitBlocks,
+  storeBlockStyles,
   toPlainHtml,
   type BlockStyle,
+  type StoredBlockStyle,
 } from "@/lib/markdown";
+import { PRESETS } from "@/lib/theme-core";
 import {
   contentClassFor,
   downloadBlob,
@@ -38,7 +42,15 @@ import {
   type ExportedImage,
   type ExportMeasure,
 } from "@/lib/export-image";
-import { autoCuts, EXPORT_TEXT_SIZES, exportLayout, pageSizes, type ExportTextSize } from "@/lib/export-layout";
+import {
+  autoCuts,
+  EXPORT_RATIOS,
+  EXPORT_TEXT_SIZES,
+  exportLayout,
+  pageSizes,
+  type ExportRatio,
+  type ExportTextSize,
+} from "@/lib/export-layout";
 import ExportPreview, { BlockStyleBar, type PreviewPage, type SheetItem } from "./export-preview";
 
 type EditorExportModalProps = {
@@ -50,6 +62,9 @@ type EditorExportModalProps = {
   preferences: EditorPreferences;
   setPreferences: React.Dispatch<React.SetStateAction<EditorPreferences>>;
   theme: EditorThemeConfig;
+  /** 存在文件裡的段落樣式,改了就存回去 */
+  blockStyles: StoredBlockStyle[] | undefined;
+  onBlockStylesChange: (next: StoredBlockStyle[]) => void;
 };
 
 const WIDTH_OPTIONS: { value: ExportImageWidth; label: string }[] = [
@@ -77,6 +92,8 @@ export default function EditorExportModal({
   preferences,
   setPreferences,
   theme,
+  blockStyles: storedStyles,
+  onBlockStylesChange,
 }: EditorExportModalProps) {
   const [blocks, setBlocks] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -87,8 +104,6 @@ export default function EditorExportModal({
   const [status, setStatus] = useState<string | null>(null);
   /** 設定列展開了沒:手機上預設收起來,把高度留給預覽 */
   const [settingsOpen, setSettingsOpen] = useState(() => typeof window === "undefined" || window.matchMedia("(min-width: 768px)").matches);
-  /** 個別段落的樣式(置中、置右、底色、底線),用段落內容當鑰匙:關掉再開、內容沒改就還在 */
-  const [blockStyles, setBlockStyles] = useState<Map<string, BlockStyle>>(() => new Map());
   /** 正在調哪一段的樣式(那一段下面浮出一條樣式列) */
   const [styling, setStyling] = useState<number | null>(null);
   /** 照實際轉圖的排版量出來的每個區塊位置(含標題時標題是第 0 個) */
@@ -150,8 +165,11 @@ export default function EditorExportModal({
     [blocks, selected]
   );
 
+  /** 個別段落的樣式(置中、置右、底色、底線):存在文件裡,關掉再開、重新整理都還在 */
+  const blockStyles = useMemo(() => resolveBlockStyles(blocks, storedStyles), [blocks, storedStyles]);
+
   const styledBlocks = useMemo(
-    () => blocks.map((block) => applyBlockStyle(block, blockStyles.get(block))),
+    () => blocks.map((block, index) => applyBlockStyle(block, blockStyles[index])),
     [blocks, blockStyles]
   );
 
@@ -162,14 +180,9 @@ export default function EditorExportModal({
 
   function updateBlockStyle(index: number, patch: Partial<BlockStyle>) {
     dropImages();
-    const key = blocks[index];
-    setBlockStyles((prev) => {
-      const next = new Map(prev);
-      const style = { ...(prev.get(key) ?? PLAIN_BLOCK), ...patch };
-      if (isPlainBlock(style)) next.delete(key);
-      else next.set(key, style);
-      return next;
-    });
+    const next = [...blockStyles];
+    next[index] = { ...(blockStyles[index] ?? PLAIN_BLOCK), ...patch };
+    onBlockStylesChange(storeBlockStyles(blocks, next));
   }
 
   const isManual = preferences.exportPaginate === "manual";
@@ -195,6 +208,7 @@ export default function EditorExportModal({
     exportTitle,
     preferences.exportImageWidth,
     preferences.exportTextSize,
+    preferences.exportRatio,
     preferences.fontFamily,
     preferences.fontSize,
     preferences.lineHeight,
@@ -229,7 +243,7 @@ export default function EditorExportModal({
   }, [preferences.exportPaginate, exportCuts, fresh]);
 
   const sizes = useMemo(
-    () => (fresh && unitCount > 0 ? pageSizes(fresh.units, effectiveCuts, preferences.exportImageWidth, fresh.padding) : null),
+    () => (fresh && unitCount > 0 ? pageSizes(fresh.units, effectiveCuts, preferences.exportImageWidth, fresh.padding, fresh.layout.pageHeight) : null),
     [fresh, unitCount, effectiveCuts, preferences.exportImageWidth]
   );
 
@@ -256,13 +270,13 @@ export default function EditorExportModal({
     if (exportTitle) pages[0].items.push({ kind: "title", html: `<div class="md-preview-title">${escapeHtml(exportTitle)}</div>` });
     let current = 0;
     let position = 0;
-    blocks.forEach((block, index) => {
+    blocks.forEach((_, index) => {
       const isSelected = selected.has(index);
       if (isSelected) {
         current = pageOfUnit(position + titleOffset);
         position += 1;
       }
-      const item: SheetItem = { kind: "block", index, html: styledBlocks[index], selected: isSelected, styled: !isPlainBlock(blockStyles.get(block)) };
+      const item: SheetItem = { kind: "block", index, html: styledBlocks[index], selected: isSelected, styled: !isPlainBlock(blockStyles[index]) };
       pages[Math.min(current, pages.length - 1)].items.push(item);
     });
     return pages;
@@ -437,12 +451,18 @@ export default function EditorExportModal({
       primary ? `${theme.primaryButton} ${theme.primaryButtonText}` : `${theme.secondaryButton} ${theme.secondaryButtonText}`
     }`;
   const fontLabel = FONT_OPTIONS.find((font) => font.key === preferences.fontFamily)?.label ?? "";
+  const palettePreset = PRESETS.find((preset) => preset.id === preferences.exportPalette);
+  const paletteLabel = palettePreset ? `${palettePreset.emoji}${palettePreset.name}` : null;
   const summary = [
     preferences.exportImageWidth,
+    preferences.exportRatio !== "free" ? preferences.exportRatio : null,
     EXPORT_TEXT_SIZES[preferences.exportTextSize]?.label,
     PAGINATE_OPTIONS.find((option) => option.value === preferences.exportPaginate)?.label,
     fontLabel,
-  ].join("・");
+    paletteLabel,
+  ]
+    .filter(Boolean)
+    .join("・");
   // 自動分頁時,太長的那張會在段落中間再切開,算張數時要一起算;手動分頁則要使用者自己再切
   const pageCount = isManual ? previewPages.length : previewPages.reduce((sum, page) => sum + (page.size?.slices ?? 1), 0);
   const tooLong = isManual || preferences.exportPaginate === "none" ? previewPages.findIndex((page) => page.size?.over) : -1;
@@ -510,6 +530,19 @@ export default function EditorExportModal({
             </select>
 
             <select
+              value={preferences.exportRatio}
+              onChange={(e) => updatePreference({ exportRatio: e.target.value as ExportRatio })}
+              className={select}
+              aria-label="每張的比例"
+            >
+              {(Object.entries(EXPORT_RATIOS) as [ExportRatio, { label: string }][]).map(([value, ratio]) => (
+                <option key={value} value={value}>
+                  {ratio.label}
+                </option>
+              ))}
+            </select>
+
+            <select
               value={preferences.exportPaginate}
               onChange={(e) => updatePreference({ exportPaginate: e.target.value as ExportPaginate })}
               className={select}
@@ -535,6 +568,20 @@ export default function EditorExportModal({
               ))}
             </select>
 
+            <select
+              value={preferences.exportPalette}
+              onChange={(e) => updatePreference({ exportPalette: e.target.value })}
+              className={select}
+              aria-label="配色"
+            >
+              <option value="site">配色：跟網站主題</option>
+              {PRESETS.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  配色：{preset.emoji} {preset.name}
+                </option>
+              ))}
+            </select>
+
             <label className={`flex items-center gap-2 ${theme.mutedText}`}>
               <input type="checkbox" checked={preferences.exportImageTitle} onChange={(e) => updatePreference({ exportImageTitle: e.target.checked })} />
               含標題
@@ -544,6 +591,20 @@ export default function EditorExportModal({
               <input type="checkbox" checked={preferences.softItalic} onChange={(e) => updatePreference({ softItalic: e.target.checked })} />
               斜體改淡色正體
             </label>
+
+            <label className={`flex items-center gap-2 ${theme.mutedText}`}>
+              <input type="checkbox" checked={preferences.exportPageNumbers} onChange={(e) => updatePreference({ exportPageNumbers: e.target.checked })} />
+              頁碼
+            </label>
+
+            <input
+              type="text"
+              value={preferences.exportSignature}
+              onChange={(e) => updatePreference({ exportSignature: e.target.value.slice(0, 40) })}
+              placeholder="署名（例如 @你的帳號）"
+              aria-label="署名"
+              className={`min-w-0 flex-1 basis-40 rounded-2xl border px-3 py-1.5 outline-none ${theme.border} ${theme.inputBg}`}
+            />
           </div>
         )}
 
@@ -618,6 +679,9 @@ export default function EditorExportModal({
               contentClass={contentClassFor(preferences)}
               fontFamily={preferences.fontFamily}
               cutting={isManual}
+              palette={preferences.exportPalette}
+              signature={preferences.exportSignature.trim()}
+              pageNumbers={preferences.exportPageNumbers}
               styling={styling}
               theme={theme}
               onToggleSelect={toggleBlock}
@@ -629,7 +693,7 @@ export default function EditorExportModal({
               }
               renderStyleBar={(index) => (
                 <BlockStyleBar
-                  style={blockStyles.get(blocks[index]) ?? PLAIN_BLOCK}
+                  style={blockStyles[index] ?? PLAIN_BLOCK}
                   onChange={(patch) => updateBlockStyle(index, patch)}
                   onClose={() => setStyling(null)}
                   theme={theme}

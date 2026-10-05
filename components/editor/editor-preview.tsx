@@ -8,13 +8,15 @@ import type { EditorThemeConfig } from "@/lib/theme";
 import { type EditorPreferences } from "@/lib/preferences";
 import { contentClassFor } from "@/lib/export-image";
 import { getFontFamily } from "@/lib/editor-font";
-import { renderToSafeHtml, type RenderableMode } from "@/lib/markdown";
+import { applyStoredStyles, renderToSafeHtml, type RenderableMode, type StoredBlockStyle } from "@/lib/markdown";
 
 type EditorPreviewProps = {
   content: string;
   mode: RenderableMode;
   preferences: EditorPreferences;
   theme: EditorThemeConfig;
+  /** 文轉圖設定的段落樣式(置中、底色……),預覽也照著顯示 */
+  blockStyles?: StoredBlockStyle[];
   className?: string;
 };
 
@@ -25,6 +27,7 @@ export default function EditorPreview({
   mode,
   preferences,
   theme,
+  blockStyles,
   className = "",
 }: EditorPreviewProps) {
   const [html, setHtml] = useState("");
@@ -37,7 +40,7 @@ export default function EditorPreview({
       renderToSafeHtml(mode, content)
         .then((next) => {
           if (cancelled) return;
-          setHtml(next);
+          setHtml(applyStoredStyles(next, blockStyles));
           setError(null);
         })
         .catch((err: unknown) => {
@@ -51,7 +54,7 @@ export default function EditorPreview({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [content, mode]);
+  }, [content, mode, blockStyles]);
 
   return (
     <div className={`w-full ${className}`}>
