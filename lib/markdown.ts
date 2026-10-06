@@ -120,7 +120,7 @@ export function splitBlocks(html: string): string[] {
   return blocks;
 }
 
-// ---- 文轉圖:個別段落的樣式(置中、置右、底色、底線) ----
+// ---- 舊版:轉圖視窗裡設定的段落樣式(現在改在編輯器裡做,只剩轉換舊資料用) ----
 
 export type BlockAlign = "left" | "center" | "right";
 export type BlockFill = "none" | "yellow" | "pink" | "blue" | "green";
@@ -128,46 +128,8 @@ export type BlockStyle = { align: BlockAlign; fill: BlockFill; underline: boolea
 
 export const PLAIN_BLOCK: BlockStyle = { align: "left", fill: "none", underline: false };
 
-/** 底色都是半透明的:淺色、深色主題(像蝶豆花)上面字都還看得清楚 */
-export const BLOCK_FILLS: Record<Exclude<BlockFill, "none">, { label: string; color: string }> = {
-  yellow: { label: "黃", color: "rgba(255, 200, 60, 0.28)" },
-  pink: { label: "粉", color: "rgba(255, 120, 160, 0.25)" },
-  blue: { label: "藍", color: "rgba(90, 160, 255, 0.25)" },
-  green: { label: "綠", color: "rgba(100, 200, 130, 0.25)" },
-};
-
 export function isPlainBlock(style: BlockStyle | undefined): boolean {
   return !style || (style.align === "left" && style.fill === "none" && !style.underline);
-}
-
-/** 樣式 → 行內 CSS(空字串 = 不用加) */
-export function blockStyleCss(style: BlockStyle): string {
-  const parts: string[] = [];
-  if (style.align !== "left") parts.push(`text-align: ${style.align}`);
-  if (style.fill !== "none") {
-    parts.push(`background: ${BLOCK_FILLS[style.fill].color}`, "padding: 0.5em 0.9em", "border-radius: 0.5em");
-  }
-  if (style.underline) {
-    parts.push("text-decoration: underline", "text-decoration-thickness: 0.08em", "text-underline-offset: 0.25em");
-  }
-  return parts.join("; ");
-}
-
-/**
- * 把樣式加到一個區塊(splitBlocks 拆出來的 outerHTML)最外層的標籤上;
- * 原本就有 style 的話接在後面。直接改字串,不必經過 DOM。
- */
-export function applyBlockStyle(html: string, style: BlockStyle | undefined): string {
-  if (!style || isPlainBlock(style)) return html;
-  const css = blockStyleCss(style);
-  const match = /^<([a-zA-Z][\w-]*)([^>]*)>/.exec(html);
-  if (!match) return `<div style="${css}">${html}</div>`;
-  const [open, tag, attrs] = match;
-  const existing = /\sstyle\s*=\s*"([^"]*)"/i.exec(attrs);
-  const nextAttrs = existing
-    ? attrs.replace(existing[0], ` style="${existing[1].replace(/;?\s*$/, "")}; ${css}"`)
-    : `${attrs} style="${css}"`;
-  return `<${tag}${nextAttrs}>${html.slice(open.length)}`;
 }
 
 // ---- 段落樣式存進文件 ----
@@ -229,10 +191,32 @@ export function storeBlockStyles(blocks: string[], styles: (BlockStyle | undefin
       : [];
   });
 }
-/** 整篇 HTML 套上存起來的段落樣式(編輯器預覽用) */
-export function applyStoredStyles(html: string, stored: StoredBlockStyle[] | undefined): string {
-  if (!stored?.length) return html;
+/**
+ * 舊版在轉圖視窗設定的段落樣式 → 寫進內容裡的格式(編輯器現在自己就能上色、對齊)。
+ * 對齊變成段落的 text-align,底色變成 <mark class="hl-…">,底線變成 <u>。
+ * 輸入輸出都是 HTML(已清洗過的渲染結果)。
+ */
+export function blockStylesToMarkup(html: string, stored: StoredBlockStyle[] | undefined): string {
   const blocks = splitBlocks(html);
   const styles = resolveBlockStyles(blocks, stored);
-  return blocks.map((block, index) => applyBlockStyle(block, styles[index])).join("");
+  return blocks
+    .map((block, index) => {
+      const style = styles[index];
+      if (!style || isPlainBlock(style)) return block;
+      const el = new DOMParser().parseFromString(block, "text/html").body.firstElementChild as HTMLElement | null;
+      if (!el || el.tagName === "PRE") return block;
+      // 段落、標題直接改;引用、清單改裡面的每一段
+      const targets = /^(P|H[1-6])$/.test(el.tagName)
+        ? [el]
+        : (Array.from(el.querySelectorAll("p, h1, h2, h3, h4, h5, h6, li")).filter((node) => !node.querySelector("p, li")) as HTMLElement[]);
+      for (const target of targets) {
+        let inner = target.innerHTML;
+        if (style.underline) inner = `<u>${inner}</u>`;
+        if (style.fill !== "none") inner = `<mark class="hl-${style.fill}">${inner}</mark>`;
+        target.innerHTML = inner;
+        if (style.align !== "left" && target.tagName !== "LI") target.style.textAlign = style.align;
+      }
+      return el.outerHTML;
+    })
+    .join("");
 }

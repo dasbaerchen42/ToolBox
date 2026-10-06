@@ -18,17 +18,10 @@ import { downloadEach, shareImages } from "@/lib/download";
 import { useCanShareImages } from "@/hooks/useCanShareImages";
 import { type WritingMode } from "@/lib/storage";
 import {
-  applyBlockStyle,
-  isPlainBlock,
   isRenderableMode,
-  PLAIN_BLOCK,
   renderToSafeHtml,
-  resolveBlockStyles,
   splitBlocks,
-  storeBlockStyles,
   toPlainHtml,
-  type BlockStyle,
-  type StoredBlockStyle,
 } from "@/lib/markdown";
 import { contrastRatio, PRESETS } from "@/lib/theme-core";
 import {
@@ -54,7 +47,7 @@ import {
   type ExportRatio,
   type ExportTextSize,
 } from "@/lib/export-layout";
-import ExportPreview, { BlockStyleBar, type PreviewPage, type SheetItem } from "./export-preview";
+import ExportPreview, { type PreviewPage, type SheetItem } from "./export-preview";
 
 type EditorExportModalProps = {
   open: boolean;
@@ -65,9 +58,6 @@ type EditorExportModalProps = {
   preferences: EditorPreferences;
   setPreferences: React.Dispatch<React.SetStateAction<EditorPreferences>>;
   theme: EditorThemeConfig;
-  /** 存在文件裡的段落樣式,改了就存回去 */
-  blockStyles: StoredBlockStyle[] | undefined;
-  onBlockStylesChange: (next: StoredBlockStyle[]) => void;
 };
 
 const WIDTH_OPTIONS: { value: ExportImageWidth; label: string }[] = [
@@ -95,8 +85,6 @@ export default function EditorExportModal({
   preferences,
   setPreferences,
   theme,
-  blockStyles: storedStyles,
-  onBlockStylesChange,
 }: EditorExportModalProps) {
   const [blocks, setBlocks] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -107,8 +95,6 @@ export default function EditorExportModal({
   const [status, setStatus] = useState<string | null>(null);
   /** 設定列展開了沒:手機上預設收起來,把高度留給預覽 */
   const [settingsOpen, setSettingsOpen] = useState(() => typeof window === "undefined" || window.matchMedia("(min-width: 768px)").matches);
-  /** 正在調哪一段的樣式(那一段下面浮出一條樣式列) */
-  const [styling, setStyling] = useState<number | null>(null);
   /** 照實際轉圖的排版量出來的每個區塊位置(含標題時標題是第 0 個) */
   const [measured, setMeasured] = useState<(ExportMeasure & { key: string }) | null>(null);
   const anchorRef = useRef<number | null>(null);
@@ -142,7 +128,6 @@ export default function EditorExportModal({
       setBlocks(next);
       setSelected(new Set(next.map((_, i) => i)));
       setCuts(new Set());
-      setStyling(null);
       anchorRef.current = null;
     })().catch((error: unknown) => {
       console.error("渲染失敗：", error);
@@ -170,25 +155,10 @@ export default function EditorExportModal({
     [blocks, selected]
   );
 
-  /** 個別段落的樣式(置中、置右、底色、底線):存在文件裡,關掉再開、重新整理都還在 */
-  const blockStyles = useMemo(() => resolveBlockStyles(blocks, storedStyles), [blocks, storedStyles]);
-
-  const styledBlocks = useMemo(
-    () => blocks.map((block, index) => applyBlockStyle(block, blockStyles[index])),
-    [blocks, blockStyles]
-  );
-
   const selectedHtml = useMemo(
-    () => selectedIndexes.map((index) => styledBlocks[index]).join(""),
-    [styledBlocks, selectedIndexes]
+    () => selectedIndexes.map((index) => blocks[index]).join(""),
+    [blocks, selectedIndexes]
   );
-
-  function updateBlockStyle(index: number, patch: Partial<BlockStyle>) {
-    dropImages();
-    const next = [...blockStyles];
-    next[index] = { ...(blockStyles[index] ?? PLAIN_BLOCK), ...patch };
-    onBlockStylesChange(storeBlockStyles(blocks, next));
-  }
 
   const isManual = preferences.exportPaginate === "manual";
   const exportTitle = preferences.exportImageTitle && title ? title : null;
@@ -283,11 +253,11 @@ export default function EditorExportModal({
         current = pageOfUnit(position + titleOffset);
         position += 1;
       }
-      const item: SheetItem = { kind: "block", index, html: styledBlocks[index], selected: isSelected, styled: !isPlainBlock(blockStyles[index]) };
+      const item: SheetItem = { kind: "block", index, html: blocks[index], selected: isSelected };
       pages[Math.min(current, pages.length - 1)].items.push(item);
     });
     return pages;
-  }, [effectiveCuts, unitCount, sizes, fresh, isManual, titleOffset, selectedIndexes, exportTitle, blocks, selected, styledBlocks, blockStyles]);
+  }, [effectiveCuts, unitCount, sizes, fresh, isManual, titleOffset, selectedIndexes, exportTitle, blocks, selected]);
 
   function seedAutoCuts() {
     if (!fresh) return;
@@ -329,7 +299,6 @@ export default function EditorExportModal({
       next.delete(index);
       return next;
     });
-    if (styling === index) setStyling(null);
   }
 
   // 手動分頁:點區塊本身 = 在它後面切一刀(勾選框仍然是選取/不選取)
@@ -364,7 +333,6 @@ export default function EditorExportModal({
 
     setBusy(true);
     setStatus("準備中……");
-    setStyling(null);
     revokeUrls();
 
     try {
@@ -778,23 +746,13 @@ export default function EditorExportModal({
               palette={exportPalette(preferences)}
               signature={preferences.exportSignature.trim()}
               pageNumbers={preferences.exportPageNumbers}
-              styling={styling}
               theme={theme}
               onToggleSelect={toggleBlock}
               onToggleCut={toggleCut}
               onRemoveCut={toggleCut}
-              onStyle={setStyling}
               overLabel={(slices) =>
                 isManual ? "太長，在中間再切一刀" : preferences.exportPaginate === "none" ? "超過單張上限" : `太長，會在段落中間切成 ${slices} 張`
               }
-              renderStyleBar={(index) => (
-                <BlockStyleBar
-                  style={blockStyles[index] ?? PLAIN_BLOCK}
-                  onChange={(patch) => updateBlockStyle(index, patch)}
-                  onClose={() => setStyling(null)}
-                  theme={theme}
-                />
-              )}
             />
           )}
         </div>
