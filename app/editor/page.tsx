@@ -12,7 +12,7 @@ import EditorViewToggle, { DocViewToggle } from "@/components/editor/editor-view
 import dynamic from "next/dynamic";
 import { useEditorState, type Editor } from "@tiptap/react";
 import { htmlToMarkdown } from "@/lib/rich-text";
-import { renderToSafeHtml } from "@/lib/markdown";
+import { blockStylesToMarkup, renderToSafeHtml } from "@/lib/markdown";
 
 // 所見即所得編輯器比較大,用到才載
 const RichEditor = dynamic(() => import("@/components/editor/rich/rich-editor"), { ssr: false });
@@ -190,6 +190,24 @@ export default function EditorPage() {
   );
 
   // 只有 Markdown / HTML 有東西可以渲染,其他模式一律停在純文字
+  // 舊版在轉圖視窗設定的段落樣式:第一次打開時寫進內容裡,之後就跟一般格式一樣在編輯器裡改
+  const legacyStyles = activeDoc?.blockStyles?.length ? activeDoc : null;
+  useEffect(() => {
+    if (!legacyStyles) return;
+    let cancelled = false;
+    const { mode, content, blockStyles } = legacyStyles;
+    void (async () => {
+      let next = content;
+      if (mode === "markdown") next = htmlToMarkdown(blockStylesToMarkup(await renderToSafeHtml("markdown", content), blockStyles));
+      else if (mode === "html") next = blockStylesToMarkup(await renderToSafeHtml("html", content), blockStyles);
+      if (!cancelled) updateActiveDoc({ content: next, blockStyles: undefined });
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 每份文件只轉一次
+  }, [legacyStyles?.id]);
+
   // 文件(Markdown)用「編輯/原始語法」;HTML 進階模式才有「純文字/渲染/並排」
   const isDoc = activeDoc?.mode === "markdown";
   const richActive = isDoc && preferences.docView === "rich";
@@ -307,7 +325,7 @@ export default function EditorPage() {
                 <div
                   className={`mx-auto flex w-full flex-1 flex-col gap-4 md:flex-row ${areaWidthClass}`}
                 >
-                  {richActive && (
+                  {richActive && !legacyStyles && (
                     <RichEditor
                       key={activeDoc.id}
                       content={activeDoc.content}
@@ -333,7 +351,6 @@ export default function EditorPage() {
                   {showPreview && previewMode && (
                     <EditorPreview
                       content={activeDoc.content}
-                      blockStyles={activeDoc.blockStyles}
                       mode={previewMode}
                       preferences={preferences}
                       theme={theme}
@@ -369,8 +386,6 @@ export default function EditorPage() {
               preferences={preferences}
               setPreferences={setPreferences}
               theme={theme}
-              blockStyles={activeDoc.blockStyles}
-              onBlockStylesChange={(blockStyles) => updateActiveDoc({ blockStyles })}
             />
           )}
 
