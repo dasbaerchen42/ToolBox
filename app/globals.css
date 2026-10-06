@@ -177,3 +177,33 @@ body {
   outline: calc(2px / var(--sheet-scale, 1)) dashed var(--accent);
   outline-offset: calc(4px / var(--sheet-scale, 1));
 }
+
+/* ── 文件的字色、底色(編輯器、預覽、轉圖共用;見 lib/rich-text) ── */
+.tc-red { color: #e0574f; }
+.tc-orange { color: #e8893a; }
+.tc-gold { color: #c99a1e; }
+.tc-green { color: #3fa36f; }
+.tc-teal { color: #2f9fa6; }
+.tc-blue { color: #4a8fe0; }
+.tc-purple { color: #9372d8; }
+.tc-pink { color: #e0679f; }
+.tc-gray { color: var(--ink-tertiary); }
+mark[class*="hl-"] { color: inherit; border-radius: 0.2em; padding: 0 0.1em; }
+.hl-yellow { background: rgba(255, 200, 60, 0.32); }
+.hl-pink { background: rgba(255, 120, 160, 0.28); }
+.hl-blue { background: rgba(90, 160, 255, 0.28); }
+.hl-green { background: rgba(100, 200, 130, 0.28); }
+.hl-purple { background: rgba(160, 120, 230, 0.28); }
+.hl-gray { background: rgba(140, 140, 140, 0.25); }
+.md-preview u { text-decoration: underline; text-underline-offset: 0.2em; }
+.md-preview s { text-decoration: line-through; opacity: 0.7; }
+
+/* 所見即所得的編輯區:長得跟預覽一樣,只是可以打字 */
+.rich-editor .ProseMirror { outline: none; min-height: 100%; }
+.rich-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--ink-tertiary);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}

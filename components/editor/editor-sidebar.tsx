@@ -1,4 +1,5 @@
 import { WritingDoc } from "@/lib/storage";
+import { stripRichTags } from "@/lib/rich-text";
 import { formatDateTime24h } from "@/lib/datetime";
 
 type EditorSidebarProps = {
@@ -19,6 +20,17 @@ type EditorSidebarProps = {
     mutedText: string;
     subtleText: string;
   };
+};
+
+/** 側欄上每份文件標的模式名稱 */
+const MODE_LABELS: Record<string, string> = {
+  markdown: "文件",
+  plain: "純文字",
+  html: "HTML",
+  yaml: "YAML",
+  json: "JSON",
+  css: "CSS",
+  social: "Social",
 };
 
 export default function EditorSidebar({
@@ -61,10 +73,10 @@ export default function EditorSidebar({
                     {doc.title || "未命名文件"}
                   </p>
                   <p className={`mt-1 text-xs uppercase ${theme.subtleText}`}>
-                    {doc.mode}
+                    {MODE_LABELS[doc.mode] ?? doc.mode}
                   </p>
                   <p className={`mt-1 truncate text-sm leading-6 tracking-[0.03em] ${theme.mutedText}`}>
-                    {doc.content || "尚未輸入內容"}
+                    {(doc.mode === "markdown" ? stripRichTags(doc.content) : doc.content) || "尚未輸入內容"}
                   </p>
                   <p className={`mt-2 text-xs ${theme.subtleText}`}>
                     更新時間：{formatDateTime24h(doc.updatedAt)}

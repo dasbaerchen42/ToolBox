@@ -5,6 +5,7 @@
 // 顯示「第 n / 共 m 筆」,上一筆/下一筆用 setSelectionRange 跳過去。
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import type { Editor } from "@tiptap/react";
 import type { EditorThemeConfig } from "@/lib/theme";
 import {
   IconChevronDown,
@@ -21,7 +22,26 @@ type EditorFindReplaceProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   theme: EditorThemeConfig;
+  /** 文件的編輯模式:在排好的內容裡找、直接在編輯器裡取代 */
+  richEditor?: Editor | null;
 };
+
+/** 編輯器內容裡每個符合的位置(只找單一段文字裡面的,跨粗體斜體邊界的不算) */
+function findInEditor(editor: Editor, query: string, caseSensitive: boolean): { from: number; to: number }[] {
+  if (!query) return [];
+  const needle = caseSensitive ? query : query.toLowerCase();
+  const found: { from: number; to: number }[] = [];
+  editor.state.doc.descendants((node, pos) => {
+    if (!node.isText || !node.text) return;
+    const text = caseSensitive ? node.text : node.text.toLowerCase();
+    let i = text.indexOf(needle);
+    while (i !== -1 && found.length < 10000) {
+      found.push({ from: pos + i, to: pos + i + query.length });
+      i = text.indexOf(needle, i + needle.length);
+    }
+  });
+  return found;
+}
 
 function findMatches(content: string, query: string, caseSensitive: boolean): number[] {
   if (!query) return [];
@@ -46,6 +66,7 @@ export default function EditorFindReplace({
   open,
   setOpen,
   theme,
+  richEditor,
 }: EditorFindReplaceProps) {
   const [query, setQuery] = useState("");
   const [replaceWith, setReplaceWith] = useState("");
@@ -53,10 +74,17 @@ export default function EditorFindReplace({
   const [rawActiveIndex, setActiveIndex] = useState(0);
   const findInputRef = useRef<HTMLInputElement>(null);
 
-  const matches = useMemo(
-    () => findMatches(content, query, caseSensitive),
-    [content, query, caseSensitive]
+  // 編輯模式時 content 是存檔的 Markdown,會跟著編輯器更新,拿來當重新找的時機
+  const richMatches = useMemo(
+    () => (richEditor ? findInEditor(richEditor, query, caseSensitive) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- content 變了代表編輯器內容變了
+    [richEditor, query, caseSensitive, content]
   );
+  const textMatches = useMemo(
+    () => (richEditor ? [] : findMatches(content, query, caseSensitive)),
+    [richEditor, content, query, caseSensitive]
+  );
+  const matches = richEditor ? richMatches : textMatches;
 
   // 內容或關鍵字變動後原本的筆數可能失效,渲染期直接夾回合法範圍
   const activeIndex =
@@ -68,9 +96,14 @@ export default function EditorFindReplace({
   }, [open]);
 
   function jumpTo(index: number) {
+    if (richEditor) {
+      const match = richMatches[index];
+      if (match) richEditor.chain().focus().setTextSelection(match).scrollIntoView().run();
+      return;
+    }
     const el = textareaRef.current;
     if (!el || matches.length === 0) return;
-    const start = matches[index];
+    const start = textMatches[index];
     const end = start + query.length;
     el.focus();
     el.setSelectionRange(start, end);
@@ -95,7 +128,12 @@ export default function EditorFindReplace({
 
   function replaceCurrent() {
     if (matches.length === 0) return;
-    const start = matches[activeIndex];
+    if (richEditor) {
+      const match = richMatches[activeIndex];
+      richEditor.chain().focus().insertContentAt(match, replaceWith ? { type: "text", text: replaceWith } : []).run();
+      return;
+    }
+    const start = textMatches[activeIndex];
     const next =
       content.slice(0, start) + replaceWith + content.slice(start + query.length);
     onReplaceContent(next);
@@ -104,9 +142,24 @@ export default function EditorFindReplace({
 
   function replaceAll() {
     if (matches.length === 0) return;
+    if (richEditor) {
+      // 從後面往前換,前面的位置才不會跑掉;一次做完,復原一下就全部回來
+      richEditor
+        .chain()
+        .command(({ tr }) => {
+          for (const match of [...richMatches].reverse()) {
+            if (replaceWith) tr.insertText(replaceWith, match.from, match.to);
+            else tr.delete(match.from, match.to);
+          }
+          return true;
+        })
+        .run();
+      setActiveIndex(0);
+      return;
+    }
     let next = "";
     let cursor = 0;
-    for (const start of matches) {
+    for (const start of textMatches) {
       next += content.slice(cursor, start) + replaceWith;
       cursor = start + query.length;
     }

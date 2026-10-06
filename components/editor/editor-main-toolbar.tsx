@@ -77,8 +77,10 @@ type Props = {
   canRedo: boolean;
   findOpen: boolean;
   onToggleFind: () => void;
-  /** 檢視切換(只有能渲染的文件才有) */
+  /** 檢視切換(文件:編輯/原始語法;HTML:純文字/渲染/並排) */
   viewToggle: ReactNode;
+  /** 文件編輯模式的格式按鈕(字色、底色、對齊……) */
+  formatBar?: ReactNode;
   onPaste: () => void;
   onPasteExport: () => void;
   /** 「更多」選單裡的 Google Docs 選項 */
@@ -96,6 +98,7 @@ export default function EditorMainToolbar({
   findOpen,
   onToggleFind,
   viewToggle,
+  formatBar,
   onPaste,
   onPasteExport,
   googleItems,
@@ -107,8 +110,10 @@ export default function EditorMainToolbar({
   const divider = <span className="mx-0.5 h-5 w-px shrink-0" style={{ background: "var(--border-light)" }} aria-hidden />;
   const menuItem = "flex w-full items-center rounded-xl px-3 py-2 text-left text-sm transition hover:bg-(--paper-bg-3)";
 
+  const row = "flex items-center gap-1.5 overflow-x-auto pb-1 [scrollbar-width:thin] sm:flex-wrap sm:overflow-visible";
   return (
-    <div className="mb-3 flex items-center gap-1.5 overflow-x-auto pb-1 [scrollbar-width:thin] sm:flex-wrap sm:overflow-visible" role="toolbar" aria-label="編輯工具列">
+    <div className="mb-3 flex flex-col gap-1.5">
+    <div className={row} role="toolbar" aria-label="編輯工具列">
       <button type="button" onClick={onUndo} disabled={!canUndo} title="還原（Ctrl+Z）" aria-label="還原" className={`${plain} px-2.5`}>
         <IconUndo />
       </button>
@@ -150,6 +155,13 @@ export default function EditorMainToolbar({
       <button type="button" onClick={onExportImage} className={`${TOOL_BUTTON} hidden border-(--accent) sm:flex ${theme.primaryButton} ${theme.primaryButtonText}`}>
         匯出成圖片
       </button>
+    </div>
+    {/* 格式按鈕自己一列:手機上才不會被擠到看不到的地方 */}
+    {formatBar && (
+      <div className={row} role="toolbar" aria-label="文字格式">
+        {formatBar}
+      </div>
+    )}
     </div>
   );
 }

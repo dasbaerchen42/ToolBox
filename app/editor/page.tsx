@@ -8,7 +8,15 @@ import EditorGoogleToolbar from "@/components/editor/editor-google-toolbar";
 import EditorSettingsPanel from "@/components/editor/editor-settings-panel";
 import EditorTextarea from "@/components/editor/editor-textarea";
 import EditorPreview from "@/components/editor/editor-preview";
-import EditorViewToggle from "@/components/editor/editor-view-toggle";
+import EditorViewToggle, { DocViewToggle } from "@/components/editor/editor-view-toggle";
+import dynamic from "next/dynamic";
+import { useEditorState, type Editor } from "@tiptap/react";
+import { htmlToMarkdown } from "@/lib/rich-text";
+import { renderToSafeHtml } from "@/lib/markdown";
+
+// 所見即所得編輯器比較大,用到才載
+const RichEditor = dynamic(() => import("@/components/editor/rich/rich-editor"), { ssr: false });
+const RichFormatBar = dynamic(() => import("@/components/editor/rich/rich-format-bar"), { ssr: false });
 import EditorExportModal from "@/components/editor/editor-export-modal";
 import EditorFindReplace from "@/components/editor/editor-find-replace";
 import EditorStatusPanel from "@/components/editor/editor-status-panel";
@@ -57,6 +65,12 @@ export default function EditorPage() {
     { payload: PastePayload; thenExport: boolean } | null
   >(null);
   const [findOpen, setFindOpen] = useState(false);
+  /** 文件編輯模式下的編輯器(工具列、尋找取代、復原重做要用) */
+  const [richEditor, setRichEditor] = useState<Editor | null>(null);
+  const richHistory = useEditorState({
+    editor: richEditor,
+    selector: ({ editor }) => ({ canUndo: !!editor?.can().undo(), canRedo: !!editor?.can().redo() }),
+  });
   const history = useEditorHistory(activeDocId);
 
   // 文件首次出現時建立歷史基底快照
@@ -75,11 +89,19 @@ export default function EditorPage() {
   }
 
   function doUndo() {
+    if (richActive && richEditor) {
+      richEditor.chain().focus().undo().run();
+      return;
+    }
     const prev = history.undo(activeDocId);
     if (prev !== null) updateActiveDoc({ content: prev });
   }
 
   function doRedo() {
+    if (richActive && richEditor) {
+      richEditor.chain().focus().redo().run();
+      return;
+    }
     const next = history.redo(activeDocId);
     if (next !== null) updateActiveDoc({ content: next });
   }
@@ -90,6 +112,9 @@ export default function EditorPage() {
     if (mod && !e.shiftKey && e.key.toLowerCase() === "f") {
       e.preventDefault();
       setFindOpen(true);
+    } else if (richActive) {
+      // 編輯模式的復原重做交給編輯器自己(它記得游標與格式)
+      if (e.key === "Escape" && findOpen) setFindOpen(false);
     } else if (mod && !e.shiftKey && e.key.toLowerCase() === "z") {
       e.preventDefault();
       doUndo();
@@ -107,17 +132,17 @@ export default function EditorPage() {
 
   // 貼上一律開新文件:不會覆蓋掉正在寫的東西,所以純文字可以完全免確認
   const applyPaste = useCallback(
-    (payload: PastePayload, keepFormat: boolean, thenExport: boolean) => {
+    async (payload: PastePayload, keepFormat: boolean, thenExport: boolean) => {
       const keep = keepFormat && !!payload.html;
-      const content = keep ? payload.html! : payload.text;
+      // 保留格式:先清洗,再轉成文件的 Markdown(粗體、清單、標題留著,顏色字體交給主題)
+      const content = keep ? htmlToMarkdown(await renderToSafeHtml("html", payload.html!)) : payload.text;
       if (!content.trim()) return;
 
       addDoc({
         ...createNewDoc(),
         title: titleFromContent(payload.text || content),
         content,
-        // 純文字也給 markdown:段落、清單這些直接就能渲染
-        mode: keep ? "html" : "markdown",
+        mode: "markdown",
       });
 
       setPendingPaste(null);
@@ -133,7 +158,7 @@ export default function EditorPage() {
         setPendingPaste({ payload, thenExport });
         return;
       }
-      applyPaste(payload, false, thenExport);
+      void applyPaste(payload, false, thenExport);
     },
     [applyPaste]
   );
@@ -165,9 +190,12 @@ export default function EditorPage() {
   );
 
   // 只有 Markdown / HTML 有東西可以渲染,其他模式一律停在純文字
+  // 文件(Markdown)用「編輯/原始語法」;HTML 進階模式才有「純文字/渲染/並排」
+  const isDoc = activeDoc?.mode === "markdown";
+  const richActive = isDoc && preferences.docView === "rich";
   const previewMode =
     activeDoc && isRenderableMode(activeDoc.mode) ? activeDoc.mode : null;
-  const renderable = previewMode !== null;
+  const renderable = previewMode !== null && !isDoc;
   const viewMode = renderable ? preferences.viewMode : "edit";
   const showEditor = viewMode !== "preview";
   const showPreview = viewMode !== "edit";
@@ -218,12 +246,19 @@ export default function EditorPage() {
                 <EditorMainToolbar
                   onUndo={doUndo}
                   onRedo={doRedo}
-                  canUndo={history.canUndo}
-                  canRedo={history.canRedo}
+                  canUndo={richActive ? !!richHistory?.canUndo : history.canUndo}
+                  canRedo={richActive ? !!richHistory?.canRedo : history.canRedo}
                   findOpen={findOpen}
                   onToggleFind={() => setFindOpen(!findOpen)}
+                  formatBar={richActive && richEditor ? <RichFormatBar editor={richEditor} theme={theme} /> : null}
                   viewToggle={
-                    renderable ? (
+                    isDoc ? (
+                      <DocViewToggle
+                        value={preferences.docView}
+                        onChange={(docView) => setPreferences((prev) => ({ ...prev, docView }))}
+                        theme={theme}
+                      />
+                    ) : renderable ? (
                       <EditorViewToggle
                         viewMode={viewMode}
                         onChange={(next) => setPreferences((prev) => ({ ...prev, viewMode: next }))}
@@ -262,6 +297,7 @@ export default function EditorPage() {
                     content={activeDoc.content}
                     textareaRef={textareaRef}
                     onReplaceContent={handleReplaceContent}
+                    richEditor={richActive ? richEditor : null}
                     open={findOpen}
                     setOpen={setFindOpen}
                     theme={theme}
@@ -271,7 +307,19 @@ export default function EditorPage() {
                 <div
                   className={`mx-auto flex w-full flex-1 flex-col gap-4 md:flex-row ${areaWidthClass}`}
                 >
-                  {showEditor && (
+                  {richActive && (
+                    <RichEditor
+                      key={activeDoc.id}
+                      content={activeDoc.content}
+                      onChange={handleContentChange}
+                      onReady={setRichEditor}
+                      preferences={preferences}
+                      theme={theme}
+                      className="flex-1"
+                    />
+                  )}
+
+                  {showEditor && !richActive && (
                     <EditorTextarea
                       ref={textareaRef}
                       content={activeDoc.content}
@@ -352,7 +400,7 @@ export default function EditorPage() {
                   <button
                     type="button"
                     onClick={() =>
-                      applyPaste(pendingPaste.payload, false, pendingPaste.thenExport)
+                      void applyPaste(pendingPaste.payload, false, pendingPaste.thenExport)
                     }
                     className={`rounded-2xl border px-4 py-2 text-sm ${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}
                   >
@@ -361,7 +409,7 @@ export default function EditorPage() {
                   <button
                     type="button"
                     onClick={() =>
-                      applyPaste(pendingPaste.payload, true, pendingPaste.thenExport)
+                      void applyPaste(pendingPaste.payload, true, pendingPaste.thenExport)
                     }
                     className={`rounded-2xl border px-4 py-2 text-sm ${theme.border} ${theme.primaryButton} ${theme.primaryButtonText}`}
                   >
