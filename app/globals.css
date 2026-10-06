@@ -92,8 +92,9 @@ body {
   font-weight: 400;
   color: var(--ink-secondary);
 }
-/* 斜體是敘述、正體是對白:對白稍微加粗,兩者只靠濃淡區分 */
-.md-preview.md-soft-italic :is(p, li, td) { font-weight: 600; }
+/* 斜體是敘述、正體是對白:預設只靠濃淡區分。
+   要對白加粗才加粗——中文字型只有一般和粗體兩種,沒有「稍微粗一點」,600 會直接變成粗體 */
+.md-preview.md-soft-italic-bold :is(p, li, td) { font-weight: 700; }
 
 .md-preview code {
   font-family: var(--font-mono, ui-monospace, "SFMono-Regular", monospace);

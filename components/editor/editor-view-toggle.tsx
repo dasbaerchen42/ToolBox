@@ -23,13 +23,13 @@ export default function EditorViewToggle({
   theme,
 }: EditorViewToggleProps) {
   return (
-    <div className={`inline-flex rounded-2xl border p-1 ${theme.border} ${theme.panelBg}`}>
+    <div className={`inline-flex h-9 shrink-0 items-center rounded-full border p-0.5 ${theme.border} ${theme.panelBg}`}>
       {OPTIONS.map((option) => (
         <button
           key={option.value}
           type="button"
           onClick={() => onChange(option.value)}
-          className={`rounded-xl px-3 py-1.5 text-sm tracking-[0.04em] transition ${
+          className={`h-full rounded-full px-3 text-sm transition ${
             option.mdOnly ? "hidden md:block" : ""
           } ${
             viewMode === option.value

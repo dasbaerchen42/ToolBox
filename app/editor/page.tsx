@@ -15,7 +15,7 @@ import EditorStatusPanel from "@/components/editor/editor-status-panel";
 import { validateContent } from "@/lib/validators";
 import EditorStatsBar from "@/components/editor/editor-stats-bar";
 import { getEditorStats } from "@/lib/editor-stats";
-import CollapsibleSection from "@/components/editor/collapsible-section";
+import EditorMainToolbar from "@/components/editor/editor-main-toolbar";
 import { formatDateTime24h } from "@/lib/datetime";
 import { isRenderableMode } from "@/lib/markdown";
 import {
@@ -47,7 +47,6 @@ export default function EditorPage() {
     adjustFontSize,
     adjustLineHeight,
     adjustLetterSpacing,
-    getEditorWidthClass,
   } = useEditorPreferences();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -172,8 +171,10 @@ export default function EditorPage() {
   const viewMode = renderable ? preferences.viewMode : "edit";
   const showEditor = viewMode !== "preview";
   const showPreview = viewMode !== "edit";
-  const areaWidthClass =
-    viewMode === "split" ? "max-w-6xl" : getEditorWidthClass();
+  // 編輯區固定寬度;並排時兩欄,放寬一點
+  const areaWidthClass = viewMode === "split" ? "max-w-6xl" : "max-w-4xl";
+  // 進階模式(YAML、JSON……)本來就是為了語法檢查,一律顯示提示
+  const showHints = preferences.showHints || !["markdown", "plain"].includes(activeDoc?.mode ?? "plain");
 
   const editorStats = useMemo(
     () => getEditorStats(activeDoc?.content ?? ""),
@@ -195,61 +196,62 @@ export default function EditorPage() {
         <section className="p-4 md:p-6">
           {activeDoc ? (
             <div className="flex h-full flex-col">
-              <header className={`mb-6 ${theme.border}`}>
-                <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
-                  <div>
-                    <label className={`mb-2 block text-sm ${theme.mutedText}`}>
-                      Title
-                    </label>
-                    <input
-                      type="text"
-                      value={activeDoc.title}
-                      onChange={(e) => updateActiveDoc({ title: e.target.value })}
-                      className={`w-full rounded-2xl border px-4 py-3 text-xl font-semibold tracking-[0.04em] outline-none transition ${theme.border} ${theme.inputBg}`}
-                      placeholder="請輸入文件標題"
-                    />
-                  </div>
-
-                  <div className="flex flex-col justify-end">
-                    <label className={`mb-2 block text-sm ${theme.mutedText}`}>
-                      操作
-                    </label>
-                    <EditorGoogleToolbar
-                      activeDoc={activeDoc}
-                      updateActiveDoc={updateActiveDoc}
-                      addDoc={addDoc}
-                      theme={theme}
-                    />
-                  </div>
+              <div className={`mx-auto w-full ${areaWidthClass}`}>
+                <div className="mb-3 flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={activeDoc.title}
+                    onChange={(e) => updateActiveDoc({ title: e.target.value })}
+                    aria-label="文件標題"
+                    className={`min-w-0 flex-1 rounded-2xl border px-4 py-2.5 text-lg font-semibold tracking-[0.04em] outline-none transition ${theme.border} ${theme.inputBg}`}
+                    placeholder="請輸入文件標題"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setExportOpen(true)}
+                    className={`shrink-0 rounded-full border border-(--accent) px-3 py-2.5 text-sm sm:hidden ${theme.primaryButton} ${theme.primaryButtonText}`}
+                  >
+                    匯出圖片
+                  </button>
                 </div>
 
-                <CollapsibleSection title="Status" defaultOpen={true} theme={theme}>
-                  <div className="space-y-3">
-                    <div className={`text-sm ${theme.mutedText}`}>
-                      ［最後儲存時間］{formatDateTime24h(activeDoc.updatedAt)}
-                    </div>
-                    {activeDoc.googleDocId && (
-                      <div className={`text-xs ${theme.subtleText}`}>
-                        ↗ 已連結 Google Docs・下次匯出將直接複寫
-                      </div>
-                    )}
-                    <EditorStatsBar stats={editorStats} theme={theme} />
-                  </div>
-                </CollapsibleSection>
-
-                <CollapsibleSection title="Setting" defaultOpen={false} theme={theme}>
-                  <EditorSettingsPanel
-                    preferences={preferences}
-                    currentMode={activeDoc.mode}
-                    onChangeMode={(mode) => updateActiveDoc({ mode })}
-                    setPreferences={setPreferences}
-                    theme={theme}
-                    adjustFontSize={adjustFontSize}
-                    adjustLineHeight={adjustLineHeight}
-                    adjustLetterSpacing={adjustLetterSpacing}
-                  />
-                </CollapsibleSection>
-              </header>
+                <EditorMainToolbar
+                  onUndo={doUndo}
+                  onRedo={doRedo}
+                  canUndo={history.canUndo}
+                  canRedo={history.canRedo}
+                  findOpen={findOpen}
+                  onToggleFind={() => setFindOpen(!findOpen)}
+                  viewToggle={
+                    renderable ? (
+                      <EditorViewToggle
+                        viewMode={viewMode}
+                        onChange={(next) => setPreferences((prev) => ({ ...prev, viewMode: next }))}
+                        theme={theme}
+                      />
+                    ) : null
+                  }
+                  onPaste={() => void pasteFromClipboard(false)}
+                  onPasteExport={() => void pasteFromClipboard(true)}
+                  googleItems={
+                    <EditorGoogleToolbar activeDoc={activeDoc} updateActiveDoc={updateActiveDoc} addDoc={addDoc} theme={theme} />
+                  }
+                  settings={
+                    <EditorSettingsPanel
+                      preferences={preferences}
+                      currentMode={activeDoc.mode}
+                      onChangeMode={(mode) => updateActiveDoc({ mode })}
+                      setPreferences={setPreferences}
+                      theme={theme}
+                      adjustFontSize={adjustFontSize}
+                      adjustLineHeight={adjustLineHeight}
+                      adjustLetterSpacing={adjustLetterSpacing}
+                    />
+                  }
+                  onExportImage={() => setExportOpen(true)}
+                  theme={theme}
+                />
+              </div>
 
               <div
                 onKeyDown={handleEditorKeyDown}
@@ -262,54 +264,8 @@ export default function EditorPage() {
                     onReplaceContent={handleReplaceContent}
                     open={findOpen}
                     setOpen={setFindOpen}
-                    onUndo={doUndo}
-                    onRedo={doRedo}
-                    canUndo={history.canUndo}
-                    canRedo={history.canRedo}
                     theme={theme}
                   />
-                </div>
-                <div
-                  className={`mx-auto mb-3 flex w-full flex-wrap items-center justify-between gap-3 ${areaWidthClass}`}
-                >
-                  {renderable ? (
-                    <EditorViewToggle
-                      viewMode={viewMode}
-                      onChange={(next) =>
-                        setPreferences((prev) => ({ ...prev, viewMode: next }))
-                      }
-                      theme={theme}
-                    />
-                  ) : (
-                    <span className={`text-xs ${theme.subtleText}`}>
-                      切到 Markdown 或 HTML 模式就能看渲染結果
-                    </span>
-                  )}
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => pasteFromClipboard(false)}
-                      className={`rounded-2xl border px-3 py-1.5 text-sm tracking-[0.04em] transition ${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}
-                      title="也可以直接按 ⌘V / Ctrl+V"
-                    >
-                      貼上
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => pasteFromClipboard(true)}
-                      className={`rounded-2xl border px-3 py-1.5 text-sm tracking-[0.04em] transition ${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}
-                    >
-                      貼上並轉圖
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setExportOpen(true)}
-                      className={`rounded-2xl border px-4 py-1.5 text-sm tracking-[0.04em] transition ${theme.border} ${theme.primaryButton} ${theme.primaryButtonText}`}
-                    >
-                      轉圖
-                    </button>
-                  </div>
                 </div>
 
                 <div
@@ -339,15 +295,15 @@ export default function EditorPage() {
                 </div>
               </div>
 
-              {pasteHint && (
-                <p className={`mx-auto mt-2 text-xs ${areaWidthClass} ${theme.subtleText}`}>
-                  {pasteHint}
-                </p>
-              )}
-
-              <CollapsibleSection title="Hint" defaultOpen={true} theme={theme}>
-                <EditorStatusPanel result={validationResult} theme={theme} />
-              </CollapsibleSection>
+              <div className={`mx-auto mt-2 w-full ${areaWidthClass}`}>
+                {pasteHint && <p className={`mb-1 text-xs ${theme.subtleText}`}>{pasteHint}</p>}
+                <EditorStatsBar stats={editorStats} theme={theme} savedAt={formatDateTime24h(activeDoc.updatedAt)} linked={!!activeDoc.googleDocId} />
+                {showHints && (
+                  <div className={`mt-3 rounded-2xl border px-4 py-3 ${theme.border} ${theme.panelBg}`}>
+                    <EditorStatusPanel result={validationResult} theme={theme} />
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <div className={`flex h-full items-center justify-center ${theme.mutedText}`}>

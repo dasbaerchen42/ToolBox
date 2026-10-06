@@ -1,6 +1,6 @@
 "use client";
 
-// 編輯區上方的常駐小工具列:還原/重做 + 尋找/取代。
+// 尋找/取代面板(按工具列的「尋找」或 Ctrl+F 打開)。
 // 尋找採「跳選反白」模式(原生 textarea 無法同時標黃多筆),
 // 顯示「第 n / 共 m 筆」,上一筆/下一筆用 setSelectionRange 跳過去。
 
@@ -10,10 +10,7 @@ import {
   IconChevronDown,
   IconChevronUp,
   IconClose,
-  IconRedo,
   IconReplace,
-  IconSearch,
-  IconUndo,
 } from "./editor-icons";
 
 type EditorFindReplaceProps = {
@@ -23,10 +20,6 @@ type EditorFindReplaceProps = {
   onReplaceContent: (next: string) => void;
   open: boolean;
   setOpen: (open: boolean) => void;
-  onUndo: () => void;
-  onRedo: () => void;
-  canUndo: boolean;
-  canRedo: boolean;
   theme: EditorThemeConfig;
 };
 
@@ -52,10 +45,6 @@ export default function EditorFindReplace({
   onReplaceContent,
   open,
   setOpen,
-  onUndo,
-  onRedo,
-  canUndo,
-  canRedo,
   theme,
 }: EditorFindReplaceProps) {
   const [query, setQuery] = useState("");
@@ -129,46 +118,10 @@ export default function EditorFindReplace({
   const iconBtn = `flex items-center justify-center rounded-full border p-2 transition disabled:opacity-30 ${theme.secondaryButton} ${theme.secondaryButtonText}`;
   const inputCls = `min-w-0 flex-1 rounded-full border px-4 py-2 text-sm tracking-[0.04em] outline-none ${theme.border} ${theme.inputBg}`;
 
+  if (!open) return null;
+
   return (
     <div className="mx-auto mb-3 w-full">
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={onUndo}
-          disabled={!canUndo}
-          title="還原(Ctrl+Z)"
-          aria-label="還原"
-          className={iconBtn}
-        >
-          <IconUndo />
-        </button>
-        <button
-          type="button"
-          onClick={onRedo}
-          disabled={!canRedo}
-          title="重做(Ctrl+Shift+Z)"
-          aria-label="重做"
-          className={iconBtn}
-        >
-          <IconRedo />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          title="尋找與取代(Ctrl+F)"
-          className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm tracking-[0.04em] transition ${
-            open
-              ? `bg-(--accent) text-(--on-accent) border-(--accent)`
-              : `${theme.secondaryButton} ${theme.secondaryButtonText}`
-          }`}
-        >
-          <IconSearch />
-          尋找/取代
-        </button>
-      </div>
-
-      {open && (
         <div
           className={`mt-2 flex flex-col gap-2 rounded-3xl border p-3 ${theme.border} ${theme.panelBg}`}
         >
@@ -269,7 +222,6 @@ export default function EditorFindReplace({
             </button>
           </div>
         </div>
-      )}
     </div>
   );
 }

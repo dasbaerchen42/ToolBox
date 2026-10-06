@@ -68,8 +68,9 @@ export type ExportImageOptions = {
 };
 
 /** 內容區要加的 class(例如斜體改淡色正體) */
-export function contentClassFor(preferences: Pick<EditorPreferences, "softItalic">): string {
-  return preferences.softItalic ? "md-preview md-soft-italic" : "md-preview";
+export function contentClassFor(preferences: Pick<EditorPreferences, "softItalic"> & Partial<Pick<EditorPreferences, "softItalicBold">>): string {
+  if (!preferences.softItalic) return "md-preview";
+  return preferences.softItalicBold ? "md-preview md-soft-italic md-soft-italic-bold" : "md-preview md-soft-italic";
 }
 
 function readThemeColor(name: string, fallback: string): string {
