@@ -107,9 +107,10 @@ export default function EditorFindReplace({
     const end = start + query.length;
     el.focus();
     el.setSelectionRange(start, end);
-    // 估算捲動位置讓選取處落在中間(textarea 沒有精準 API,用比例近似)
+    // 輸入框不自己捲動(整頁捲):估算那一筆在框裡的高度,把頁面捲到它在畫面中間
     const ratio = start / Math.max(1, content.length);
-    el.scrollTop = Math.max(0, ratio * el.scrollHeight - el.clientHeight / 2);
+    const top = el.getBoundingClientRect().top + window.scrollY + ratio * el.scrollHeight;
+    window.scrollTo({ top: Math.max(0, top - window.innerHeight / 2) });
   }
 
   function goPrev() {

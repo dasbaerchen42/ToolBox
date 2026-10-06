@@ -199,7 +199,8 @@ mark[class*="hl-"] { color: inherit; border-radius: 0.2em; padding: 0 0.1em; }
 .md-preview s { text-decoration: line-through; opacity: 0.7; }
 
 /* 所見即所得的編輯區:長得跟預覽一樣,只是可以打字 */
-.rich-editor .ProseMirror { outline: none; min-height: 100%; }
+/* 不自己捲動:內容多長編輯區就多長,整頁只有一條捲軸 */
+.rich-editor .ProseMirror { outline: none; min-height: 60vh; }
 .rich-editor .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   color: var(--ink-tertiary);

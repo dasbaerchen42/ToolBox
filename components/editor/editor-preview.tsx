@@ -57,10 +57,10 @@ export default function EditorPreview({
     <div className={`w-full ${className}`}>
       <div className={`rounded-3xl border p-4 shadow-sm ${theme.border} ${theme.textareaBg}`}>
         {error ? (
-          <div className={`h-[70vh] text-sm ${theme.mutedText}`}>{error}</div>
+          <div className={`min-h-[60vh] text-sm ${theme.mutedText}`}>{error}</div>
         ) : (
           <div
-            className={`${contentClassFor(preferences)} h-[70vh] overflow-auto`}
+            className={`${contentClassFor(preferences)} min-h-[60vh]`}
             style={{
               fontSize: `${preferences.fontSize}px`,
               lineHeight: preferences.lineHeight,
