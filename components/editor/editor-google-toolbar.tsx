@@ -9,6 +9,7 @@ import {
 import EditorToolbar from "@/components/editor/editor-toolbar";
 import { exportDoc, importDoc, extractDocId } from "@/lib/google-docs";
 import { type WritingDoc, createNewDoc } from "@/lib/storage";
+import { stripRichTags } from "@/lib/rich-text";
 
 type ToolbarTheme = ComponentProps<typeof EditorToolbar>["theme"];
 
@@ -68,7 +69,8 @@ function GoogleActions({ activeDoc, updateActiveDoc, addDoc, theme }: Props) {
         const { documentId, url, isUpdate } = await exportDoc(
           tokenResponse.access_token,
           activeDoc.title,
-          activeDoc.content,
+          // Google Docs 這邊收純文字:文件裡的字色、底色標籤先拿掉
+          activeDoc.mode === "markdown" ? stripRichTags(activeDoc.content) : activeDoc.content,
           activeDoc.googleDocId
         );
 

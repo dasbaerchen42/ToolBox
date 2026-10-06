@@ -23,6 +23,8 @@ export type EditorPreferences = {
   letterSpacing: number;
   fontFamily: FontFamilyName;
   viewMode: EditorViewMode;
+  /** 文件要用哪種方式編輯:rich 是直接看排好的樣子,source 是改 Markdown 原文 */
+  docView: "rich" | "source";
   exportImageWidth: ExportImageWidth;
   exportImageTitle: boolean;
   exportPaginate: ExportPaginate;
@@ -58,6 +60,7 @@ export const defaultPreferences: EditorPreferences = {
   letterSpacing: 0,
   fontFamily: "mono",
   viewMode: "edit",
+  docView: "rich",
   exportImageWidth: 1080,
   exportImageTitle: false,
   exportPaginate: "auto",

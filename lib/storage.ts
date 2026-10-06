@@ -38,7 +38,8 @@ export function createNewDoc(): WritingDoc {
     id: createId(),
     title: "未命名文件",
     content: "",
-    mode: "plain",
+    // 新文件預設是「文件」:可以直接上色、對齊,存起來是 Markdown
+    mode: "markdown",
     createdAt: now,
     updatedAt: now,
   };

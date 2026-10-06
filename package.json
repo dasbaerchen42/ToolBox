@@ -12,6 +12,11 @@
   },
   "dependencies": {
     "@react-oauth/google": "^0.13.4",
+    "@tiptap/extension-text-align": "^3.31.4",
+    "@tiptap/extensions": "^3.31.4",
+    "@tiptap/pm": "^3.31.4",
+    "@tiptap/react": "^3.31.4",
+    "@tiptap/starter-kit": "^3.31.4",
     "dompurify": "^3.4.14",
     "gifenc": "^1.0.3",
     "html2canvas-pro": "^2.4.0",
@@ -20,6 +25,7 @@
     "next": "16.2.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "turndown": "^7.2.4",
     "yaml": "^2.8.3"
   },
   "devDependencies": {
@@ -28,6 +34,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/turndown": "^5.0.6",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "jest": "^30.4.2",
