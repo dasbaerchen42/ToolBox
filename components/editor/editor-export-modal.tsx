@@ -220,6 +220,7 @@ export default function EditorExportModal({
     preferences.lineHeight,
     preferences.letterSpacing,
     preferences.softItalic,
+    preferences.softItalicBold,
   ].join("\u0000");
   useEffect(() => {
     if (!open || !selectedHtml) return;
@@ -613,6 +614,13 @@ export default function EditorExportModal({
               <input type="checkbox" checked={preferences.softItalic} onChange={(e) => updatePreference({ softItalic: e.target.checked })} />
               斜體改淡色正體
             </label>
+
+            {preferences.softItalic && (
+              <label className={`flex items-center gap-2 ${theme.mutedText}`}>
+                <input type="checkbox" checked={preferences.softItalicBold} onChange={(e) => updatePreference({ softItalicBold: e.target.checked })} />
+                對白加粗
+              </label>
+            )}
 
             <label className={`flex items-center gap-2 ${theme.mutedText}`}>
               <input type="checkbox" checked={preferences.exportPageNumbers} onChange={(e) => updatePreference({ exportPageNumbers: e.target.checked })} />

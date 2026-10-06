@@ -21,7 +21,6 @@ export type EditorPreferences = {
   fontSize: number;
   lineHeight: number;
   letterSpacing: number;
-  editorWidth: "narrow" | "medium" | "wide";
   fontFamily: FontFamilyName;
   viewMode: EditorViewMode;
   exportImageWidth: ExportImageWidth;
@@ -44,6 +43,10 @@ export type EditorPreferences = {
   exportMargin: "narrow" | "normal" | "wide";
   /** 斜體改成淡色的正體(預覽與轉圖都適用) */
   softItalic: boolean;
+  /** 斜體改淡色正體時,對白(正體)要不要加粗 */
+  softItalicBold: boolean;
+  /** 編輯區下面要不要顯示格式檢查提示 */
+  showHints: boolean;
 };
 
 export const PREFERENCES_KEY = "orange-writing-preferences";
@@ -53,7 +56,6 @@ export const defaultPreferences: EditorPreferences = {
   fontSize: 16,
   lineHeight: 1.8,
   letterSpacing: 0,
-  editorWidth: "medium",
   fontFamily: "mono",
   viewMode: "edit",
   exportImageWidth: 1080,
@@ -68,4 +70,6 @@ export const defaultPreferences: EditorPreferences = {
   exportSignature: "",
   exportMargin: "normal",
   softItalic: false,
+  softItalicBold: false,
+  showHints: false,
 };

@@ -66,24 +66,11 @@ export function useEditorPreferences() {
     }));
   }
 
-  function getEditorWidthClass() {
-    switch (preferences.editorWidth) {
-      case "narrow":
-        return "max-w-2xl";
-      case "wide":
-        return "max-w-6xl";
-      case "medium":
-      default:
-        return "max-w-4xl";
-    }
-  }
-
   return {
     preferences,
     setPreferences,
     adjustFontSize,
     adjustLineHeight,
     adjustLetterSpacing,
-    getEditorWidthClass,
   };
 }

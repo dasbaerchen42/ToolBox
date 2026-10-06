@@ -4,26 +4,25 @@ import { EditorStats } from "@/lib/editor-stats";
 
 type EditorStatsBarProps = {
   stats: EditorStats;
+  /** 最後儲存時間(已格式化) */
+  savedAt: string;
+  /** 已經連到 Google Docs */
+  linked: boolean;
   theme: {
-    mutedText: string;
+    subtleText: string;
   };
 };
 
-export default function EditorStatsBar({
-  stats,
-  theme,
-}: EditorStatsBarProps) {
+/** 編輯區下面的一行小字:儲存時間、字數、段落數 */
+export default function EditorStatsBar({ stats, savedAt, linked, theme }: EditorStatsBarProps) {
   return (
-    <div className={`text-sm tracking-[0.04em] leading-7 ${theme.mutedText}`}>
-      ［字數］
-      <span className="ml-2">含標點及空白 {stats.totalChars}</span>
-      <span className="ml-3">不含空白 {stats.totalCharsNoSpaces}</span>
-      <span className="ml-3">不含標點及空白 {stats.totalCharsNoSpacesNoPunctuation}
+    <div className={`flex flex-wrap gap-x-3 gap-y-0.5 text-xs leading-6 ${theme.subtleText}`}>
+      <span>已儲存 {savedAt}</span>
+      <span title={`含標點及空白 ${stats.totalChars}・不含空白 ${stats.totalCharsNoSpaces}・不含標點及空白 ${stats.totalCharsNoSpacesNoPunctuation}`}>
+        字數 {stats.totalCharsNoSpaces}（不含標點 {stats.totalCharsNoSpacesNoPunctuation}）
       </span>
-      <span className="mx-3">｜</span>
-      <span>［行數］{stats.lineCount}</span>
-      <span className="mx-3">｜</span>
-      <span>［段落數］{stats.paragraphCount}</span>
+      <span>{stats.lineCount} 行・{stats.paragraphCount} 段</span>
+      {linked && <span>↗ 已連結 Google Docs，下次匯出會直接複寫</span>}
     </div>
   );
 }

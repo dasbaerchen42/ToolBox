@@ -1,51 +1,30 @@
 "use client";
 
+// Google Docs 匯入/匯出:放在工具列「⋯ 更多」選單裡的兩個選項。
+
 type EditorToolbarProps = {
   onExport: () => void;
   onImport: () => void;
-  /** 沒設 NEXT_PUBLIC_GOOGLE_CLIENT_ID 時為 false:按鈕停用,編輯器其餘功能照常 */
+  /** 沒設 NEXT_PUBLIC_GOOGLE_CLIENT_ID 時為 false:選項停用,編輯器其餘功能照常 */
   googleEnabled: boolean;
   theme: {
-    border: string;
-    panelBg: string;
     mutedText: string;
-    secondaryButton: string;
-    secondaryButtonText: string;
-    primaryButton: string;
-    primaryButtonText: string;
+    subtleText?: string;
   };
 };
 
-export default function EditorToolbar({
-  onExport,
-  onImport,
-  googleEnabled,
-  theme,
-}: EditorToolbarProps) {
-  if (!googleEnabled) {
-    return (
-      <p className={`text-xs leading-6 ${theme.mutedText}`}>
-        這個站沒有設定 Google Client ID，Google Docs 匯入匯出停用中。
-        編輯器其餘功能都可以照常使用。
-      </p>
-    );
-  }
+export const MENU_ITEM = "flex w-full items-center rounded-xl px-3 py-2 text-left text-sm transition hover:bg-(--paper-bg-3) disabled:opacity-40";
 
+export default function EditorToolbar({ onExport, onImport, googleEnabled, theme }: EditorToolbarProps) {
   return (
-    <div className="flex w-full gap-2">
-      <button
-        onClick={onImport}
-        className={`flex-1 rounded-2xl border px-3 py-3 text-sm font-medium tracking-[0.06em] transition ${theme.secondaryButton} ${theme.secondaryButtonText}`}
-      >
-        匯入
+    <>
+      <button type="button" role="menuitem" onClick={onImport} disabled={!googleEnabled} className={MENU_ITEM}>
+        從 Google Docs 匯入
       </button>
-
-      <button
-        onClick={onExport}
-        className={`flex-1 rounded-2xl px-3 py-3 text-sm font-medium tracking-[0.06em] transition ${theme.primaryButton} ${theme.primaryButtonText}`}
-      >
-        匯出
+      <button type="button" role="menuitem" onClick={onExport} disabled={!googleEnabled} className={MENU_ITEM}>
+        匯出到 Google Docs
       </button>
-    </div>
+      {!googleEnabled && <p className={`px-3 pb-1 text-xs ${theme.mutedText}`}>這個站沒有設定 Google Client ID，Google Docs 功能停用中。</p>}
+    </>
   );
 }
