@@ -260,57 +260,69 @@ export default function EditorPage() {
                     匯出圖片
                   </button>
                 </div>
-
-                <EditorMainToolbar
-                  onUndo={doUndo}
-                  onRedo={doRedo}
-                  canUndo={richActive ? !!richHistory?.canUndo : history.canUndo}
-                  canRedo={richActive ? !!richHistory?.canRedo : history.canRedo}
-                  findOpen={findOpen}
-                  onToggleFind={() => setFindOpen(!findOpen)}
-                  formatBar={richActive && richEditor ? <RichFormatBar editor={richEditor} theme={theme} /> : null}
-                  viewToggle={
-                    isDoc ? (
-                      <DocViewToggle
-                        value={preferences.docView}
-                        onChange={(docView) => setPreferences((prev) => ({ ...prev, docView }))}
-                        theme={theme}
-                      />
-                    ) : renderable ? (
-                      <EditorViewToggle
-                        viewMode={viewMode}
-                        onChange={(next) => setPreferences((prev) => ({ ...prev, viewMode: next }))}
-                        theme={theme}
-                      />
-                    ) : null
-                  }
-                  onPaste={() => void pasteFromClipboard(false)}
-                  onPasteExport={() => void pasteFromClipboard(true)}
-                  googleItems={
-                    <EditorGoogleToolbar activeDoc={activeDoc} updateActiveDoc={updateActiveDoc} addDoc={addDoc} theme={theme} />
-                  }
-                  settings={
-                    <EditorSettingsPanel
-                      preferences={preferences}
-                      currentMode={activeDoc.mode}
-                      onChangeMode={(mode) => updateActiveDoc({ mode })}
-                      setPreferences={setPreferences}
-                      theme={theme}
-                      adjustFontSize={adjustFontSize}
-                      adjustLineHeight={adjustLineHeight}
-                      adjustLetterSpacing={adjustLetterSpacing}
-                    />
-                  }
-                  onExportImage={() => setExportOpen(true)}
-                  theme={theme}
-                />
               </div>
 
               <div
                 onKeyDown={handleEditorKeyDown}
                 className="flex min-h-0 flex-1 flex-col"
               >
-                <div className={`mx-auto w-full ${areaWidthClass}`}>
+                {/* 工具列與尋找面板:往下捲時固定在畫面頂端 */}
+                <div className={`sticky top-0 z-30 mx-auto w-full ${areaWidthClass} ${theme.pageBg}`}>
+                    <EditorMainToolbar
+                      onUndo={doUndo}
+                      onRedo={doRedo}
+                      canUndo={richActive ? !!richHistory?.canUndo : history.canUndo}
+                      canRedo={richActive ? !!richHistory?.canRedo : history.canRedo}
+                      findOpen={findOpen}
+                      onToggleFind={() => setFindOpen(!findOpen)}
+                      formatBar={richActive && richEditor ? <RichFormatBar editor={richEditor} theme={theme} /> : null}
+                      modeControl={
+                        isDoc && !richActive ? (
+                          <button
+                            type="button"
+                            onClick={() => setPreferences((prev) => ({ ...prev, docView: "rich" }))}
+                            title="現在是原始語法（Markdown）；回到直接看排好樣子的編輯模式"
+                            className={`h-9 shrink-0 rounded-full border px-3 text-sm ${theme.border} ${theme.primaryButton} ${theme.primaryButtonText}`}
+                          >
+                            ← 回到編輯模式
+                          </button>
+                        ) : renderable ? (
+                          <EditorViewToggle
+                            viewMode={viewMode}
+                            onChange={(next) => setPreferences((prev) => ({ ...prev, viewMode: next }))}
+                            theme={theme}
+                          />
+                        ) : null
+                      }
+                      viewItems={
+                        isDoc ? (
+                          <DocViewToggle
+                            value={preferences.docView}
+                            onChange={(docView) => setPreferences((prev) => ({ ...prev, docView }))}
+                            theme={theme}
+                          />
+                        ) : null
+                      }
+                      onPaste={() => void pasteFromClipboard(false)}
+                      onPasteExport={() => void pasteFromClipboard(true)}
+                      googleItems={
+                        <EditorGoogleToolbar activeDoc={activeDoc} updateActiveDoc={updateActiveDoc} addDoc={addDoc} theme={theme} />
+                      }
+                      settings={
+                        <EditorSettingsPanel
+                          preferences={preferences}
+                          currentMode={activeDoc.mode}
+                          onChangeMode={(mode) => updateActiveDoc({ mode })}
+                          setPreferences={setPreferences}
+                          theme={theme}
+                          adjustFontSize={adjustFontSize}
+                          adjustLineHeight={adjustLineHeight}
+                          adjustLetterSpacing={adjustLetterSpacing}
+                        />
+                      }
+                      onExportImage={() => setExportOpen(true)}
+                      theme={theme}
+                    />
                   <EditorFindReplace
                     content={activeDoc.content}
                     textareaRef={textareaRef}

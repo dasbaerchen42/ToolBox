@@ -39,7 +39,12 @@ function Inner({ initialHtml, content, onChange, onReady, preferences, theme, cl
     extensions: [...RICH_EXTENSIONS, Placeholder.configure({ placeholder: "在這裡開始寫字……" })],
     content: initialHtml,
     immediatelyRender: false,
-    editorProps: { attributes: { class: `${contentClassFor(preferences)} h-full`, "aria-label": "文件內容" } },
+    editorProps: {
+      attributes: { class: `${contentClassFor(preferences)} h-full`, "aria-label": "文件內容" },
+      // 工具列固定在頂端:游標跑到畫面邊緣時,捲動要留出工具列的高度
+      scrollMargin: { top: 140, bottom: 80, left: 0, right: 0 },
+      scrollThreshold: { top: 140, bottom: 80, left: 0, right: 0 },
+    },
     onUpdate: ({ editor: current }) => {
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => save(current), SAVE_DELAY_MS);
@@ -76,7 +81,7 @@ function Inner({ initialHtml, content, onChange, onReady, preferences, theme, cl
       <div className={`rounded-3xl border p-4 shadow-sm ${theme.border} ${theme.textareaBg}`}>
         <EditorContent
           editor={editor}
-          className="rich-editor h-[70vh] overflow-auto"
+          className="rich-editor"
           style={{
             fontSize: `${preferences.fontSize}px`,
             lineHeight: preferences.lineHeight,
@@ -108,7 +113,7 @@ export default function RichEditor(props: Props) {
   if (initialHtml === null) {
     return (
       <div className={`w-full ${props.className ?? ""}`}>
-        <div className={`h-[calc(70vh+2rem)] rounded-3xl border p-4 ${props.theme.border} ${props.theme.textareaBg}`} />
+        <div className={`min-h-[calc(60vh+2rem)] rounded-3xl border p-4 ${props.theme.border} ${props.theme.textareaBg}`} />
       </div>
     );
   }
