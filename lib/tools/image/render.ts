@@ -15,6 +15,7 @@ import {
   type WatermarkSettings,
 } from "./watermark";
 import { canvasFontFamily } from "@/lib/web-fonts";
+import { drawTextLayer, type TextLayer } from "./text";
 import type {
   Axis,
   MaskRect,
@@ -150,6 +151,33 @@ export async function applyMasks(
           ctx.fillStyle = mask.color;
           ctx.fillRect(mask.x, mask.y, mask.width, mask.height);
         }
+      },
+    });
+
+    return toWorkImage(blob, image.name);
+  } finally {
+    bitmap.close();
+  }
+}
+
+/** 放字:把每段字壓進圖裡。families 是每段字已經換成真實字體名稱的 font-family */
+export async function applyTextLayers(
+  image: WorkImage,
+  layers: TextLayer[],
+  families: Record<string, string>,
+  output: OutputOptions
+): Promise<WorkImage> {
+  const bitmap = await decode(image.blob, image.name);
+
+  try {
+    const blob = await drawToBlob({
+      width: image.width,
+      height: image.height,
+      background: null,
+      output,
+      draw: (ctx) => {
+        ctx.drawImage(bitmap, 0, 0);
+        for (const layer of layers) drawTextLayer(ctx, layer, families[layer.id] ?? "sans-serif");
       },
     });
 

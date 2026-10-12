@@ -12,7 +12,7 @@ export const TOOLS: { key: ToolKey; label: string; hint: string }[] = [
   { key: "slice", label: "影像切割", hint: "自動等分、自由下刀、框選裁切" },
   { key: "merge", label: "圖片拼接", hint: "照順序接成一張" },
   { key: "frame", label: "尺寸邊框", hint: "描邊、補成指定比例" },
-  { key: "mark", label: "文字標記", hint: "浮水印、局部遮罩" },
+  { key: "mark", label: "文字標記", hint: "放字、浮水印、局部遮罩" },
   { key: "print", label: "效果沖印", hint: "網點、孔版、拍立得、郵票、海報、社群介面" },
 ];
 

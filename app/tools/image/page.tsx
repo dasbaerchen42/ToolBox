@@ -20,6 +20,7 @@ import {
   applyWatermark,
   prepareWatermarkFont,
   applyMasks,
+  applyTextLayers,
   clearColorCache,
   convertForOutput,
   createWorkImage,
@@ -43,6 +44,8 @@ import Sidebar, { TOOLS, type ToolKey } from "./_components/Sidebar";
 import { WorkbenchShell, ToolPane, EmptyWorkspace } from "./_components/WorkbenchLayout";
 import { Segmented, StationHint } from "./_components/controls";
 import MaskTool from "./_components/MaskTool";
+import TextTool from "./_components/TextTool";
+import type { TextLayer } from "@/lib/tools/image/text";
 import SliceTool from "./_components/SliceTool";
 import MergeTool from "./_components/MergeTool";
 import FrameTool, { type FrameSettings } from "./_components/FrameTool";
@@ -62,7 +65,7 @@ export default function ImageWorkbenchPage() {
 
   const [tool, setTool] = useState<ToolKey>("slice");
   /** 文字標記站裡的分頁 */
-  const [markTab, setMarkTab] = useState<"watermark" | "mask">("watermark");
+  const [markTab, setMarkTab] = useState<"text" | "watermark" | "mask">("text");
   const [downloadOpen, setDownloadOpen] = useState(false);
 
   useEffect(() => {
@@ -286,6 +289,14 @@ export default function ImageWorkbenchPage() {
       const result = await applyMasks(active, masks, WORKING_OUTPUT);
       replaceImage(active.id, [result]);
       return `蓋掉 ${masks.length} 塊。`;
+    });
+
+  const handleText = (layers: TextLayer[], families: Record<string, string>) =>
+    run(async () => {
+      if (!active) return;
+      const result = await applyTextLayers(active, layers, families, WORKING_OUTPUT);
+      replaceImage(active.id, [result]);
+      return `放上 ${layers.length} 段字。`;
     });
 
   const handleSlice = (spans: Span[], axis: Axis) =>
@@ -595,11 +606,18 @@ export default function ImageWorkbenchPage() {
                 t={t}
                 label="文字標記"
                 options={[
+                  { value: "text", label: "放字" },
                   { value: "watermark", label: "浮水印" },
                   { value: "mask", label: "局部遮罩" },
                 ]}
               />
             </div>
+            {markTab === "text" &&
+              (active ? (
+                <TextTool key={active.id} image={active} busy={busy} t={t} onApply={(layers, families) => void handleText(layers, families)} />
+              ) : (
+                needImage
+              ))}
             {markTab === "watermark" && (
             <WatermarkTool
               images={selected}
