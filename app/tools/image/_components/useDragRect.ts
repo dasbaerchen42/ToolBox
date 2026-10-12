@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { clampRect, rectFromPoints } from "@/lib/tools/image/geometry";
+import { clampRect, ratioRectFromPoints, rectFromPoints } from "@/lib/tools/image/geometry";
 import type { Point, Rect, Size } from "@/lib/tools/image/types";
 import { pointFromEvent } from "./ImageStage";
 import type { StagePointerHandlers } from "./ImageStage";
@@ -16,6 +16,8 @@ type Options = {
   onTap?: (point: Point) => void;
   /** 小於這個邊長就算「點一下」而不是拖曳;觸控比滑鼠容易晃,要放寬一點 */
   tapThreshold?: number;
+  /** 鎖定比例(寬/高);不給就是自由拖 */
+  ratio?: number | null;
 };
 
 /**
@@ -30,7 +32,10 @@ export function useDragRect({
   onComplete,
   onTap,
   tapThreshold = 2,
+  ratio = null,
 }: Options) {
+  const toRect = (origin: Point, current: Point) =>
+    ratio ? ratioRectFromPoints(origin, current, ratio, size) : clampRect(rectFromPoints(origin, current), size);
   const ref = useRef<HTMLDivElement>(null);
   const start = useRef<Point | null>(null);
   const [draft, setDraft] = useState<Rect | null>(null);
@@ -47,7 +52,7 @@ export function useDragRect({
     }
 
     const current = pointFromEvent(element, event, size);
-    const rect = clampRect(rectFromPoints(origin, current), size);
+    const rect = toRect(origin, current);
 
     // 沒拖出面積就當成單純點一下
     if (rect.width < tapThreshold && rect.height < tapThreshold) {
@@ -79,7 +84,7 @@ export function useDragRect({
       if (!element || !origin) return;
 
       const current = pointFromEvent(element, event, size);
-      setDraft(clampRect(rectFromPoints(origin, current), size));
+      setDraft(toRect(origin, current));
     },
 
     onPointerUp: finish,

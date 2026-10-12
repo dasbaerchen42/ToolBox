@@ -8,13 +8,14 @@ import {
   normalizeCuts,
   type Span,
 } from "@/lib/tools/image/slice";
-import { isUsableRect } from "@/lib/tools/image/geometry";
+import { isUsableRect, largestRatioRect } from "@/lib/tools/image/geometry";
+import type { Ratio } from "@/lib/tools/image/frame";
 import type { Axis, Rect, WorkImage } from "@/lib/tools/image/types";
 import type { ThemeClasses } from "@/lib/theme";
 import ImageStage, { percent } from "./ImageStage";
 import { useDragRect } from "./useDragRect";
 import { ToolPane } from "./WorkbenchLayout";
-import { ActionButton, Field, NumberField, Segmented, StationHint } from "./controls";
+import { ActionButton, Field, NumberField, RatioPicker, Segmented, StationHint } from "./controls";
 
 type Mode = "equal" | "free" | "crop";
 
@@ -39,6 +40,8 @@ export default function SliceTool({ image, busy, t, onSlice, onCrop }: Props) {
   const [parts, setParts] = useState(2);
   const [freeCuts, setFreeCuts] = useState<number[]>([]);
   const [crop, setCrop] = useState<Rect | null>(null);
+  /** 框選裁切鎖定的比例;null 是不限 */
+  const [cropRatio, setCropRatio] = useState<Ratio | null>(null);
 
   const total = axis === "y" ? image.height : image.width;
 
@@ -56,6 +59,7 @@ export default function SliceTool({ image, busy, t, onSlice, onCrop }: Props) {
     size: image,
     enabled: !busy,
     tapThreshold: 6,
+    ratio: mode === "crop" && cropRatio ? cropRatio.w / cropRatio.h : null,
     onComplete: (rect) => {
       if (mode === "crop") setCrop(rect);
     },
@@ -127,7 +131,7 @@ export default function SliceTool({ image, busy, t, onSlice, onCrop }: Props) {
             {mode === "equal" &&
               "填份數，刀會自己排好；除不盡時餘數分給前面幾段，不會留下一條一像素的尾巴。"}
             {mode === "free" && "在圖上點一下就下一刀，點幾刀就切幾段。"}
-            {mode === "crop" && "拖一個框，套用之後只留下框裡面那塊。"}
+            {mode === "crop" && "拖一個框，套用之後只留下框裡面那塊。選了比例，拖出來的框就固定是那個比例。"}
           </StationHint>
 
           <Field label="模式" t={t}>
@@ -156,6 +160,21 @@ export default function SliceTool({ image, busy, t, onSlice, onCrop }: Props) {
                   { value: "y", label: "橫刀（分上下）" },
                   { value: "x", label: "直刀（分左右）" },
                 ]}
+              />
+            </Field>
+          )}
+
+          {mode === "crop" && (
+            <Field label="比例" t={t}>
+              <RatioPicker
+                value={cropRatio}
+                allowFree
+                onChange={(next) => {
+                  setCropRatio(next);
+                  // 選了比例就先擺一個最大、置中的框,不想調的話直接套用
+                  if (next) setCrop(largestRatioRect(image, next.w / next.h));
+                }}
+                t={t}
               />
             </Field>
           )}
