@@ -46,6 +46,7 @@ function deriveVars(input) {
     "--ink-tertiary": blend(ink, bg, 0.58),
     "--ink-black": blend(ink, "#000000", 0.1),
     "--accent": accent,
+    "--accent-fill": accent,
     "--accent-soft": blend(accent, bg, 0.3),
     "--on-accent": contrastRatio("#ffffff", accent) >= contrastRatio("#1a1a1a", accent) ? "#ffffff" : "#1a1a1a",
     "--danger": dark ? SEMANTIC.danger.dark : SEMANTIC.danger.light,
@@ -63,7 +64,9 @@ const PRESETS = [
     input: { bg: "#fcfcfb", bg2: "#f1f3ee", ink: "#2e3330", accent: "#8a9a7b" },
     type: { letterSpacing: "0.06em", lineHeight: "1.9" },
     // 規範:按鈕是白字、線是 #E8EAE5、錯誤色用磚色
-    overrides: { "--on-accent": "#ffffff", "--border-light": "#e8eae5", "--danger": "#b4553f" },
+    // 按鈕這類白字的色塊用規範的「鼠尾草深」#75856A(白字對比 3.95);
+    // 引用線、焦點框、連結這些裝飾還是原本的鼠尾草綠
+    overrides: { "--accent-fill": "#75856a", "--on-accent": "#ffffff", "--border-light": "#e8eae5", "--danger": "#b4553f" },
   },
   {
     id: "grape",

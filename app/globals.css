@@ -1,6 +1,12 @@
 @import "./theme.css";
 @import "tailwindcss";
 
+/* 按鈕等填滿色塊的主色:主題沒指定(例如舊的自訂配色)就跟主色一樣。
+   用 :where 讓它的權重是 0,主題裡有寫的一定蓋得過 */
+:where(:root) {
+  --accent-fill: var(--accent);
+}
+
 :root {
   /* 品牌層(非色彩)token */
   --radius: 3px;

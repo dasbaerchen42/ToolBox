@@ -25,13 +25,13 @@ const TOKEN_CLASSES: ThemeClasses = {
   input:
     "border-(--border-light) bg-(--paper-bg) text-(--ink-primary) placeholder:text-(--ink-tertiary)",
   muted: "text-(--ink-secondary)",
-  primary: "border-(--accent) bg-(--accent) text-(--on-accent) hover:opacity-90",
+  primary: "border-(--accent-fill) bg-(--accent-fill) text-(--on-accent) hover:opacity-90",
   secondary:
     "border-(--border-dark) bg-(--paper-bg-2) text-(--ink-primary) hover:bg-(--paper-bg-3)",
-  selected: "border-(--accent) bg-(--accent) text-(--on-accent)",
+  selected: "border-(--accent-fill) bg-(--accent-fill) text-(--on-accent)",
   unselected: "border-(--border-light) bg-(--paper-bg-2) text-(--ink-secondary)",
   divider: "border-(--border-light)",
-  listSelected: "border-(--accent) bg-(--accent) text-(--on-accent) shadow-sm",
+  listSelected: "border-(--accent-fill) bg-(--accent-fill) text-(--on-accent) shadow-sm",
   listUnselected:
     "border-(--border-light) bg-(--paper-bg-2) text-(--ink-primary) hover:bg-(--paper-bg-3)",
 };
@@ -71,7 +71,7 @@ export const EDITOR_THEME: EditorThemeConfig = {
   subtleText: "text-(--ink-tertiary)",
   inputBg: "bg-(--paper-bg)",
   textareaBg: "bg-(--paper-bg-2)",
-  primaryButton: "bg-(--accent) hover:opacity-90",
+  primaryButton: "bg-(--accent-fill) hover:opacity-90",
   primaryButtonText: "text-(--on-accent)",
   secondaryButton: "border-(--border-dark) hover:bg-(--paper-bg-3)",
   secondaryButtonText: "text-(--ink-primary)",

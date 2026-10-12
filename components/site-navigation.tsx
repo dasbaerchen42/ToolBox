@@ -36,7 +36,7 @@ export default function SiteNavigation() {
                 href={item.href}
                 className={`shrink-0 rounded-xl border px-3 py-2 text-sm tracking-[0.04em] transition ${
                   isActive
-                    ? "border-(--accent) bg-(--accent) text-(--on-accent)"
+                    ? "border-(--accent-fill) bg-(--accent-fill) text-(--on-accent)"
                     : "border-(--border-light) text-(--ink-secondary) hover:bg-(--paper-bg-3)"
                 }`}
               >

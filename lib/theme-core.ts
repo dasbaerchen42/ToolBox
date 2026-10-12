@@ -81,6 +81,8 @@ export function deriveVars(input: BaseInput): ThemeVars {
     "--ink-tertiary": blend(ink, bg, 0.58),
     "--ink-black": blend(ink, "#000000", 0.1),
     "--accent": accent,
+    // 填滿色塊(按鈕、選取中)用的主色;有的主題會換深一階,上面的白字才清楚
+    "--accent-fill": accent,
     "--accent-soft": blend(accent, bg, 0.3),
     "--on-accent":
       contrastRatio("#ffffff", accent) >= contrastRatio("#1a1a1a", accent) ? "#ffffff" : "#1a1a1a",

@@ -241,7 +241,7 @@ export default function TextTool({ image, busy, t, onApply }: Props) {
                 data-remove="1"
                 aria-label="刪掉這段字"
                 onClick={() => remove(selected.id)}
-                className="pointer-events-auto absolute -left-3 -top-3 flex h-6 w-6 items-center justify-center rounded-full bg-(--accent) text-xs text-(--on-accent) shadow"
+                className="pointer-events-auto absolute -left-3 -top-3 flex h-6 w-6 items-center justify-center rounded-full bg-(--accent-fill) text-xs text-(--on-accent) shadow"
               >
                 ✕
               </button>
@@ -251,7 +251,7 @@ export default function TextTool({ image, busy, t, onApply }: Props) {
             <div
               data-handle="1"
               title="拖這個圓點旋轉、縮放"
-              className="absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize rounded-full border-2 border-white bg-(--accent) shadow"
+              className="absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize rounded-full border-2 border-white bg-(--accent-fill) shadow"
               style={{ left: percent(handle.x, image.width), top: percent(handle.y, image.height) }}
             />
           )}
