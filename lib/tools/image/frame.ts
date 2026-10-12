@@ -37,12 +37,17 @@ export function borderLayout(
 
 export type Ratio = { w: number; h: number };
 
+/** 尺寸邊框、棋盤拼貼、框選裁切共用的比例清單(直式在前、橫式在後) */
 export const RATIO_PRESETS: { label: string; ratio: Ratio }[] = [
   { label: "1:1", ratio: { w: 1, h: 1 } },
   { label: "4:5", ratio: { w: 4, h: 5 } },
   { label: "3:4", ratio: { w: 3, h: 4 } },
-  { label: "16:9", ratio: { w: 16, h: 9 } },
+  { label: "2:3", ratio: { w: 2, h: 3 } },
   { label: "9:16", ratio: { w: 9, h: 16 } },
+  { label: "5:4", ratio: { w: 5, h: 4 } },
+  { label: "4:3", ratio: { w: 4, h: 3 } },
+  { label: "3:2", ratio: { w: 3, h: 2 } },
+  { label: "16:9", ratio: { w: 16, h: 9 } },
 ];
 
 /**

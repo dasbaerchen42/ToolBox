@@ -3,7 +3,9 @@ import {
   clampRect,
   isPointInRect,
   isUsableRect,
+  largestRatioRect,
   moveRectWithin,
+  ratioRectFromPoints,
   rectFromPoints,
   toImagePoint,
 } from "./geometry";
@@ -14,7 +16,7 @@ import {
   normalizeCuts,
   spanToRect,
 } from "./slice";
-import { coverRect, layoutGrid, layoutMerge, suggestCellWidth } from "./merge";
+import { balancedRows, coverRect, layoutGrid, layoutJustified, layoutMerge, layoutWaterfall, suggestCellWidth } from "./merge";
 import { borderLayout, ratioLayout } from "./frame";
 import { baseNameOf, buildFileName, supportsAlpha, supportsQuality } from "./format";
 
@@ -409,5 +411,73 @@ describe("merge:棋盤拼貼", () => {
   it("預設格子寬度取最大那張,避免把圖放大到糊掉", () => {
     expect(suggestCellWidth([{ width: 300, height: 1 }, { width: 900, height: 1 }])).toBe(900);
     expect(suggestCellWidth([])).toBe(1000);
+  });
+});
+
+describe("merge:瀑布式與河道式", () => {
+  const sizes = [
+    { width: 400, height: 300 },
+    { width: 200, height: 400 },
+    { width: 400, height: 400 },
+    { width: 800, height: 400 },
+  ];
+
+  it("瀑布式 1 欄 = 往下接(跟單向接圖一樣)", () => {
+    const flow = layoutWaterfall(sizes, { lines: 1, fit: "max", align: "center", gap: 0 });
+    const linear = layoutMerge(sizes, { axis: "y", fit: "max", align: "center", gap: 0 });
+    expect(flow).toEqual(linear);
+  });
+
+  it("瀑布式多欄:每張同寬,放進目前最短的那一欄", () => {
+    const { canvas, placements } = layoutWaterfall(sizes, { lines: 2, fit: "min", align: "center", gap: 10 });
+    expect(placements.every((p) => p.width === 200)).toBe(true);
+    expect(canvas.width).toBe(200 * 2 + 10);
+    // 第一張 150 高放左欄、第二張 400 高放右欄、第三張 200 高放回左欄(比較短)
+    expect(placements[2]).toMatchObject({ x: 0, y: 150 + 10 });
+    expect(canvas.height).toBe(Math.max(...placements.map((p) => p.y + p.height)));
+  });
+
+  it("河道式 1 排 = 往右接", () => {
+    const flow = layoutJustified(sizes, { lines: 1, fit: "max", align: "center", gap: 0 });
+    expect(flow).toEqual(layoutMerge(sizes, { axis: "x", fit: "max", align: "center", gap: 0 }));
+  });
+
+  it("河道式多排:每排左右切齊、同一排一樣高", () => {
+    const { canvas, placements } = layoutJustified(sizes, { lines: 2, fit: "max", align: "center", gap: 8 });
+    const rows = new Map<number, typeof placements>();
+    for (const p of placements) rows.set(p.y, [...(rows.get(p.y) ?? []), p]);
+    expect(rows.size).toBe(2);
+    for (const row of rows.values()) {
+      const last = row[row.length - 1];
+      expect(last.x + last.width).toBe(canvas.width);
+      expect(new Set(row.map((p) => p.height)).size).toBe(1);
+    }
+  });
+
+  it("照順序分排,讓最寬那排盡量窄", () => {
+    expect(balancedRows([1, 1, 1, 1], 2)).toEqual([
+      [0, 1],
+      [2, 3],
+    ]);
+    expect(balancedRows([3, 1, 1, 1], 2)).toEqual([[0], [1, 2, 3]]);
+  });
+});
+
+describe("geometry:鎖定比例的裁切框", () => {
+  const size = { width: 1000, height: 800 };
+
+  it("照比例長出去,往左上拖也可以", () => {
+    expect(ratioRectFromPoints({ x: 100, y: 100 }, { x: 500, y: 200 }, 4 / 5, size)).toEqual({ x: 100, y: 100, width: 400, height: 500 });
+    expect(ratioRectFromPoints({ x: 500, y: 600 }, { x: 400, y: 100 }, 1, size)).toEqual({ x: 0, y: 100, width: 500, height: 500 });
+  });
+
+  it("碰到邊緣就等比縮小,比例不變", () => {
+    const rect = ratioRectFromPoints({ x: 900, y: 100 }, { x: 1200, y: 900 }, 1, size);
+    expect(rect).toEqual({ x: 900, y: 100, width: 100, height: 100 });
+  });
+
+  it("選了比例先擺一個最大、置中的框", () => {
+    expect(largestRatioRect(size, 4 / 5)).toEqual({ x: 180, y: 0, width: 640, height: 800 });
+    expect(largestRatioRect(size, 16 / 9)).toEqual({ x: 0, y: 119, width: 1000, height: 563 });
   });
 });

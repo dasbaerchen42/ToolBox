@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { checkCanvasSize, DEVICE_MAX_SIDE } from "@/lib/canvas-limits";
-import { RATIO_PRESETS, type Ratio } from "@/lib/tools/image/frame";
+import type { Ratio } from "@/lib/tools/image/frame";
 import {
   layoutGrid,
-  layoutMerge,
+  layoutJustified,
+  layoutWaterfall,
   suggestCellWidth,
   type GridFit,
   type MergeLayout,
@@ -20,12 +21,13 @@ import {
   ColorField,
   Field,
   NumberField,
+  RatioPicker,
   Segmented,
   StationHint,
   Toggle,
 } from "./controls";
 
-type Mode = "linear" | "grid";
+type Mode = "waterfall" | "justified" | "grid";
 
 type Props = {
   images: WorkImage[];
@@ -36,14 +38,16 @@ type Props = {
 };
 
 /**
- * 圖片拼接台。
+ * 圖片拼接。
  *
- * 兩種排列方式的差別不只是方向:
- * 單軸是「格子跟著圖走」——每張保持自己的尺寸,沿著一個方向接下去;
- * 棋盤是「圖去配合格子」——格子先固定成一樣大,照片才排得出整齊的方格。
+ * 瀑布式:每張同寬,一欄一欄往下疊;1 欄就是往下接成長條。
+ * 河道式:每張同高,一排一排往右接、每排左右切齊;1 排就是往右接成長條。
+ * 棋盤式:「圖去配合格子」——格子先固定成一樣大,照片才排得出整齊的方格。
  */
 export default function MergeTool({ images, busy, t, onMove, onMerge }: Props) {
-  const [mode, setMode] = useState<Mode>("linear");
+  const [mode, setMode] = useState<Mode>("waterfall");
+  /** 瀑布式的欄數、河道式的排數 */
+  const [lines, setLines] = useState(1);
 
   const [options, setOptions] = useState<MergeOptions>({
     axis: "y",
@@ -64,9 +68,11 @@ export default function MergeTool({ images, busy, t, onMove, onMerge }: Props) {
 
   const layout = useMemo(
     () =>
-      mode === "linear"
-        ? layoutMerge(images, options)
-        : layoutGrid(images, {
+      mode === "waterfall"
+        ? layoutWaterfall(images, { lines, fit: options.fit, align: options.align, gap: options.gap })
+        : mode === "justified"
+          ? layoutJustified(images, { lines, fit: options.fit, align: options.align, gap: options.gap })
+          : layoutGrid(images, {
             columns,
             cellWidth: effectiveCellWidth,
             ratio,
@@ -74,7 +80,7 @@ export default function MergeTool({ images, busy, t, onMove, onMerge }: Props) {
             gap: options.gap,
             lastRow,
           }),
-    [mode, images, options, columns, effectiveCellWidth, ratio, gridFit, lastRow]
+    [mode, images, options, lines, columns, effectiveCellWidth, ratio, gridFit, lastRow]
   );
 
   const [transparent, setTransparent] = useState(false);
@@ -136,9 +142,11 @@ export default function MergeTool({ images, busy, t, onMove, onMerge }: Props) {
           <Field
             label="排列方式"
             hint={
-              mode === "linear"
-                ? "每張保持自己的尺寸，沿著一個方向接下去"
-                : "格子先固定成一樣大，照片去配合格子"
+              mode === "waterfall"
+                ? "每張一樣寬，一欄一欄往下疊；1 欄就是往下接成長條"
+                : mode === "justified"
+                  ? "每張一樣高，一排一排往右接，每排左右切齊；1 排就是往右接成長條"
+                  : "格子先固定成一樣大，照片去配合格子"
             }
             t={t}
           >
@@ -147,41 +155,52 @@ export default function MergeTool({ images, busy, t, onMove, onMerge }: Props) {
               onChange={setMode}
               t={t}
               options={[
-                { value: "linear", label: "單向接圖" },
-                { value: "grid", label: "棋盤拼貼" },
+                { value: "waterfall", label: "瀑布式" },
+                { value: "justified", label: "河道式" },
+                { value: "grid", label: "棋盤式" },
               ]}
             />
           </Field>
 
-          {mode === "linear" ? (
+          {mode !== "grid" ? (
             <>
-              <Field label="方向" t={t}>
-                <Segmented
-                  value={options.axis}
-                  onChange={(value) => update("axis", value)}
+              <Field
+                label={mode === "waterfall" ? "幾欄" : "幾排"}
+                hint={lines === 1 ? (mode === "waterfall" ? "1 欄：往下接成一長條" : "1 排：往右接成一長條") : undefined}
+                t={t}
+              >
+                <NumberField
+                  value={lines}
+                  onChange={(value) => {
+                    const next = Math.max(1, Math.min(8, Math.round(value)));
+                    setLines(next);
+                    // 多欄、多排一定要統一尺寸,「各自原尺寸」換成放到最大
+                    if (next > 1 && options.fit === "none") update("fit", "max");
+                  }}
+                  min={1}
+                  max={8}
+                  label={mode === "waterfall" ? "幾欄" : "幾排"}
                   t={t}
-                  options={[
-                    { value: "y", label: "直向（往下接）" },
-                    { value: "x", label: "橫向（往右接）" },
-                  ]}
                 />
               </Field>
 
-              <Field label="對齊" t={t}>
-                <Segmented
-                  value={options.align}
-                  onChange={(value) => update("align", value)}
-                  t={t}
-                  options={[
-                    { value: "start", label: options.axis === "y" ? "靠左" : "靠上" },
-                    { value: "center", label: "置中" },
-                    { value: "end", label: options.axis === "y" ? "靠右" : "靠下" },
-                  ]}
-                />
-              </Field>
+              {lines === 1 && (
+                <Field label="對齊" t={t}>
+                  <Segmented
+                    value={options.align}
+                    onChange={(value) => update("align", value)}
+                    t={t}
+                    options={[
+                      { value: "start", label: mode === "waterfall" ? "靠左" : "靠上" },
+                      { value: "center", label: "置中" },
+                      { value: "end", label: mode === "waterfall" ? "靠右" : "靠下" },
+                    ]}
+                  />
+                </Field>
+              )}
 
               <Field
-                label={options.axis === "y" ? "寬度處理" : "高度處理"}
+                label={mode === "waterfall" ? "寬度處理" : "高度處理"}
                 hint="統一尺寸是等比縮放，不會把圖拉變形"
                 t={t}
               >
@@ -190,9 +209,9 @@ export default function MergeTool({ images, busy, t, onMove, onMerge }: Props) {
                   onChange={(value) => update("fit", value)}
                   t={t}
                   options={[
-                    { value: "none", label: "各自原尺寸" },
-                    { value: "min", label: "縮到最小那張" },
-                    { value: "max", label: "放到最大那張" },
+                    ...(lines === 1 ? [{ value: "none" as const, label: "各自原尺寸" }] : []),
+                    { value: "min" as const, label: "縮到最小那張" },
+                    { value: "max" as const, label: "放到最大那張" },
                   ]}
                 />
               </Field>
@@ -211,22 +230,7 @@ export default function MergeTool({ images, busy, t, onMove, onMerge }: Props) {
               </Field>
 
               <Field label="格子比例" t={t}>
-                <div className="flex flex-wrap gap-1.5">
-                  {RATIO_PRESETS.map((preset) => (
-                    <button
-                      key={preset.label}
-                      type="button"
-                      onClick={() => setRatio(preset.ratio)}
-                      className={`rounded-xl border px-3 py-1.5 text-xs transition ${
-                        ratio.w === preset.ratio.w && ratio.h === preset.ratio.h
-                          ? t.selected
-                          : t.unselected
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
+                <RatioPicker value={ratio} onChange={(next) => next && setRatio(next)} t={t} />
               </Field>
 
               <Field
@@ -321,7 +325,7 @@ export default function MergeTool({ images, busy, t, onMove, onMerge }: Props) {
 
           <div className={`rounded-xl border p-3 ${t.subPanel}`}>
             <p className="mb-2 text-xs tracking-[0.08em]">
-              {mode === "grid" ? "排列順序（左上到右下）" : "拼接順序"}
+              {mode === "grid" ? "排列順序（左上到右下）" : mode === "waterfall" && lines > 1 ? "排列順序（放進最短的那一欄）" : "拼接順序"}
             </p>
             <ol className="space-y-1.5">
               {images.map((image, index) => (

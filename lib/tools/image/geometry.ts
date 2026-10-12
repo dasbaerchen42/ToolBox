@@ -82,3 +82,48 @@ export function moveRectWithin(rect: Rect, delta: Point, size: Size): Rect {
     y: Math.round(Math.min(Math.max(rect.y + delta.y, 0), maxY)),
   };
 }
+
+/**
+ * 鎖定比例拖框:從起點拖到目前位置,框照 ratio(寬/高)長出去,
+ * 方向跟著拖的方向;碰到圖片邊緣就整個等比縮小,不會變形。
+ */
+export function ratioRectFromPoints(origin: Point, current: Point, ratio: number, size: Size): Rect {
+  const dx = current.x - origin.x;
+  const dy = current.y - origin.y;
+  const signX = dx < 0 ? -1 : 1;
+  const signY = dy < 0 ? -1 : 1;
+  // 拖得比較遠的那個方向決定框多大
+  let width = Math.max(Math.abs(dx), Math.abs(dy) * ratio);
+  let height = width / ratio;
+  // 朝拖曳方向最多能長多大
+  const roomX = signX > 0 ? size.width - origin.x : origin.x;
+  const roomY = signY > 0 ? size.height - origin.y : origin.y;
+  const shrink = Math.min(1, roomX / Math.max(width, 1e-9), roomY / Math.max(height, 1e-9));
+  width *= shrink;
+  height *= shrink;
+  const rect = {
+    x: signX > 0 ? origin.x : origin.x - width,
+    y: signY > 0 ? origin.y : origin.y - height,
+    width,
+    height,
+  };
+  return {
+    x: Math.round(rect.x),
+    y: Math.round(rect.y),
+    width: Math.round(rect.width),
+    height: Math.round(rect.height),
+  };
+}
+
+/** 圖片裡放得下的最大、置中的指定比例框(選了比例就先擺一個,不用自己拖) */
+export function largestRatioRect(size: Size, ratio: number): Rect {
+  let width = size.width;
+  let height = width / ratio;
+  if (height > size.height) {
+    height = size.height;
+    width = height * ratio;
+  }
+  width = Math.round(width);
+  height = Math.round(height);
+  return { x: Math.round((size.width - width) / 2), y: Math.round((size.height - height) / 2), width, height };
+}

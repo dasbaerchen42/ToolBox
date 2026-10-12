@@ -213,3 +213,111 @@ export function suggestCellWidth(sizes: Size[]): number {
   const widths = sizes.map((size) => size.width).filter((width) => width > 0);
   return widths.length > 0 ? Math.max(...widths) : 1000;
 }
+
+
+// ── 瀑布式與河道式 ────────────────────────────────────────────────────
+//
+// 瀑布式:每張縮成同樣寬,一欄一欄往下疊(放進目前最短的那一欄)。1 欄就是往下接成長條。
+// 河道式:每張縮成同樣高,一排一排往右接,每排再整排縮放到一樣寬。1 排就是往右接成長條。
+// 1 欄、1 排時直接走單向接圖(保留「各自原尺寸」與對齊)。
+
+export type FlowOptions = {
+  /** 瀑布式是欄數,河道式是排數 */
+  lines: number;
+  /** 統一成最大或最小那張(各自原尺寸只有 1 欄/1 排時有意義) */
+  fit: FitMode;
+  align: Align;
+  gap: number;
+};
+
+export function layoutWaterfall(sizes: Size[], options: FlowOptions): MergeLayout {
+  const valid = sizes.filter((size) => size.width > 0 && size.height > 0);
+  const columns = Math.max(1, Math.round(options.lines));
+  if (valid.length === 0) return { canvas: { width: 0, height: 0 }, placements: [] };
+  if (columns === 1) return layoutMerge(valid, { axis: "y", align: options.align, fit: options.fit, gap: options.gap });
+
+  const gap = Math.max(0, Math.round(options.gap));
+  const widths = valid.map((size) => size.width);
+  const columnWidth = options.fit === "min" ? Math.min(...widths) : Math.max(...widths);
+  const heights = new Array<number>(Math.min(columns, valid.length)).fill(0);
+  const used = heights.map(() => false);
+
+  const placements = valid.map((size) => {
+    const height = Math.max(1, Math.round((size.height * columnWidth) / size.width));
+    // 放進目前最短的那一欄,同樣短就放左邊的
+    let column = 0;
+    for (let i = 1; i < heights.length; i += 1) if (heights[i] < heights[column]) column = i;
+    const y = heights[column] + (used[column] ? gap : 0);
+    used[column] = true;
+    heights[column] = y + height;
+    return { x: column * (columnWidth + gap), y, width: columnWidth, height };
+  });
+
+  return {
+    canvas: { width: heights.length * columnWidth + (heights.length - 1) * gap, height: Math.max(...heights) },
+    placements,
+  };
+}
+
+/** 照順序把寬度分成 k 段,讓最寬那段盡量窄(線性分割,動態規劃) */
+export function balancedRows(widths: number[], k: number): number[][] {
+  const n = widths.length;
+  const rows = Math.max(1, Math.min(k, n));
+  const prefix = [0];
+  for (const width of widths) prefix.push(prefix[prefix.length - 1] + width);
+  const cost: number[][] = Array.from({ length: rows + 1 }, () => new Array<number>(n + 1).fill(Infinity));
+  const cut: number[][] = Array.from({ length: rows + 1 }, () => new Array<number>(n + 1).fill(0));
+  cost[0][0] = 0;
+  for (let r = 1; r <= rows; r += 1) {
+    for (let i = r; i <= n; i += 1) {
+      for (let j = r - 1; j < i; j += 1) {
+        const value = Math.max(cost[r - 1][j], prefix[i] - prefix[j]);
+        if (value < cost[r][i]) {
+          cost[r][i] = value;
+          cut[r][i] = j;
+        }
+      }
+    }
+  }
+  const groups: number[][] = [];
+  let end = n;
+  for (let r = rows; r >= 1; r -= 1) {
+    const start = cut[r][end];
+    groups.unshift(Array.from({ length: end - start }, (_, i) => start + i));
+    end = start;
+  }
+  return groups;
+}
+
+export function layoutJustified(sizes: Size[], options: FlowOptions): MergeLayout {
+  const valid = sizes.filter((size) => size.width > 0 && size.height > 0);
+  const lines = Math.max(1, Math.round(options.lines));
+  if (valid.length === 0) return { canvas: { width: 0, height: 0 }, placements: [] };
+  if (lines === 1) return layoutMerge(valid, { axis: "x", align: options.align, fit: options.fit, gap: options.gap });
+
+  const gap = Math.max(0, Math.round(options.gap));
+  const heights = valid.map((size) => size.height);
+  const base = options.fit === "min" ? Math.min(...heights) : Math.max(...heights);
+  const baseWidths = valid.map((size) => (size.width * base) / size.height);
+  const groups = balancedRows(baseWidths, lines);
+  // 最寬那排的寬度就是畫布寬;其他排整排等比放大到一樣寬(間距不跟著放大)
+  const rowWidth = (group: number[]) => group.reduce((sum, i) => sum + baseWidths[i], 0);
+  const canvasWidth = Math.round(Math.max(...groups.map((group) => rowWidth(group) + gap * (group.length - 1))));
+
+  const placements: Placement[] = new Array(valid.length);
+  let y = 0;
+  groups.forEach((group, row) => {
+    const scale = (canvasWidth - gap * (group.length - 1)) / rowWidth(group);
+    const height = Math.max(1, Math.round(base * scale));
+    let x = 0;
+    group.forEach((index, k) => {
+      // 最後一張吃掉四捨五入的誤差,右邊才會切齊
+      const width = k === group.length - 1 ? canvasWidth - x : Math.max(1, Math.round(baseWidths[index] * scale));
+      placements[index] = { x, y, width, height };
+      x += width + gap;
+    });
+    y += height + (row < groups.length - 1 ? gap : 0);
+  });
+
+  return { canvas: { width: canvasWidth, height: y }, placements };
+}

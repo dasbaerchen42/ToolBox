@@ -1,7 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { ThemeClasses } from "@/lib/theme";
+import { RATIO_PRESETS, type Ratio } from "@/lib/tools/image/frame";
 import Segmented from "@/components/segmented";
 
 // Segmented 已經提到 components/ 給社群轉換區共用,這裡轉出去讓既有的匯入不用改
@@ -145,6 +146,61 @@ export function ActionButton({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * 比例選擇:常用比例一排按鈕 + 「自訂」(自己填寬:高)。
+ * 尺寸邊框、棋盤拼貼、框選裁切共用;allowFree 時多一個「不限」(value 是 null)。
+ */
+export function RatioPicker({
+  value,
+  onChange,
+  allowFree = false,
+  t,
+}: {
+  value: Ratio | null;
+  onChange: (value: Ratio | null) => void;
+  allowFree?: boolean;
+  t: ThemeClasses;
+}) {
+  const preset = value ? RATIO_PRESETS.find((p) => p.ratio.w === value.w && p.ratio.h === value.h) : null;
+  const [custom, setCustom] = useState(() => !!value && !preset);
+  const showCustom = custom || (!!value && !preset);
+  const chip = (active: boolean) => `rounded-xl border px-3 py-1.5 text-xs transition ${active ? t.selected : t.unselected}`;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1.5">
+        {allowFree && (
+          <button type="button" onClick={() => { setCustom(false); onChange(null); }} className={chip(value === null)}>
+            不限
+          </button>
+        )}
+        {RATIO_PRESETS.map((p) => (
+          <button key={p.label} type="button" onClick={() => { setCustom(false); onChange(p.ratio); }} className={chip(!showCustom && preset === p)}>
+            {p.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => {
+            setCustom(true);
+            if (!value) onChange({ w: 7, h: 5 });
+          }}
+          className={chip(showCustom)}
+        >
+          自訂
+        </button>
+      </div>
+      {showCustom && value && (
+        <div className="flex items-center gap-2">
+          <NumberField value={value.w} onChange={(w) => onChange({ ...value, w: Math.max(1, w) })} min={1} max={100} label="比例寬" t={t} />
+          <span className={t.muted}>:</span>
+          <NumberField value={value.h} onChange={(h) => onChange({ ...value, h: Math.max(1, h) })} min={1} max={100} label="比例高" t={t} />
+        </div>
+      )}
+    </div>
   );
 }
 

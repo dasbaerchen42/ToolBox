@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import {
   borderLayout,
   ratioLayout,
-  RATIO_PRESETS,
   type Ratio,
 } from "@/lib/tools/image/frame";
 import type { Align, Rect, Size, WorkImage } from "@/lib/tools/image/types";
@@ -16,6 +15,7 @@ import {
   ColorField,
   Field,
   NumberField,
+  RatioPicker,
   Segmented,
   StationHint,
   Toggle,
@@ -204,50 +204,8 @@ export default function FrameTool({ images, busy, t, onApply }: Props) {
             {ratio && (
               <div className="space-y-3">
                 <Field label="比例" t={t}>
-                  <div className="flex flex-wrap gap-1.5">
-                    {RATIO_PRESETS.map((preset) => (
-                      <button
-                        key={preset.label}
-                        type="button"
-                        onClick={() => setRatioValue(preset.ratio)}
-                        className={`rounded-xl border px-3 py-1.5 text-xs transition ${
-                          ratioValue.w === preset.ratio.w &&
-                          ratioValue.h === preset.ratio.h
-                            ? t.selected
-                            : t.unselected
-                        }`}
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
-                  </div>
+                  <RatioPicker value={ratioValue} onChange={(next) => next && setRatioValue(next)} t={t} />
                 </Field>
-
-                <div className="flex items-end gap-2">
-                  <Field label="寬" t={t}>
-                    <NumberField
-                      value={ratioValue.w}
-                      onChange={(value) =>
-                        setRatioValue((prev) => ({ ...prev, w: Math.max(1, value) }))
-                      }
-                      min={1}
-                      label="比例寬"
-                      t={t}
-                    />
-                  </Field>
-                  <span className={`pb-2 ${t.muted}`}>:</span>
-                  <Field label="高" t={t}>
-                    <NumberField
-                      value={ratioValue.h}
-                      onChange={(value) =>
-                        setRatioValue((prev) => ({ ...prev, h: Math.max(1, value) }))
-                      }
-                      min={1}
-                      label="比例高"
-                      t={t}
-                    />
-                  </Field>
-                </div>
 
                 <Field label="原圖放在" t={t}>
                   <div className="space-y-1.5">
