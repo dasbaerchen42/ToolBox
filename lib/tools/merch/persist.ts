@@ -1,4 +1,4 @@
-// 周邊工坊的存檔:四種周邊的設計、目前在做哪一種,加上「你的照片」與去背圖。
+// 周邊工坊的存檔:三種周邊的設計、目前在做哪一種,加上「你的照片」與去背圖。
 // 設計是純 JSON;照片與去背圖是 Blob,一起放進 IndexedDB(lib/idb.ts),重新整理或下次打開都還在。
 //
 // 讀回來的東西一律當作不可信(可能是舊版存的、被改壞的):
@@ -95,15 +95,6 @@ export function sanitizeDesigns(raw: unknown): MerchDesigns {
   const card = mergeFlat(base.card, raw.card);
   card.stickers = isRecord(raw.card) ? readPlaced(raw.card.stickers) : base.card.stickers;
 
-  const charm = mergeFlat(base.charm, raw.charm);
-  charm.pieces =
-    isRecord(raw.charm) && Array.isArray(raw.charm.pieces)
-      ? raw.charm.pieces.filter(
-          (piece): piece is MerchDesigns["charm"]["pieces"][number] =>
-            isRecord(piece) && typeof piece.id === "string" && typeof piece.artId === "string" && isNumber(piece.cell)
-        ).map((piece) => withRecolor(piece, piece as unknown as Record<string, unknown>))
-      : base.charm.pieces;
-
   const omamori = mergeFlat(base.omamori, raw.omamori);
   if (isRecord(raw.omamori) && (raw.omamori.bell === null || typeof raw.omamori.bell === "string")) {
     omamori.bell = raw.omamori.bell as string | null;
@@ -131,7 +122,8 @@ export function sanitizeDesigns(raw: unknown): MerchDesigns {
 
   if (!["none", "lace", "beads", "motif"].includes(card.frame)) card.frame = base.card.frame;
 
-  return { card, charm, omamori, acrylic };
+  // 舊存檔的搖搖吊飾(已拿掉)不讀
+  return { card, omamori, acrylic };
 }
 
 /** 讀回整份存檔;不是這個格式就回 null(當作第一次來) */

@@ -9,15 +9,6 @@ import {
   triangleAffine,
   type Quad,
 } from "./perspective";
-import {
-  bodyFromCells,
-  containerDistance,
-  kineticEnergy,
-  partPosition,
-  step,
-  type Body,
-  type Container,
-} from "./physics";
 
 function image(width: number, height: number, paint: (x: number, y: number) => number[]): Pixels {
   const data = new Uint8ClampedArray(width * height * 4);
@@ -130,76 +121,6 @@ describe("perspective:透視", () => {
   });
 });
 
-describe("physics:搖搖吊飾", () => {
-  const star = [-1, 0, -1, 0, 0, 0, -1, 0, -1]; // 3×3 的十字
-  const box: Container = { kind: "rect", cx: 100, cy: 100, hw: 80, hh: 80, round: 10 };
-
-  it("剛體由有豆子的格子組成,重心在中間", () => {
-    const body = bodyFromCells(star, 3, 3, 10)!;
-    expect(body.parts).toHaveLength(5);
-    expect(body.mass).toBe(5);
-    const cx = body.parts.reduce((s, p) => s + p.dx, 0);
-    expect(cx).toBeCloseTo(0, 6);
-    expect(bodyFromCells([-1, -1], 2, 1, 10)).toBeNull();
-  });
-
-  it("容器的帶號距離:裡面負、外面正", () => {
-    expect(containerDistance(box, { x: 100, y: 100 })).toBeLessThan(0);
-    expect(containerDistance(box, { x: 300, y: 100 })).toBeGreaterThan(0);
-    expect(containerDistance({ kind: "circle", cx: 0, cy: 0, r: 10 }, { x: 10, y: 0 })).toBeCloseTo(0, 6);
-  });
-
-  function drop(count: number): Body[] {
-    const bodies: Body[] = [];
-    for (let k = 0; k < count; k += 1) {
-      const body = bodyFromCells(star, 3, 3, 10)!;
-      body.x = 70 + k * 25;
-      body.y = 60;
-      body.av = k % 2 ? 1 : -1;
-      bodies.push(body);
-    }
-    return bodies;
-  }
-
-  it("在重力下落到底、停下來,而且都還在容器裡", () => {
-    const bodies = drop(3);
-    for (let i = 0; i < 600; i += 1) step(bodies, box, 1 / 60, { gravity: { x: 0, y: 900 } });
-
-    expect(kineticEnergy(bodies)).toBeLessThan(50);
-    for (const body of bodies) {
-      expect(body.y).toBeGreaterThan(130); // 掉到下半部
-      for (const part of body.parts) {
-        expect(containerDistance(box, partPosition(body, part))).toBeLessThan(part.r * 0.5);
-      }
-    }
-  });
-
-  it("零件之間不會疊在一起", () => {
-    const bodies = drop(4);
-    for (let i = 0; i < 600; i += 1) step(bodies, box, 1 / 60, { gravity: { x: 0, y: 900 } });
-    for (let i = 0; i < bodies.length; i += 1) {
-      for (let k = i + 1; k < bodies.length; k += 1) {
-        for (const pa of bodies[i].parts) {
-          for (const pb of bodies[k].parts) {
-            const a = partPosition(bodies[i], pa);
-            const b = partPosition(bodies[k], pb);
-            expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan((pa.r + pb.r) * 0.7);
-          }
-        }
-      }
-    }
-  });
-
-  it("搖一下:零件會被甩起來", () => {
-    const bodies = drop(1);
-    for (let i = 0; i < 300; i += 1) step(bodies, box, 1 / 60, { gravity: { x: 0, y: 900 } });
-    const before = bodies[0].y;
-    step(bodies, box, 1 / 60, { gravity: { x: 0, y: 900 }, shake: { x: 0, y: -60000 } });
-    for (let i = 0; i < 3; i += 1) step(bodies, box, 1 / 60, { gravity: { x: 0, y: 900 } });
-    expect(bodies[0].y).toBeLessThan(before);
-  });
-});
-
 describe("design:貼紙擺法與打卡棒的透視延伸", () => {
   it("新貼紙錯開放,不會疊在同一點;拖曳夾在設計區附近", () => {
     const first = placeSticker([], "a");
@@ -224,7 +145,8 @@ describe("persist:周邊存檔", () => {
     expect(designs.card.laser).toBe(base.card.laser);
     expect(designs.card.stickers).toHaveLength(1);
     expect(designs.card.mosaic).toEqual(base.card.mosaic);
-    expect(designs.charm.pieces.map((piece) => piece.artId)).toEqual(base.charm.pieces.map((piece) => piece.artId));
+    // 舊存檔的搖搖吊飾已經拿掉,讀回來直接丟掉
+    expect("charm" in designs).toBe(false);
     expect(designs.omamori.front).toBe("平安");
     expect(designs.omamori.bell).toBeNull();
     expect(designs.acrylic.place).toEqual(base.acrylic.place);
@@ -241,5 +163,6 @@ describe("persist:周邊存檔", () => {
     expect(stored.photo).toBeNull();
     expect(stored.cutouts).toEqual([]);
     expect(readStoredMerch({ version: 1, kind: "rocket" })!.kind).toBe("card");
+    expect(readStoredMerch({ version: 1, kind: "charm" })!.kind).toBe("card");
   });
 });

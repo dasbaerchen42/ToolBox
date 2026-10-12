@@ -8,11 +8,9 @@ import { meltOf } from "@/lib/tools/beads/finish";
 import {
   artKey,
   type CardDesign,
-  type CharmDesign,
   type OmamoriDesign,
   type Placed,
 } from "./design";
-import { partPosition, type Body, type Container } from "./physics";
 
 const FONT = `system-ui, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif`;
 const SERIF = `"Noto Serif TC", "Songti TC", "PMingLiU", serif`;
@@ -24,7 +22,7 @@ export type Art = {
   source: CanvasImageSource;
   width: number;
   height: number;
-  /** 拼豆圖才有;搖搖吊飾用它算碰撞形狀 */
+  /** 拼豆圖才有;換色、御守小鈴鐺用 */
   pattern?: BeadPattern;
 };
 
@@ -41,20 +39,6 @@ export function rasterizeBeads(pattern: BeadPattern, palette: BeadColor[]): HTML
   const ctx = canvas.getContext("2d");
   if (ctx) drawBeads(ctx, pattern, beadShades(palette), cell, () => meltOf("medium"));
   return canvas;
-}
-
-/** 拼豆圖裡有豆子的格子的重心(格為單位);吊飾零件繞著它轉 */
-export function patternCentroid(pattern: BeadPattern): { x: number; y: number } {
-  let sx = 0;
-  let sy = 0;
-  let n = 0;
-  pattern.cells.forEach((cell, i) => {
-    if (cell < 0) return;
-    sx += (i % pattern.cols) + 0.5;
-    sy += Math.floor(i / pattern.cols) + 0.5;
-    n += 1;
-  });
-  return n === 0 ? { x: pattern.cols / 2, y: pattern.rows / 2 } : { x: sx / n, y: sy / n };
 }
 
 /** 照片裁滿到指定區域 */
@@ -311,139 +295,6 @@ export function drawCard(
   ctx.strokeStyle = "rgba(0, 0, 0, 0.18)";
   ctx.stroke();
   ctx.restore();
-}
-
-/** 搖搖吊飾的外形與裡面的透明空間(物理的容器) */
-export function charmGeometry(design: CharmDesign, w: number, h: number) {
-  const border = w * 0.06;
-  const top = h * 0.16;
-  const outer =
-    design.shape === "circle"
-      ? { kind: "circle" as const, cx: w / 2, cy: top + (h - top) / 2, r: Math.min(w, h - top) / 2 - 4 }
-      : { kind: "rect" as const, cx: w / 2, cy: top + (h - top) / 2, hw: w / 2 - 4, hh: (h - top) / 2 - 4, round: w * 0.12 };
-  const inner: Container =
-    outer.kind === "circle"
-      ? { kind: "circle", cx: outer.cx, cy: outer.cy, r: outer.r - border }
-      : { kind: "rect", cx: outer.cx, cy: outer.cy, hw: outer.hw - border, hh: outer.hh - border, round: Math.max(4, outer.round - border) };
-  const hole = { x: w / 2, y: outer.kind === "circle" ? outer.cy - outer.r + border * 0.55 : outer.cy - outer.hh + border * 0.55 };
-  return { outer, inner, hole, border };
-}
-
-function containerPath(ctx: CanvasRenderingContext2D, c: Container) {
-  ctx.beginPath();
-  if (c.kind === "circle") ctx.arc(c.cx, c.cy, c.r, 0, Math.PI * 2);
-  else ctx.roundRect(c.cx - c.hw, c.cy - c.hh, c.hw * 2, c.hh * 2, c.round);
-}
-
-export type CharmPiece = { id: string; body: Body; art: Art; cell: number; centroid: { x: number; y: number } };
-
-/** 搖搖吊飾:白邊壓克力外框 + 打孔與金屬環 + 後層照片 + 會動的零件 + 前層反光 */
-export function drawCharm(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  design: CharmDesign,
-  photo: (CanvasImageSource & { width: number; height: number }) | null,
-  pieces: CharmPiece[]
-) {
-  const { outer, inner, hole, border } = charmGeometry(design, w, h);
-
-  // 吊繩與金屬環
-  ctx.save();
-  ctx.strokeStyle = "#8a8a8a";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(w / 2, 0);
-  ctx.lineTo(w / 2, hole.y - border * 0.9);
-  ctx.stroke();
-  ctx.restore();
-
-  // 外框(壓克力白邊),陰影讓它浮起來
-  ctx.save();
-  ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
-  ctx.shadowBlur = 18;
-  ctx.shadowOffsetY = 6;
-  containerPath(ctx, outer);
-  ctx.fillStyle = "#fbfbfb";
-  ctx.fill();
-  ctx.restore();
-
-  // 後層
-  ctx.save();
-  containerPath(ctx, inner);
-  ctx.clip();
-  ctx.fillStyle = design.color;
-  ctx.fillRect(0, 0, w, h);
-  if (design.background === "photo" && photo) {
-    const box =
-      inner.kind === "circle"
-        ? { x: inner.cx - inner.r, y: inner.cy - inner.r, w: inner.r * 2, h: inner.r * 2 }
-        : { x: inner.cx - inner.hw, y: inner.cy - inner.hh, w: inner.hw * 2, h: inner.hh * 2 };
-    drawCover(ctx, photo, box.x, box.y, box.w, box.h);
-  }
-  // 透明夾層讓後面的圖稍微霧一點
-  ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
-  ctx.fillRect(0, 0, w, h);
-
-  // 會動的零件
-  for (const piece of pieces) {
-    const { body, art, cell, centroid } = piece;
-    const pw = (art.pattern?.cols ?? 1) * cell;
-    const ph = (art.pattern?.rows ?? 1) * cell;
-    ctx.save();
-    ctx.translate(body.x, body.y);
-    ctx.rotate(body.angle);
-    ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
-    ctx.shadowBlur = cell * 0.6;
-    ctx.shadowOffsetY = cell * 0.25;
-    ctx.drawImage(art.source, -centroid.x * cell, -centroid.y * cell, pw, ph);
-    ctx.restore();
-  }
-
-  // 前層壓克力的反光:斜斜一片 + 內緣亮線
-  const g = ctx.createLinearGradient(0, outer.kind === "circle" ? outer.cy - outer.r : outer.cy - outer.hh, w, h);
-  g.addColorStop(0, "rgba(255, 255, 255, 0.35)");
-  g.addColorStop(0.35, "rgba(255, 255, 255, 0.04)");
-  g.addColorStop(0.6, "rgba(255, 255, 255, 0)");
-  g.addColorStop(0.75, "rgba(255, 255, 255, 0.12)");
-  g.addColorStop(1, "rgba(255, 255, 255, 0)");
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, w, h);
-  ctx.restore();
-
-  ctx.save();
-  containerPath(ctx, inner);
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
-  ctx.stroke();
-  containerPath(ctx, outer);
-  ctx.lineWidth = 1.5;
-  ctx.strokeStyle = "rgba(0, 0, 0, 0.15)";
-  ctx.stroke();
-  ctx.restore();
-
-  // 打孔 + 金屬環
-  ctx.save();
-  ctx.globalCompositeOperation = "destination-out";
-  ctx.beginPath();
-  ctx.arc(hole.x, hole.y, border * 0.28, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-  ctx.save();
-  ctx.strokeStyle = design.ring;
-  ctx.lineWidth = border * 0.16;
-  ctx.beginPath();
-  ctx.ellipse(hole.x, hole.y - border * 0.45, border * 0.36, border * 0.62, 0, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.restore();
-}
-
-/** 零件的世界座標外接範圍(拖曳判斷點到哪個零件用) */
-export function pieceHit(piece: CharmPiece, p: { x: number; y: number }): boolean {
-  return piece.body.parts.some((part) => {
-    const q = partPosition(piece.body, part);
-    return Math.hypot(q.x - p.x, q.y - p.y) <= part.r * 1.2;
-  });
 }
 
 /** 御守的袋子:下方圓角,上方兩肩斜收成屋頂 */

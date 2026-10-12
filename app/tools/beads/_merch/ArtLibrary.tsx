@@ -29,7 +29,7 @@ function Thumb({ art }: { art: Art | null }) {
 
 /**
  * 素材庫:點一下就加到目前的周邊上。
- * filter 讓搖搖吊飾只列得出能算碰撞的小拼豆;onUpload 給了就多一顆「上傳圖片去背」。
+ * filter 讓御守小鈴鐺只列得出小拼豆;onUpload 給了就多一顆「上傳圖片去背」。
  */
 export default function ArtLibrary({
   entries,
