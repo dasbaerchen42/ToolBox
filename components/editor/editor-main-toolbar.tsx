@@ -54,7 +54,7 @@ export function ToolPopover({
     };
   }, [open]);
 
-  const active = "border-(--accent) bg-(--accent) text-(--on-accent)";
+  const active = "border-(--accent-fill) bg-(--accent-fill) text-(--on-accent)";
   const idle = `${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`;
 
   return (
@@ -195,11 +195,11 @@ export default function EditorMainToolbar({
         title="尋找與取代（Ctrl+F）"
         aria-label="尋找與取代"
         aria-pressed={findOpen}
-        className={`${TOOL_BUTTON} w-9 px-0 ${findOpen ? "border-(--accent) bg-(--accent) text-(--on-accent)" : `${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}`}
+        className={`${TOOL_BUTTON} w-9 px-0 ${findOpen ? "border-(--accent-fill) bg-(--accent-fill) text-(--on-accent)" : `${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}`}
       >
         <IconSearch />
       </button>
-      <ToolPopover label="⋯" title="更多：檢視、設定、開新文件、Google Docs" theme={theme} align="right" width="w-80" buttonClassName={(open) => `${TOOL_BUTTON} w-9 px-0 text-lg leading-none ${open ? "border-(--accent) bg-(--accent) text-(--on-accent)" : `${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}`}>
+      <ToolPopover label="⋯" title="更多：檢視、設定、開新文件、Google Docs" theme={theme} align="right" width="w-80" buttonClassName={(open) => `${TOOL_BUTTON} w-9 px-0 text-lg leading-none ${open ? "border-(--accent-fill) bg-(--accent-fill) text-(--on-accent)" : `${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}`}>
         {(close) => (
           <MoreMenu viewItems={viewItems} onPaste={onPaste} onPasteExport={onPasteExport} googleItems={googleItems} settings={settings} close={close} theme={theme} />
         )}

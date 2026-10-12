@@ -125,7 +125,7 @@ export default function ThemeMenu() {
       >
         <span
           aria-hidden
-          className="inline-block h-3.5 w-3.5 rounded-full bg-(--accent)"
+          className="inline-block h-3.5 w-3.5 rounded-full bg-(--accent-fill)"
         />
         <span className="hidden sm:inline">
           {currentId === "custom" ? "自訂" : currentPreset?.name ?? "主題"}
@@ -188,7 +188,7 @@ export default function ThemeMenu() {
               type="button"
               onClick={keepRandom}
               disabled={!lastRandom}
-              className="flex-1 rounded-2xl bg-(--accent) px-3 py-2 text-sm tracking-[0.04em] text-(--on-accent) transition hover:opacity-90 disabled:opacity-40"
+              className="flex-1 rounded-2xl bg-(--accent-fill) px-3 py-2 text-sm tracking-[0.04em] text-(--on-accent) transition hover:opacity-90 disabled:opacity-40"
             >
               保存這組
             </button>

@@ -70,7 +70,7 @@ export default function RichFormatBar({ editor, theme }: { editor: Editor; theme
   });
 
   const chain = () => editor.chain().focus();
-  const on = "border-(--accent) bg-(--accent) text-(--on-accent)";
+  const on = "border-(--accent-fill) bg-(--accent-fill) text-(--on-accent)";
   const off = `${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`;
   const square = (active: boolean) => `${TOOL_BUTTON} w-9 px-0 ${active ? on : off}`;
   const item = (active: boolean) =>

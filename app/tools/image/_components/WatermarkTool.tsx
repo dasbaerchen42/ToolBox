@@ -23,6 +23,7 @@ import { backgroundStyle } from "./checkerboard";
 import { ToolPane, EmptyWorkspace } from "./WorkbenchLayout";
 import {
   ActionButton,
+  Collapse,
   ColorField,
   Field,
   RangeField,
@@ -435,46 +436,48 @@ export default function WatermarkTool({ images, busy, t, onApply }: Props) {
                   </Field>
                 )}
 
-                <RangeField
-                  label="透明度"
-                  display={`${Math.round(watermark.opacity * 100)}%`}
-                  value={watermark.opacity}
-                  min={0.05}
-                  max={1}
-                  step={0.05}
-                  onChange={(value) => updateMark("opacity", value)}
-                  t={t}
-                />
-                {watermark.source === "text" ? (
+                <Collapse title={`透明度 ${Math.round(watermark.opacity * 100)}%・大小・角度 ${watermark.angle}°`} t={t}>
                   <RangeField
-                    label="大小"
-                    display={`${watermark.size}%`}
-                    value={watermark.size}
-                    min={1}
-                    max={20}
-                    onChange={(value) => updateMark("size", value)}
+                    label="透明度"
+                    display={`${Math.round(watermark.opacity * 100)}%`}
+                    value={watermark.opacity}
+                    min={0.05}
+                    max={1}
+                    step={0.05}
+                    onChange={(value) => updateMark("opacity", value)}
                     t={t}
                   />
-                ) : (
+                  {watermark.source === "text" ? (
+                    <RangeField
+                      label="大小"
+                      display={`${watermark.size}%`}
+                      value={watermark.size}
+                      min={1}
+                      max={20}
+                      onChange={(value) => updateMark("size", value)}
+                      t={t}
+                    />
+                  ) : (
+                    <RangeField
+                      label="大小"
+                      display={`${watermark.imageSize}%`}
+                      value={watermark.imageSize}
+                      min={2}
+                      max={80}
+                      onChange={(value) => updateMark("imageSize", value)}
+                      t={t}
+                    />
+                  )}
                   <RangeField
-                    label="大小"
-                    display={`${watermark.imageSize}%`}
-                    value={watermark.imageSize}
-                    min={2}
-                    max={80}
-                    onChange={(value) => updateMark("imageSize", value)}
+                    label="角度"
+                    display={`${watermark.angle}°`}
+                    value={watermark.angle}
+                    min={-90}
+                    max={90}
+                    onChange={(value) => updateMark("angle", value)}
                     t={t}
                   />
-                )}
-                <RangeField
-                  label="角度"
-                  display={`${watermark.angle}°`}
-                  value={watermark.angle}
-                  min={-90}
-                  max={90}
-                  onChange={(value) => updateMark("angle", value)}
-                  t={t}
-                />
+                </Collapse>
 
                 <Field label="擺放方式" t={t}>
                   <Segmented
@@ -536,7 +539,7 @@ export default function WatermarkTool({ images, busy, t, onApply }: Props) {
             )}
           </div>
 
-          <div className={`space-y-3 rounded-xl border p-3 ${t.subPanel}`}>
+          <Collapse title={noise.enabled ? "雜訊覆蓋（開著）" : "雜訊覆蓋（進階）"} defaultOpen={noise.enabled} t={t}>
             <Toggle
               checked={noise.enabled}
               onChange={(value) => updateNoise("enabled", value)}
@@ -586,7 +589,7 @@ export default function WatermarkTool({ images, busy, t, onApply }: Props) {
                 />
               </div>
             )}
-          </div>
+          </Collapse>
 
           <ActionButton
             t={t}

@@ -1,5 +1,55 @@
 /* 自動產生 — node scripts/generate-theme-css.mjs > app/theme.css。請勿手改。 */
 
+[data-theme="sage"] {
+  --paper-bg: #fcfcfb;
+  --paper-bg-2: #f1f3ee;
+  --paper-bg-3: #dee0db;
+  --surface: rgba(243, 244, 240, 0.62);
+  --border-light: #e8eae5;
+  --border-dark: #b7b9b5;
+  --ink-primary: #2e3330;
+  --ink-secondary: #7c7f7d;
+  --ink-tertiary: #a5a8a6;
+  --ink-black: #292e2b;
+  --accent: #8a9a7b;
+  --accent-fill: #75856a;
+  --accent-soft: #acb7a1;
+  --on-accent: #ffffff;
+  --danger: #b4553f;
+  --success: #2e9c6a;
+  --warning: #c8761f;
+  --on-danger: #ffffff;
+  --on-success: #ffffff;
+  --on-warning: #ffffff;
+  --ls-body: 0.06em;
+  --lh-body: 1.9;
+}
+
+[data-theme="grape"] {
+  --paper-bg: #fcfbfd;
+  --paper-bg-2: #f1edf5;
+  --paper-bg-3: #dedae2;
+  --surface: rgba(243, 239, 246, 0.62);
+  --border-light: #d6d2da;
+  --border-dark: #b7b3bc;
+  --ink-primary: #302b36;
+  --ink-secondary: #7e7a82;
+  --ink-tertiary: #a6a4a9;
+  --ink-black: #2b2731;
+  --accent: #7e6a9e;
+  --accent-fill: #7e6a9e;
+  --accent-soft: #a496bb;
+  --on-accent: #ffffff;
+  --danger: #b4553f;
+  --success: #2e9c6a;
+  --warning: #c8761f;
+  --on-danger: #ffffff;
+  --on-success: #ffffff;
+  --on-warning: #ffffff;
+  --ls-body: 0.06em;
+  --lh-body: 1.9;
+}
+
 [data-theme="huninn"] {
   --paper-bg: #17181a;
   --paper-bg-2: #1f2023;
@@ -12,6 +62,7 @@
   --ink-tertiary: #70706f;
   --ink-black: #d3d2cd;
   --accent: #e8c45c;
+  --accent-fill: #e8c45c;
   --accent-soft: #a99048;
   --on-accent: #1a1a1a;
   --danger: #e0574f;
@@ -34,6 +85,7 @@
   --ink-tertiary: #aba299;
   --ink-black: #37291f;
   --accent: #a33b26;
+  --accent-fill: #a33b26;
   --accent-soft: #bd7362;
   --on-accent: #ffffff;
   --danger: #c0392b;
@@ -45,41 +97,20 @@
 }
 
 [data-theme="stone"] {
-  --paper-bg: #f4f4f4;
-  --paper-bg-2: #e8e8e8;
-  --paper-bg-3: #d3d3d3;
-  --surface: rgba(235, 235, 235, 0.62);
-  --border-light: #cacaca;
-  --border-dark: #a8a8a8;
-  --ink-primary: #141414;
-  --ink-secondary: #696969;
-  --ink-tertiary: #969696;
-  --ink-black: #121212;
-  --accent: #5a5a5a;
-  --accent-soft: #888888;
+  --paper-bg: #f7f5f0;
+  --paper-bg-2: #ece8df;
+  --paper-bg-3: #d9d5cc;
+  --surface: rgba(238, 235, 227, 0.62);
+  --border-light: #d1cdc5;
+  --border-dark: #b2aea7;
+  --ink-primary: #2b2824;
+  --ink-secondary: #797672;
+  --ink-tertiary: #a19f9a;
+  --ink-black: #272420;
+  --accent: #7d7262;
+  --accent-fill: #7d7262;
+  --accent-soft: #a2998d;
   --on-accent: #ffffff;
-  --danger: #c0392b;
-  --success: #2e9c6a;
-  --warning: #c8761f;
-  --on-danger: #ffffff;
-  --on-success: #ffffff;
-  --on-warning: #ffffff;
-}
-
-[data-theme="mango"] {
-  --paper-bg: #f3f8f0;
-  --paper-bg-2: #ddecd6;
-  --paper-bg-3: #cbdbc5;
-  --surface: rgba(225, 238, 219, 0.62);
-  --border-light: #c3d4be;
-  --border-dark: #a6b8a2;
-  --ink-primary: #243d28;
-  --ink-secondary: #738474;
-  --ink-tertiary: #9ca99c;
-  --ink-black: #203724;
-  --accent: #a87a50;
-  --accent-soft: #bfa080;
-  --on-accent: #1a1a1a;
   --danger: #c0392b;
   --success: #2e9c6a;
   --warning: #c8761f;
@@ -100,6 +131,7 @@
   --ink-tertiary: #736967;
   --ink-black: #d3c0b8;
   --accent: #d4607a;
+  --accent-fill: #d4607a;
   --accent-soft: #9d4b5e;
   --on-accent: #1a1a1a;
   --danger: #e0574f;
@@ -122,6 +154,7 @@
   --ink-tertiary: #666a79;
   --ink-black: #b8bfd1;
   --accent: #7884cc;
+  --accent-fill: #7884cc;
   --accent-soft: #5c659b;
   --on-accent: #1a1a1a;
   --danger: #e0574f;
@@ -133,18 +166,19 @@
 }
 
 [data-theme="melon"] {
-  --paper-bg: #fff8f0;
-  --paper-bg-2: #fce8d4;
-  --paper-bg-3: #e7d9c4;
-  --surface: rgba(252, 235, 217, 0.62);
-  --border-light: #dfd3be;
-  --border-dark: #bebca5;
-  --ink-primary: #2e5438;
-  --ink-secondary: #7d927e;
-  --ink-tertiary: #a7b3a3;
-  --ink-black: #294c32;
-  --accent: #d96c10;
-  --accent-soft: #e49653;
+  --paper-bg: #fff8ec;
+  --paper-bg-2: #f8e6c8;
+  --paper-bg-3: #e7d4b8;
+  --surface: rgba(249, 233, 207, 0.62);
+  --border-light: #e0cdb1;
+  --border-dark: #c4b197;
+  --ink-primary: #4a3424;
+  --ink-secondary: #8f7e70;
+  --ink-tertiary: #b3a698;
+  --ink-black: #432f20;
+  --accent: #c87a14;
+  --accent-fill: #c87a14;
+  --accent-soft: #d9a055;
   --on-accent: #1a1a1a;
   --danger: #c0392b;
   --success: #2e9c6a;

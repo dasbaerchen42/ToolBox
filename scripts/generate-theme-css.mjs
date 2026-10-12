@@ -46,6 +46,7 @@ function deriveVars(input) {
     "--ink-tertiary": blend(ink, bg, 0.58),
     "--ink-black": blend(ink, "#000000", 0.1),
     "--accent": accent,
+    "--accent-fill": accent,
     "--accent-soft": blend(accent, bg, 0.3),
     "--on-accent": contrastRatio("#ffffff", accent) >= contrastRatio("#1a1a1a", accent) ? "#ffffff" : "#1a1a1a",
     "--danger": dark ? SEMANTIC.danger.dark : SEMANTIC.danger.light,
@@ -58,20 +59,37 @@ function deriveVars(input) {
 }
 
 const PRESETS = [
+  {
+    id: "sage",
+    input: { bg: "#fcfcfb", bg2: "#f1f3ee", ink: "#2e3330", accent: "#8a9a7b" },
+    type: { letterSpacing: "0.06em", lineHeight: "1.9" },
+    // 規範:按鈕是白字、線是 #E8EAE5、錯誤色用磚色
+    // 按鈕這類白字的色塊用規範的「鼠尾草深」#75856A(白字對比 3.95);
+    // 引用線、焦點框、連結這些裝飾還是原本的鼠尾草綠
+    overrides: { "--accent-fill": "#75856a", "--on-accent": "#ffffff", "--border-light": "#e8eae5", "--danger": "#b4553f" },
+  },
+  {
+    id: "grape",
+    input: { bg: "#fcfbfd", bg2: "#f1edf5", ink: "#302b36", accent: "#7e6a9e" },
+    type: { letterSpacing: "0.06em", lineHeight: "1.9" },
+    // 規範:錯誤色不用正紅,用跟主色一樣偏濁的磚色
+    overrides: { "--danger": "#b4553f" },
+  },
   { id: "huninn", input: { bg: "#17181a", bg2: "#1f2023", ink: "#eae9e4", accent: "#e8c45c" } },
   { id: "latte", input: { bg: "#faf6ef", bg2: "#f0e5d5", ink: "#3d2e22", accent: "#a33b26" } },
-  { id: "stone", input: { bg: "#f4f4f4", bg2: "#e8e8e8", ink: "#141414", accent: "#5a5a5a" } },
-  { id: "mango", input: { bg: "#f3f8f0", bg2: "#ddecd6", ink: "#243d28", accent: "#a87a50" } },
+  { id: "stone", input: { bg: "#f7f5f0", bg2: "#ece8df", ink: "#2b2824", accent: "#7d7262" } },
   { id: "peach", input: { bg: "#1c1a1e", bg2: "#28252c", ink: "#ead5cc", accent: "#d4607a" } },
   { id: "butterfly", input: { bg: "#1c1e28", bg2: "#262d3e", ink: "#ccd4e8", accent: "#7884cc" } },
-  { id: "melon", input: { bg: "#fff8f0", bg2: "#fce8d4", ink: "#2e5438", accent: "#d96c10" } },
+  { id: "melon", input: { bg: "#fff8ec", bg2: "#f8e6c8", ink: "#4a3424", accent: "#c87a14" } },
 ];
 
 let out = "/* 自動產生 — node scripts/generate-theme-css.mjs > app/theme.css。請勿手改。 */\n";
 for (const p of PRESETS) {
   const vars = deriveVars(p.input);
+  Object.assign(vars, p.overrides ?? {});
   out += `\n[data-theme="${p.id}"] {\n`;
   for (const [k, v] of Object.entries(vars)) out += `  ${k}: ${v};\n`;
+  if (p.type) out += `  --ls-body: ${p.type.letterSpacing};\n  --lh-body: ${p.type.lineHeight};\n`;
   out += "}\n";
 }
 process.stdout.write(out);

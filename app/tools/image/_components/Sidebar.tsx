@@ -176,7 +176,7 @@ export default function Sidebar({
                     </button>
 
                     {selected && (
-                      <span className="absolute -left-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-(--accent) text-[10px] text-(--on-accent)">
+                      <span className="absolute -left-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-(--accent-fill) text-[10px] text-(--on-accent)">
                         {order + 1}
                       </span>
                     )}

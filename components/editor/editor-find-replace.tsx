@@ -231,7 +231,7 @@ export default function EditorFindReplace({
               title="區分大小寫"
               className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${
                 caseSensitive
-                  ? "bg-(--accent) text-(--on-accent) border-(--accent)"
+                  ? "bg-(--accent-fill) text-(--on-accent) border-(--accent)"
                   : `${theme.secondaryButton} ${theme.secondaryButtonText}`
               }`}
             >
