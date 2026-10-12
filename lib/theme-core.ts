@@ -109,8 +109,16 @@ export function ensureReadable(input: BaseInput): BaseInput {
 // ── 內建主題(改這裡要同步 scripts/generate-theme-css.mjs 並重產 app/theme.css)──
 // 第一個是預設主題。id 不要改(存在使用者的瀏覽器裡),要改名改 name 就好。
 export const PRESETS: PresetDef[] = [
-  // 葡萄果凍:照視覺規範——不用純黑純白(帶紫調的墨色、微暖的白)、低彩度主色、
+  // 梅子綠茶:直接照視覺規範的色票——鼠尾草綠主色、帶綠的墨色、微暖白、#E8EAE5 的線,
   // 內文字距 .06em、行距 1.9
+  {
+    id: "sage",
+    name: "梅子綠茶",
+    emoji: "🍏",
+    input: { bg: "#fcfcfb", bg2: "#f1f3ee", ink: "#2e3330", accent: "#8a9a7b" },
+    type: { letterSpacing: "0.06em", lineHeight: "1.9" },
+  },
+  // 葡萄果凍:同一套規範換成灰葡萄紫
   {
     id: "grape",
     name: "葡萄果凍",

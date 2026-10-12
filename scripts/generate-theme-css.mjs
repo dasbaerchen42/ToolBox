@@ -59,11 +59,18 @@ function deriveVars(input) {
 
 const PRESETS = [
   {
+    id: "sage",
+    input: { bg: "#fcfcfb", bg2: "#f1f3ee", ink: "#2e3330", accent: "#8a9a7b" },
+    type: { letterSpacing: "0.06em", lineHeight: "1.9" },
+    // 規範:按鈕是白字、線是 #E8EAE5、錯誤色用磚色
+    overrides: { "--on-accent": "#ffffff", "--border-light": "#e8eae5", "--danger": "#b4553f" },
+  },
+  {
     id: "grape",
     input: { bg: "#fcfbfd", bg2: "#f1edf5", ink: "#302b36", accent: "#7e6a9e" },
     type: { letterSpacing: "0.06em", lineHeight: "1.9" },
     // 規範:錯誤色不用正紅,用跟主色一樣偏濁的磚色
-    danger: "#b4553f",
+    overrides: { "--danger": "#b4553f" },
   },
   { id: "huninn", input: { bg: "#17181a", bg2: "#1f2023", ink: "#eae9e4", accent: "#e8c45c" } },
   { id: "latte", input: { bg: "#faf6ef", bg2: "#f0e5d5", ink: "#3d2e22", accent: "#a33b26" } },
@@ -76,7 +83,7 @@ const PRESETS = [
 let out = "/* 自動產生 — node scripts/generate-theme-css.mjs > app/theme.css。請勿手改。 */\n";
 for (const p of PRESETS) {
   const vars = deriveVars(p.input);
-  if (p.danger) vars["--danger"] = p.danger;
+  Object.assign(vars, p.overrides ?? {});
   out += `\n[data-theme="${p.id}"] {\n`;
   for (const [k, v] of Object.entries(vars)) out += `  ${k}: ${v};\n`;
   if (p.type) out += `  --ls-body: ${p.type.letterSpacing};\n  --lh-body: ${p.type.lineHeight};\n`;

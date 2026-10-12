@@ -45,7 +45,7 @@ export default function RootLayout({
     // bootstrap script 會在 React 水合前改寫 data-theme/inline vars,屬預期差異
     <html
       lang="zh-TW"
-      data-theme="grape"
+      data-theme="sage"
       className={huninn.variable}
       suppressHydrationWarning
     >

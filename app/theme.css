@@ -1,5 +1,29 @@
 /* 自動產生 — node scripts/generate-theme-css.mjs > app/theme.css。請勿手改。 */
 
+[data-theme="sage"] {
+  --paper-bg: #fcfcfb;
+  --paper-bg-2: #f1f3ee;
+  --paper-bg-3: #dee0db;
+  --surface: rgba(243, 244, 240, 0.62);
+  --border-light: #e8eae5;
+  --border-dark: #b7b9b5;
+  --ink-primary: #2e3330;
+  --ink-secondary: #7c7f7d;
+  --ink-tertiary: #a5a8a6;
+  --ink-black: #292e2b;
+  --accent: #8a9a7b;
+  --accent-soft: #acb7a1;
+  --on-accent: #ffffff;
+  --danger: #b4553f;
+  --success: #2e9c6a;
+  --warning: #c8761f;
+  --on-danger: #ffffff;
+  --on-success: #ffffff;
+  --on-warning: #ffffff;
+  --ls-body: 0.06em;
+  --lh-body: 1.9;
+}
+
 [data-theme="grape"] {
   --paper-bg: #fcfbfd;
   --paper-bg-2: #f1edf5;
