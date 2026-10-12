@@ -20,6 +20,7 @@ import {
   ActionButton,
   ColorField,
   Field,
+  Collapse,
   NumberField,
   RatioPicker,
   Segmented,
@@ -48,6 +49,8 @@ export default function MergeTool({ images, busy, t, onMove, onMerge }: Props) {
   const [mode, setMode] = useState<Mode>("waterfall");
   /** 瀑布式的欄數、河道式的排數 */
   const [lines, setLines] = useState(1);
+  /** 瀑布式多欄:底部切齊 */
+  const [even, setEven] = useState(true);
 
   const [options, setOptions] = useState<MergeOptions>({
     axis: "y",
@@ -69,7 +72,7 @@ export default function MergeTool({ images, busy, t, onMove, onMerge }: Props) {
   const layout = useMemo(
     () =>
       mode === "waterfall"
-        ? layoutWaterfall(images, { lines, fit: options.fit, align: options.align, gap: options.gap })
+        ? layoutWaterfall(images, { lines, fit: options.fit, align: options.align, gap: options.gap, even })
         : mode === "justified"
           ? layoutJustified(images, { lines, fit: options.fit, align: options.align, gap: options.gap })
           : layoutGrid(images, {
@@ -80,7 +83,7 @@ export default function MergeTool({ images, busy, t, onMove, onMerge }: Props) {
             gap: options.gap,
             lastRow,
           }),
-    [mode, images, options, lines, columns, effectiveCellWidth, ratio, gridFit, lastRow]
+    [mode, images, options, lines, even, columns, effectiveCellWidth, ratio, gridFit, lastRow]
   );
 
   const [transparent, setTransparent] = useState(false);
@@ -183,6 +186,24 @@ export default function MergeTool({ images, busy, t, onMove, onMerge }: Props) {
                   t={t}
                 />
               </Field>
+
+              {mode === "waterfall" && lines > 1 && (
+                <Field
+                  label="底部"
+                  hint={even ? "照順序分欄，再微調每欄的寬度讓底部切齊，不裁掉照片" : "每欄一樣寬，照片放進最短的那欄，底部會長短不一"}
+                  t={t}
+                >
+                  <Segmented
+                    value={even ? "even" : "free"}
+                    onChange={(value) => setEven(value === "even")}
+                    t={t}
+                    options={[
+                      { value: "even", label: "切齊" },
+                      { value: "free", label: "參差" },
+                    ]}
+                  />
+                </Field>
+              )}
 
               {lines === 1 && (
                 <Field label="對齊" t={t}>
@@ -300,32 +321,34 @@ export default function MergeTool({ images, busy, t, onMove, onMerge }: Props) {
             </>
           )}
 
-          <Field label={mode === "grid" ? "格子之間的間距（px）" : "圖與圖的間距（px）"} t={t}>
-            <NumberField
-              value={options.gap}
-              onChange={(value) => update("gap", Math.max(0, Math.round(value)))}
-              min={0}
-              max={500}
-              label="間距"
-              t={t}
-            />
-          </Field>
+          <Collapse title={`間距 ${options.gap}px・${transparent ? "透明背景" : "背景色"}`} t={t}>
+            <Field label={mode === "grid" ? "格子之間的間距（px）" : "圖與圖的間距（px）"} t={t}>
+              <NumberField
+                value={options.gap}
+                onChange={(value) => update("gap", Math.max(0, Math.round(value)))}
+                min={0}
+                max={500}
+                label="間距"
+                t={t}
+              />
+            </Field>
 
-          <div className="space-y-2">
-            <Toggle
-              checked={transparent}
-              onChange={setTransparent}
-              label="背景保持透明"
-              t={t}
-            />
-            {!transparent && (
-              <ColorField value={background} onChange={setBackground} t={t} />
-            )}
-          </div>
+            <div className="space-y-2">
+              <Toggle
+                checked={transparent}
+                onChange={setTransparent}
+                label="背景保持透明"
+                t={t}
+              />
+              {!transparent && (
+                <ColorField value={background} onChange={setBackground} t={t} />
+              )}
+            </div>
+          </Collapse>
 
           <div className={`rounded-xl border p-3 ${t.subPanel}`}>
             <p className="mb-2 text-xs tracking-[0.08em]">
-              {mode === "grid" ? "排列順序（左上到右下）" : mode === "waterfall" && lines > 1 ? "排列順序（放進最短的那一欄）" : "拼接順序"}
+              {mode === "grid" ? "排列順序（左上到右下）" : mode === "waterfall" && lines > 1 && !even ? "排列順序（放進最短的那一欄）" : "拼接順序"}
             </p>
             <ol className="space-y-1.5">
               {images.map((image, index) => (

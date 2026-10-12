@@ -58,20 +58,28 @@ function deriveVars(input) {
 }
 
 const PRESETS = [
+  {
+    id: "grape",
+    input: { bg: "#fcfbfd", bg2: "#f1edf5", ink: "#302b36", accent: "#7e6a9e" },
+    type: { letterSpacing: "0.06em", lineHeight: "1.9" },
+    // 規範:錯誤色不用正紅,用跟主色一樣偏濁的磚色
+    danger: "#b4553f",
+  },
   { id: "huninn", input: { bg: "#17181a", bg2: "#1f2023", ink: "#eae9e4", accent: "#e8c45c" } },
   { id: "latte", input: { bg: "#faf6ef", bg2: "#f0e5d5", ink: "#3d2e22", accent: "#a33b26" } },
-  { id: "stone", input: { bg: "#f4f4f4", bg2: "#e8e8e8", ink: "#141414", accent: "#5a5a5a" } },
-  { id: "mango", input: { bg: "#f3f8f0", bg2: "#ddecd6", ink: "#243d28", accent: "#a87a50" } },
+  { id: "stone", input: { bg: "#f7f5f0", bg2: "#ece8df", ink: "#2b2824", accent: "#7d7262" } },
   { id: "peach", input: { bg: "#1c1a1e", bg2: "#28252c", ink: "#ead5cc", accent: "#d4607a" } },
   { id: "butterfly", input: { bg: "#1c1e28", bg2: "#262d3e", ink: "#ccd4e8", accent: "#7884cc" } },
-  { id: "melon", input: { bg: "#fff8f0", bg2: "#fce8d4", ink: "#2e5438", accent: "#d96c10" } },
+  { id: "melon", input: { bg: "#fff8ec", bg2: "#f8e6c8", ink: "#4a3424", accent: "#c87a14" } },
 ];
 
 let out = "/* 自動產生 — node scripts/generate-theme-css.mjs > app/theme.css。請勿手改。 */\n";
 for (const p of PRESETS) {
   const vars = deriveVars(p.input);
+  if (p.danger) vars["--danger"] = p.danger;
   out += `\n[data-theme="${p.id}"] {\n`;
   for (const [k, v] of Object.entries(vars)) out += `  ${k}: ${v};\n`;
+  if (p.type) out += `  --ls-body: ${p.type.letterSpacing};\n  --lh-body: ${p.type.lineHeight};\n`;
   out += "}\n";
 }
 process.stdout.write(out);

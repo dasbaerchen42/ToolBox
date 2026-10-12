@@ -27,7 +27,7 @@ import type { Point, WorkImage } from "@/lib/tools/image/types";
 import type { ThemeClasses } from "@/lib/theme";
 import ImageStage, { percent, pointFromEvent } from "./ImageStage";
 import { ToolPane } from "./WorkbenchLayout";
-import { ActionButton, ColorField, Field, RangeField, Segmented, StationHint, Toggle } from "./controls";
+import { ActionButton, Collapse, ColorField, Field, RangeField, Segmented, StationHint, Toggle } from "./controls";
 
 /** 預覽 canvas 最寬畫到這麼寬,大圖不必整張原解析度重畫 */
 const PREVIEW_MAX = 1600;
@@ -360,28 +360,30 @@ export default function TextTool({ image, busy, t, onApply }: Props) {
                 )}
               </Field>
 
-              <RangeField
-                label="字級"
-                display={`${selected.size}px`}
-                value={selected.size}
-                min={8}
-                max={Math.max(64, Math.round(Math.min(image.width, image.height) * 0.4))}
-                step={1}
-                onChange={(size) => update(selected.id, { size })}
-                t={t}
-              />
-              <RangeField
-                label="旋轉"
-                display={`${Math.round(selected.rotation)}°`}
-                value={selected.rotation}
-                min={-180}
-                max={180}
-                step={1}
-                onChange={(rotation) => update(selected.id, { rotation })}
-                t={t}
-              />
+              <Collapse title={`字級 ${selected.size}px・角度 ${Math.round(selected.rotation)}°（也可以拖圓點）`} t={t}>
+                <RangeField
+                  label="字級"
+                  display={`${selected.size}px`}
+                  value={selected.size}
+                  min={8}
+                  max={Math.max(64, Math.round(Math.min(image.width, image.height) * 0.4))}
+                  step={1}
+                  onChange={(size) => update(selected.id, { size })}
+                  t={t}
+                />
+                <RangeField
+                  label="旋轉"
+                  display={`${Math.round(selected.rotation)}°`}
+                  value={selected.rotation}
+                  min={-180}
+                  max={180}
+                  step={1}
+                  onChange={(rotation) => update(selected.id, { rotation })}
+                  t={t}
+                />
+              </Collapse>
 
-              <div className={`space-y-3 rounded-xl border p-3 ${t.subPanel}`}>
+              <Collapse title="描邊與陰影" t={t}>
                 <RangeField
                   label="描邊"
                   display={selected.stroke > 0 ? `${Math.round(selected.stroke * 100)}%` : "不描"}
@@ -394,7 +396,7 @@ export default function TextTool({ image, busy, t, onApply }: Props) {
                 />
                 {selected.stroke > 0 && <ColorField value={selected.strokeColor} onChange={(strokeColor) => update(selected.id, { strokeColor })} t={t} />}
                 <Toggle checked={selected.shadow} onChange={(shadow) => update(selected.id, { shadow })} label="陰影（淺色底上字比較清楚）" t={t} />
-              </div>
+              </Collapse>
 
               <div className="flex flex-wrap gap-2">
                 <ActionButton tone="secondary" t={t} onClick={() => duplicate(selected)}>

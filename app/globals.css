@@ -11,6 +11,9 @@ body {
   background: var(--paper-bg);
   color: var(--ink-primary);
   font-family: var(--font-round);
+  /* 主題可以帶自己的字距行距(葡萄果凍照視覺規範是 .06em、1.9) */
+  letter-spacing: var(--ls-body, 0.04em);
+  line-height: var(--lh-body, 1.75);
 }
 
 /* ── Markdown / HTML 預覽與轉圖用的排版 ───────────────────────────────

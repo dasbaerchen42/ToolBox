@@ -228,6 +228,8 @@ export type FlowOptions = {
   fit: FitMode;
   align: Align;
   gap: number;
+  /** 瀑布式多欄時底部切齊:照順序分欄,再微調各欄寬度讓每欄一樣長(不裁圖) */
+  even?: boolean;
 };
 
 export function layoutWaterfall(sizes: Size[], options: FlowOptions): MergeLayout {
@@ -235,6 +237,18 @@ export function layoutWaterfall(sizes: Size[], options: FlowOptions): MergeLayou
   const columns = Math.max(1, Math.round(options.lines));
   if (valid.length === 0) return { canvas: { width: 0, height: 0 }, placements: [] };
   if (columns === 1) return layoutMerge(valid, { axis: "y", align: options.align, fit: options.fit, gap: options.gap });
+
+  // 底部切齊 = 把河道式轉 90 度:河道式每排左右切齊,轉過來就是每欄上下切齊
+  if (options.even) {
+    const turned = layoutJustified(
+      valid.map((size) => ({ width: size.height, height: size.width })),
+      { ...options, lines: columns, even: false }
+    );
+    return {
+      canvas: { width: turned.canvas.height, height: turned.canvas.width },
+      placements: turned.placements.map((p) => ({ x: p.y, y: p.x, width: p.height, height: p.width })),
+    };
+  }
 
   const gap = Math.max(0, Math.round(options.gap));
   const widths = valid.map((size) => size.width);

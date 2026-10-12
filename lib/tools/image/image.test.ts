@@ -481,3 +481,25 @@ describe("geometry:鎖定比例的裁切框", () => {
     expect(largestRatioRect(size, 16 / 9)).toEqual({ x: 0, y: 119, width: 1000, height: 563 });
   });
 });
+
+describe("merge:瀑布式底部切齊", () => {
+  it("每欄一樣長、照順序分欄,不留空白", () => {
+    const sizes = [
+      { width: 400, height: 300 },
+      { width: 200, height: 400 },
+      { width: 400, height: 400 },
+      { width: 800, height: 400 },
+    ];
+    const { canvas, placements } = layoutWaterfall(sizes, { lines: 2, fit: "max", align: "center", gap: 6, even: true });
+    const columns = new Map<number, typeof placements>();
+    for (const p of placements) columns.set(p.x, [...(columns.get(p.x) ?? []), p]);
+    expect(columns.size).toBe(2);
+    for (const column of columns.values()) {
+      const last = column[column.length - 1];
+      expect(last.y + last.height).toBe(canvas.height);
+      expect(new Set(column.map((p) => p.width)).size).toBe(1);
+    }
+    // 順序:前面的圖在左邊那欄
+    expect(placements[0].x).toBe(0);
+  });
+});

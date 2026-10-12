@@ -17,6 +17,8 @@ export interface PresetDef {
   name: string;
   emoji: string;
   input: BaseInput;
+  /** 這個主題自己的字距、行距(沒有就用網站預設) */
+  type?: { letterSpacing: string; lineHeight: string };
 }
 
 // ── 色彩數學 ──
@@ -105,14 +107,23 @@ export function ensureReadable(input: BaseInput): BaseInput {
 }
 
 // ── 內建主題(改這裡要同步 scripts/generate-theme-css.mjs 並重產 app/theme.css)──
+// 第一個是預設主題。id 不要改(存在使用者的瀏覽器裡),要改名改 name 就好。
 export const PRESETS: PresetDef[] = [
-  { id: "huninn", name: "灰黃", emoji: "🐻", input: { bg: "#17181a", bg2: "#1f2023", ink: "#eae9e4", accent: "#e8c45c" } },
-  { id: "latte", name: "拿鐵", emoji: "☕", input: { bg: "#faf6ef", bg2: "#f0e5d5", ink: "#3d2e22", accent: "#a33b26" } },
-  { id: "stone", name: "薏仁", emoji: "🪨", input: { bg: "#f4f4f4", bg2: "#e8e8e8", ink: "#141414", accent: "#5a5a5a" } },
-  { id: "mango", name: "情人果", emoji: "🥭", input: { bg: "#f3f8f0", bg2: "#ddecd6", ink: "#243d28", accent: "#a87a50" } },
-  { id: "peach", name: "蜜桃", emoji: "🍑", input: { bg: "#1c1a1e", bg2: "#28252c", ink: "#ead5cc", accent: "#d4607a" } },
-  { id: "butterfly", name: "蝶豆花", emoji: "🦋", input: { bg: "#1c1e28", bg2: "#262d3e", ink: "#ccd4e8", accent: "#7884cc" } },
-  { id: "melon", name: "哈密瓜", emoji: "🍈", input: { bg: "#fff8f0", bg2: "#fce8d4", ink: "#2e5438", accent: "#d96c10" } },
+  // 葡萄果凍:照視覺規範——不用純黑純白(帶紫調的墨色、微暖的白)、低彩度主色、
+  // 內文字距 .06em、行距 1.9
+  {
+    id: "grape",
+    name: "葡萄果凍",
+    emoji: "🍇",
+    input: { bg: "#fcfbfd", bg2: "#f1edf5", ink: "#302b36", accent: "#7e6a9e" },
+    type: { letterSpacing: "0.06em", lineHeight: "1.9" },
+  },
+  { id: "huninn", name: "芝麻奶黃", emoji: "🥮", input: { bg: "#17181a", bg2: "#1f2023", ink: "#eae9e4", accent: "#e8c45c" } },
+  { id: "latte", name: "卡布奇諾", emoji: "☕", input: { bg: "#faf6ef", bg2: "#f0e5d5", ink: "#3d2e22", accent: "#a33b26" } },
+  { id: "stone", name: "薏仁牛奶", emoji: "🥛", input: { bg: "#f7f5f0", bg2: "#ece8df", ink: "#2b2824", accent: "#7d7262" } },
+  { id: "peach", name: "蜜桃黑巧", emoji: "🍑", input: { bg: "#1c1a1e", bg2: "#28252c", ink: "#ead5cc", accent: "#d4607a" } },
+  { id: "butterfly", name: "蝶豆花茶", emoji: "🦋", input: { bg: "#1c1e28", bg2: "#262d3e", ink: "#ccd4e8", accent: "#7884cc" } },
+  { id: "melon", name: "起司餅乾", emoji: "🧀", input: { bg: "#fff8ec", bg2: "#f8e6c8", ink: "#4a3424", accent: "#c87a14" } },
 ];
 
 // ── 和諧感隨機 ──
@@ -166,6 +177,8 @@ export function clearCustomVars() {
   VAR_NAMES.forEach((v) => el.style.removeProperty(v));
 }
 export function applyTheme(id: string) {
+  // 拿掉的主題(例如情人果)存在舊的瀏覽器裡:回到預設
+  if (id !== "custom" && !PRESETS.some((p) => p.id === id)) id = PRESETS[0].id;
   if (id === "custom") {
     const input = getCustomInput();
     if (input) return applyCustomTheme(input);
@@ -186,7 +199,8 @@ export function applyCustomTheme(input: BaseInput) {
   localStorage.setItem(K_VARS, JSON.stringify(vars));
 }
 export function getCurrentThemeId(): string {
-  return localStorage.getItem(K_ID) ?? PRESETS[0].id;
+  const id = localStorage.getItem(K_ID) ?? PRESETS[0].id;
+  return id === "custom" || PRESETS.some((p) => p.id === id) ? id : PRESETS[0].id;
 }
 export function getCustomInput(): BaseInput | null {
   try {
@@ -226,6 +240,7 @@ export function deleteRandomScheme(i: number): BaseInput[] {
 // Android 沒有這個問題,加了反而會擋掉縮放,所以不加。
 export const BOOTSTRAP_SCRIPT = `(function(){try{
 var id=localStorage.getItem('${K_ID}')||'${PRESETS[0].id}';
+if(id!=='custom'&&${JSON.stringify(PRESETS.map((p) => p.id))}.indexOf(id)<0)id='${PRESETS[0].id}';
 if(id==='custom'){var v=JSON.parse(localStorage.getItem('${K_VARS}')||'{}');var s=document.documentElement.style;for(var k in v)s.setProperty(k,v[k]);document.documentElement.setAttribute('data-theme','custom');}
 else{document.documentElement.setAttribute('data-theme',id);}
 }catch(e){}
