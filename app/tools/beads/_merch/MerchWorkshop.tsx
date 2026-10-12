@@ -15,7 +15,6 @@ import { ImageDecodeError } from "@/lib/tools/image/render";
 import {
   artKey,
   parseArtKey,
-  CHARM_CELL,
   DESIGN_SIZE,
   defaultDesigns,
   MERCH_KINDS,
@@ -25,18 +24,15 @@ import {
   type MerchKind,
   type Placed,
 } from "@/lib/tools/merch/design";
-import type { Container, Vec } from "@/lib/tools/merch/physics";
 import {
   acrylicWobble,
   cardLaserAngle,
-  charmPieceOffsets,
-  charmSwing,
   GIF_FPS,
   LOOP_SECONDS,
   omamoriSway,
   VIDEO_FPS,
 } from "@/lib/tools/merch/motion";
-import { charmGeometry, drawCard, drawCharm, type CharmPiece } from "@/lib/tools/merch/render";
+import { drawCard } from "@/lib/tools/merch/render";
 import {
   buildAcrylic,
   buildOmamori,
@@ -51,9 +47,8 @@ import { ActionButton, ColorField, Field, RangeField, Segmented, StationHint, To
 import { ToolPane } from "../../image/_components/WorkbenchLayout";
 import AcrylicStage, { type AcrylicView } from "./AcrylicStage";
 import ArtLibrary from "./ArtLibrary";
-import { isPieceable, MAX_PIECE_SIDE, useArts, type Cutout } from "./arts";
+import { isPieceable, useArts, type Cutout } from "./arts";
 import CardStage from "./CardStage";
-import CharmStage from "./CharmStage";
 import OmamoriStage from "./OmamoriStage";
 import PlacedControls, { RecolorControls } from "./PlacedControls";
 import { needsMotionPermission, requestMotionPermission } from "./useDesignCanvas";
@@ -61,14 +56,11 @@ import WandDialog from "./WandDialog";
 
 /** 輸出倍率:設計單位 × 2,小卡就是 1100×1700 */
 const EXPORT_SCALE = 2;
-const MAX_PIECES = 12;
 /** 動態輸出:GIF 小一點(檔案才傳得動),影片長邊到 1080 */
 const GIF_MAX_SIDE = 560;
 const VIDEO_MAX_SIDE = 1080;
 /** GIF 透明只有全有全無,邊緣會毛,所以鋪淡色底;影片也用同一個底 */
 const LOOP_BACKGROUND = "#f4f1ea";
-/** 錄的時候吊飾縮一點、從上緣往下掛,擺動時角不會出框 */
-const CHARM_LOOP_SCALE = 0.88;
 
 const PATTERNS = [
   { value: "asanoha", label: "麻葉" },
@@ -80,8 +72,8 @@ const PATTERNS = [
 type Notice = { text: string; kind: "info" | "error" } | null;
 
 /**
- * 周邊工坊:小卡套、搖搖吊飾、御守、透卡／打卡棒。
- * 素材來自內建模板、相簿(作品與素材)與魔術棒去背的圖片;一張「你的照片」四種周邊共用。
+ * 周邊工坊:小卡套、御守、透卡／打卡棒。
+ * 素材來自內建模板、相簿(作品與素材)與魔術棒去背的圖片;一張「你的照片」各種周邊共用。
  */
 export default function MerchWorkshop({
   album,
@@ -118,8 +110,6 @@ export default function MerchWorkshop({
   const photoInput = useRef<HTMLInputElement>(null);
   const wandInput = useRef<HTMLInputElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
-  const charmPieces = useRef<CharmPiece[]>([]);
-  const shake = useRef<Vec | null>(null);
 
   const { entries, getArt, artMap } = useArts(album, cutouts, palette);
 
@@ -182,7 +172,7 @@ export default function MerchWorkshop({
   }, [restored, kind, designs, photoBlob, cutouts]);
 
   function resetAll() {
-    if (!window.confirm("四種周邊都回到預設的樣子，照片與去背圖也會拿掉。要繼續嗎？")) return;
+    if (!window.confirm("所有周邊都回到預設的樣子，照片與去背圖也會拿掉。要繼續嗎？")) return;
     setDesigns(defaultDesigns());
     setPhoto(null);
     setPhotoBlob(null);
@@ -196,7 +186,6 @@ export default function MerchWorkshop({
   }, []);
 
   const card = designs.card;
-  const charm = designs.charm;
   const omamori = designs.omamori;
   const acrylic = designs.acrylic;
 
@@ -204,7 +193,6 @@ export default function MerchWorkshop({
     () => artMap([...card.stickers.map(artKey), ...(card.frame === "motif" ? [card.frameArt] : [])]),
     [artMap, card.stickers, card.frame, card.frameArt]
   );
-  const charmArts = useMemo(() => artMap(charm.pieces.map(artKey)), [artMap, charm.pieces]);
   const acrylicArts = useMemo(() => artMap(acrylic.stickers.map(artKey)), [artMap, acrylic.stickers]);
   const bell = useMemo(() => (omamori.bell ? getArt(omamori.bell) : null), [getArt, omamori.bell]);
 
@@ -235,13 +223,6 @@ export default function MerchWorkshop({
       setAcrylicView("edit");
       update("acrylic", { ...acrylic, stickers: [...acrylic.stickers, placed] });
       setSelected(placed.id);
-    } else if (kind === "charm") {
-      if (charm.pieces.length >= MAX_PIECES) {
-        showNotice(`吊飾裡最多放 ${MAX_PIECES} 個零件。`, "error");
-        return;
-      }
-      const cell = charm.pieces[0]?.cell ?? CHARM_CELL;
-      update("charm", { ...charm, pieces: [...charm.pieces, { id: newId("piece"), artId, cell }] });
     } else {
       update("omamori", { ...omamori, bell: artId });
     }
@@ -261,7 +242,6 @@ export default function MerchWorkshop({
     if (!ctx) return canvas;
     ctx.scale(EXPORT_SCALE, EXPORT_SCALE);
     if (kind === "card") drawCard(ctx, width, height, card, { photo, arts: cardArts }, 0.7);
-    else if (kind === "charm") drawCharm(ctx, width, height, charm, photo, charmPieces.current);
     else if (kind === "omamori") {
       drawAcrylicOmamori(ctx, width, height, omamori, buildOmamori(omamori, side, width, height, EXPORT_SCALE), 0, bell);
     } else {
@@ -295,36 +275,12 @@ export default function MerchWorkshop({
       const piece = buildOmamori(omamori, side, width, height, 1.5);
       return (ctx, t) => drawAcrylicOmamori(ctx, width, height, omamori, piece, omamoriSway(t), bell);
     }
-    if (kind === "acrylic") {
-      // 板子做一次,每一格只在照片上微微晃(四個角換成 0–1 再套晃動路徑)
-      const piece = buildAcrylic(acrylic, acrylicArts, 1.25);
-      const base = sceneQuad(piece, acrylic.place, width, height).map((p) => ({ x: p.x / width, y: p.y / height })) as Quad;
-      return (ctx, t) => {
-        const quad = acrylicWobble(base, t).map((p) => ({ x: p.x * width, y: p.y * height })) as Quad;
-        drawAcrylicScene(ctx, width, height, photo, piece, quad, acrylic.clarity);
-      };
-    }
-    // 吊飾:零件從現在停著的位置開始晃(跟畫面上看到的一樣)
-    const pieces = charmPieces.current;
-    const { inner } = charmGeometry(charm, width, height);
-    const box: Container = inner.kind === "circle" ? { ...inner, r: inner.r - 3 } : { ...inner, hw: inner.hw - 3, hh: inner.hh - 3 };
-    const bodies = pieces.map((piece) => piece.body);
+    // 透卡:板子做一次,每一格只在照片上微微晃(四個角換成 0–1 再套晃動路徑)
+    const piece = buildAcrylic(acrylic, acrylicArts, 1.25);
+    const base = sceneQuad(piece, acrylic.place, width, height).map((p) => ({ x: p.x / width, y: p.y / height })) as Quad;
     return (ctx, t) => {
-      const offsets = charmPieceOffsets(bodies, box, t);
-      const moved = pieces.map((piece, k) => ({
-        ...piece,
-        body: {
-          ...piece.body,
-          x: piece.body.x + offsets[k].dx,
-          y: piece.body.y + offsets[k].dy,
-          angle: piece.body.angle + offsets[k].dAngle,
-        },
-      }));
-      ctx.translate(width / 2, height * 0.03);
-      ctx.rotate(charmSwing(t));
-      ctx.scale(CHARM_LOOP_SCALE, CHARM_LOOP_SCALE);
-      ctx.translate(-width / 2, 0);
-      drawCharm(ctx, width, height, charm, photo, moved);
+      const quad = acrylicWobble(base, t).map((p) => ({ x: p.x * width, y: p.y * height })) as Quad;
+      drawAcrylicScene(ctx, width, height, photo, piece, quad, acrylic.clarity);
     };
   }
 
@@ -411,8 +367,6 @@ export default function MerchWorkshop({
         onSelect={setSelected}
         active={active}
       />
-    ) : kind === "charm" ? (
-      <CharmStage design={charm} photo={photo} arts={charmArts} active={active} piecesRef={charmPieces} shakeRef={shake} />
     ) : kind === "omamori" ? (
       <OmamoriStage
         design={omamori}
@@ -501,9 +455,7 @@ export default function MerchWorkshop({
                 hint={
                   kind === "card"
                     ? "底選「照片」時放在框裡。"
-                    : kind === "charm"
-                      ? "後層選「照片」時放在吊飾裡。"
-                      : "放在壓克力後面當背景（不會印上去），透明的地方看得到後面的景。"
+                    : "放在壓克力後面當背景（不會印上去），透明的地方看得到後面的景。"
                 }
                 t={t}
               >
@@ -609,77 +561,6 @@ export default function MerchWorkshop({
                   <Toggle label="雷射膜" checked={card.laser} onChange={(laser) => update("card", { ...card, laser })} t={t} />
                   <Toggle label="亮面" checked={card.gloss} onChange={(gloss) => update("card", { ...card, gloss })} t={t} />
                 </Field>
-              </>
-            )}
-
-            {kind === "charm" && (
-              <>
-                <Field label="外形" t={t}>
-                  <Segmented
-                    label="外形"
-                    value={charm.shape}
-                    onChange={(shape) => update("charm", { ...charm, shape })}
-                    options={[
-                      { value: "rounded", label: "圓角方形" },
-                      { value: "circle", label: "圓形" },
-                    ]}
-                    t={t}
-                  />
-                </Field>
-                <Field label="後層" t={t}>
-                  <Segmented
-                    label="後層"
-                    value={charm.background}
-                    onChange={(background) => update("charm", { ...charm, background })}
-                    options={[
-                      { value: "color", label: "底色" },
-                      { value: "photo", label: "照片" },
-                    ]}
-                    t={t}
-                  />
-                  <ColorField value={charm.color} onChange={(color) => update("charm", { ...charm, color })} t={t} />
-                </Field>
-                <Field label="金屬環" t={t}>
-                  <ColorField value={charm.ring} onChange={(ring) => update("charm", { ...charm, ring })} t={t} />
-                </Field>
-                <RangeField
-                  label="零件大小"
-                  display={`${charm.pieces[0]?.cell ?? CHARM_CELL}`}
-                  value={charm.pieces[0]?.cell ?? CHARM_CELL}
-                  min={10}
-                  max={24}
-                  onChange={(cell) =>
-                    update("charm", { ...charm, pieces: charm.pieces.map((piece) => ({ ...piece, cell })) })
-                  }
-                  t={t}
-                />
-                <div className="flex flex-wrap gap-2">
-                  <ActionButton
-                    tone="secondary"
-                    t={t}
-                    onClick={() => {
-                      shake.current = { x: (Math.random() - 0.5) * 30000, y: -26000 };
-                    }}
-                  >
-                    搖一搖
-                  </ActionButton>
-                  <ActionButton
-                    tone="secondary"
-                    t={t}
-                    onClick={() => update("charm", { ...charm, pieces: charm.pieces.slice(0, -1) })}
-                    disabled={charm.pieces.length === 0}
-                  >
-                    拿掉最後一個
-                  </ActionButton>
-                  <ActionButton
-                    tone="secondary"
-                    t={t}
-                    onClick={() => update("charm", { ...charm, pieces: [] })}
-                    disabled={charm.pieces.length === 0}
-                  >
-                    清空
-                  </ActionButton>
-                </div>
               </>
             )}
 
@@ -900,25 +781,15 @@ export default function MerchWorkshop({
             )}
 
             <Field
-              label={
-                kind === "charm" ? "加零件" : kind === "omamori" ? "拼豆小鈴鐺" : "加貼紙"
-              }
-              hint={
-                kind === "charm"
-                  ? `只放得進 ${MAX_PIECE_SIDE}×${MAX_PIECE_SIDE} 以內的小拼豆；在拼豆工坊用迷你板拼好、收藏成「素材」就會出現在這裡。`
-                  : kind === "omamori"
-                    ? "點一個掛在繩結旁邊。"
-                    : "相簿裡的作品與素材都在這裡；也可以上傳圖片去背。"
-              }
+              label={kind === "omamori" ? "拼豆小鈴鐺" : "加貼紙"}
+              hint={kind === "omamori" ? "點一個掛在繩結旁邊。" : "相簿裡的作品與素材都在這裡；也可以上傳圖片去背。"}
               t={t}
             >
               <ArtLibrary
                 entries={entries}
                 getArt={getArt}
                 onPick={addSticker}
-                filter={
-                  kind === "charm" || kind === "omamori" ? isPieceable : undefined
-                }
+                filter={kind === "omamori" ? isPieceable : undefined}
                 onUpload={kind === "card" || kind === "acrylic" ? () => wandInput.current?.click() : undefined}
                 t={t}
               />
@@ -954,7 +825,7 @@ export default function MerchWorkshop({
               )}
             </div>
             <p className={`text-[11px] leading-5 ${t.muted}`}>
-              GIF 與影片是 {LOOP_SECONDS} 秒的循環：{kind === "card" ? "雷射膜來回流動" : kind === "charm" ? "吊飾擺動、零件跟著滑" : kind === "omamori" ? "繩結輕輕晃" : "板子像拿在手上微微晃"}。GIF 最多 256 色，雷射與亮粉會有一點色帶；影片畫質完整，錄的時候要等 {LOOP_SECONDS * 2} 秒。
+              GIF 與影片是 {LOOP_SECONDS} 秒的循環：{kind === "card" ? "雷射膜來回流動" : kind === "omamori" ? "繩結輕輕晃" : "板子像拿在手上微微晃"}。GIF 最多 256 色，雷射與亮粉會有一點色帶；影片畫質完整，錄的時候要等 {LOOP_SECONDS * 2} 秒。
             </p>
             <p className={`text-[11px] leading-5 ${t.muted}`}>
               {saveFailed
@@ -987,7 +858,6 @@ export default function MerchWorkshop({
             showNotice("照片放在壓克力後面當背景了。要印在壓克力上的圖，請到「編輯壓克力」按「上傳圖片（自動去背）」。");
           }
           if (kind === "card") update("card", { ...card, background: "photo" });
-          if (kind === "charm") update("charm", { ...charm, background: "photo" });
         }}
       />
       <input

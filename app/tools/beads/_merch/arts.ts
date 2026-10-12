@@ -29,7 +29,7 @@ export const GROUP_LABELS: Record<ArtEntry["group"], string> = {
   cutout: "去背圖",
 };
 
-/** 搖搖吊飾裡的零件要算碰撞,太大的作品放不進去 */
+/** 御守的拼豆小鈴鐺只放得下小拼豆,太大的作品不列出來 */
 export const MAX_PIECE_SIDE = 15;
 
 export function isPieceable(entry: ArtEntry): boolean {

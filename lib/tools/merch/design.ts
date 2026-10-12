@@ -1,16 +1,15 @@
-// 周邊工坊的設計資料:四種周邊各自的設定,與貼紙的擺法。
+// 周邊工坊的設計資料:三種周邊各自的設定,與貼紙的擺法。
 //
 // 每種周邊都有預設的樣子(用內建模板當貼紙),沒有照片也能直接做。
 // 貼紙只記三件事:用哪一份圖(art)、位置/大小/旋轉、(拼豆的話)燙法與材質跟著格子資料走。
-// 同一顆星星可以同時當吊飾裡的小亮片,也能放大當卡套主角。
+// 同一顆星星可以同時當御守的小鈴鐺,也能放大當卡套主角。
 
 import { defaultPlacement, type Placement } from "./acrylic-shape";
 
-export type MerchKind = "card" | "charm" | "omamori" | "acrylic";
+export type MerchKind = "card" | "omamori" | "acrylic";
 
 export const MERCH_KINDS: { kind: MerchKind; label: string; hint: string }[] = [
   { kind: "card", label: "小卡套", hint: "照片＋框、蕾絲邊、貼紙、雷射膜；移動滑鼠或傾斜手機，雷射彩虹會流動" },
-  { kind: "charm", label: "搖搖吊飾", hint: "後層照片或底色，前層透明空間裝拼豆小零件；拖動或晃手機，零件照真實形狀碰撞翻滾" },
   { kind: "omamori", label: "壓克力御守", hint: "御守袋印在一片透明壓克力上，外緣留一圈透明邊，袋口打孔穿繩結；點一下翻面" },
   { kind: "acrylic", label: "透卡／打卡棒", hint: "壓克力上印你的圖（拼豆或去背圖），先攤平排版，再「放到照片上」和實景合成；拖板子移動、拖四個角傾斜" },
 ];
@@ -67,15 +66,6 @@ export type CardDesign = {
   stickers: Placed[];
 };
 
-export type CharmDesign = {
-  shape: "rounded" | "circle";
-  background: "photo" | "color";
-  color: string;
-  ring: string;
-  /** 吊飾裡的零件:哪一份圖、多大(一顆豆子幾個設計單位) */
-  pieces: { id: string; artId: string; cell: number; recolor?: Recolor }[];
-};
-
 export type OmamoriDesign = {
   fabric: string;
   pattern: "plain" | "asanoha" | "seigaiha" | "dots";
@@ -118,7 +108,6 @@ export type AcrylicDesign = {
 
 export type MerchDesigns = {
   card: CardDesign;
-  charm: CharmDesign;
   omamori: OmamoriDesign;
   acrylic: AcrylicDesign;
 };
@@ -127,13 +116,9 @@ export type MerchDesigns = {
 export const DESIGN_SIZE: Record<MerchKind, { width: number; height: number }> = {
   // 小卡 55×85mm
   card: { width: 550, height: 850 },
-  charm: { width: 640, height: 820 },
   omamori: { width: 480, height: 820 },
   acrylic: { width: 900, height: 1200 },
 };
-
-/** 搖搖吊飾零件預設的大小:一顆豆子幾個設計單位 */
-export const CHARM_CELL = 16;
 
 let counter = 0;
 export function newId(prefix: string): string {
@@ -156,17 +141,6 @@ export function defaultDesigns(): MerchDesigns {
         { id: newId("sticker"), artId: "tpl:cat-9", x: 0.5, y: 0.46, size: 0.62, rotation: -4 },
         { id: newId("sticker"), artId: "tpl:heart-5", x: 0.8, y: 0.8, size: 0.24, rotation: 12 },
       ],
-    },
-    charm: {
-      shape: "rounded",
-      background: "color",
-      color: "#bbc8e6",
-      ring: "#d8b45a",
-      pieces: ["tpl:star-7", "tpl:heart-5", "tpl:star-7", "tpl:flower-7", "tpl:heart-5"].map((artId) => ({
-        id: newId("piece"),
-        artId,
-        cell: CHARM_CELL,
-      })),
     },
     omamori: {
       fabric: "#a22041",
