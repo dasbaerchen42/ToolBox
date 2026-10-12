@@ -9,7 +9,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { FONT_OPTIONS } from "@/lib/editor-font";
 import type { FontFamilyName } from "@/lib/preferences";
-import { canvasFontFamily } from "@/lib/web-fonts";
+import { canvasFontFamily, ensureFancyFallback } from "@/lib/web-fonts";
+import { convertFancy, getFontResults } from "@/app/tools/_lib/fancy-fonts";
 import {
   dragHandle,
   drawTextLayer,
@@ -44,6 +45,14 @@ type Props = {
   onApply: (layers: TextLayer[], families: Record<string, string>) => void;
 };
 
+/** 畫的時候用的樣子:選了英文花體就先把字母換掉(打字的地方還是原本的字) */
+function shown(layer: TextLayer): TextLayer {
+  return layer.fancy ? { ...layer, text: convertFancy(layer.text, layer.fancy) } : layer;
+}
+
+/** 花體選單:用 Abc 當示範 */
+const FANCY_OPTIONS = getFontResults("Abc 123").map((result) => ({ key: result.key, label: `${result.label}　${result.value}` }));
+
 let measureCtx: CanvasRenderingContext2D | null = null;
 function measurer(): CanvasRenderingContext2D | null {
   if (!measureCtx && typeof document !== "undefined") measureCtx = document.createElement("canvas").getContext("2d");
@@ -65,12 +74,18 @@ export default function TextTool({ image, busy, t, onApply }: Props) {
   const scale = Math.min(1, PREVIEW_MAX / image.width);
 
   // 字體:每段字用到的字(含粗細)都先載好,才不會畫成備援字體
-  const fontKey = layers.map((l) => `${l.id}|${l.font}|${l.bold}|${l.text}`).join("\n");
+  const fontKey = layers.map((l) => `${l.id}|${l.font}|${l.bold}|${l.fancy ?? ""}|${l.text}`).join("\n");
   useEffect(() => {
     let cancelled = false;
     const timer = setTimeout(() => {
       void Promise.all(
-        layers.map(async (layer) => [layer.id, await canvasFontFamily(layer.font, layer.text, layer.bold ? 700 : 400)] as const)
+        layers.map(async (layer) => {
+          const text = shown(layer).text;
+          let family = await canvasFontFamily(layer.font, text, layer.bold ? 700 : 400);
+          // 花體字母不在一般字型裡,接上數學、符號字型補位
+          if (layer.fancy) family = `${family}, ${await ensureFancyFallback(text)}`;
+          return [layer.id, family] as const;
+        })
       ).then((entries) => {
         if (!cancelled) setFamilies(Object.fromEntries(entries));
       });
@@ -91,7 +106,7 @@ export default function TextTool({ image, busy, t, onApply }: Props) {
     if (!ctx) return map;
     for (const layer of layers) {
       ctx.font = fontString(layer, families[layer.id] ?? "sans-serif");
-      map.set(layer.id, layoutTextLayer(layer, (text) => ctx.measureText(text)));
+      map.set(layer.id, layoutTextLayer(shown(layer), (text) => ctx.measureText(text)));
     }
     return map;
   }, [layers, families]);
@@ -105,7 +120,7 @@ export default function TextTool({ image, busy, t, onApply }: Props) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (const layer of layers) drawTextLayer(ctx, layer, families[layer.id] ?? "sans-serif", scale);
+    for (const layer of layers) drawTextLayer(ctx, shown(layer), families[layer.id] ?? "sans-serif", scale);
   }, [layers, families, image.width, image.height, scale]);
 
   function update(id: string, patch: Partial<TextLayer>) {
@@ -118,7 +133,7 @@ export default function TextTool({ image, busy, t, onApply }: Props) {
     // 新的一段沿用上一段的樣式(字體、顏色、底色),連續放字比較快
     const last = selected ?? layers[layers.length - 1];
     const base = last
-      ? { font: last.font, bold: last.bold, color: last.color, align: last.align, backdrop: last.backdrop, backdropColor: last.backdropColor, stroke: last.stroke, strokeColor: last.strokeColor, shadow: last.shadow, size: last.size }
+      ? { font: last.font, bold: last.bold, color: last.color, align: last.align, backdrop: last.backdrop, backdropColor: last.backdropColor, stroke: last.stroke, strokeColor: last.strokeColor, shadow: last.shadow, size: last.size, fancy: last.fancy }
       : undefined;
     const layer = newTextLayer(id, point, image, base);
     setLayers((prev) => [...prev, layer]);
@@ -278,6 +293,22 @@ export default function TextTool({ image, busy, t, onApply }: Props) {
                 </div>
               </Field>
 
+              <Field label="英文花體" hint="只換英文字母和數字，中文不變；跟社群轉換區同一套" t={t}>
+                <select
+                  value={selected.fancy ?? ""}
+                  onChange={(event) => update(selected.id, { fancy: event.target.value || null })}
+                  aria-label="英文花體"
+                  className={`w-full rounded-xl border px-3 py-2 text-sm ${t.input}`}
+                >
+                  <option value="">不轉換</option>
+                  {FANCY_OPTIONS.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
               <Field label="文字顏色" t={t}>
                 <div className="flex flex-wrap items-center gap-1.5">
                   {SWATCHES.map((color) => (
@@ -381,7 +412,7 @@ export default function TextTool({ image, busy, t, onApply }: Props) {
           )}
 
           {layers.length > 0 && (
-            <ActionButton t={t} onClick={() => onApply(layers, Object.fromEntries(layers.map((l) => [l.id, familyOf(l)])))} disabled={busy}>
+            <ActionButton t={t} onClick={() => onApply(layers.map(shown), Object.fromEntries(layers.map((l) => [l.id, familyOf(l)])))} disabled={busy}>
               把字壓到圖上（{layers.length} 段）
             </ActionButton>
           )}

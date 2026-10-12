@@ -6,7 +6,17 @@ export type FontFamilyName =
   | "round"
   | "wenkai"
   | "iansui"
-  | "cactus";
+  | "cactus"
+  | "goround"
+  | "chocolate"
+  | "marker"
+  | "lubrifont"
+  | "dancing"
+  | "caveat"
+  | "pacifico"
+  | "permanent"
+  | "playfair"
+  | "bebas";
 
 /** 編輯區的呈現方式：純文字、渲染結果、左右並排 */
 export type EditorViewMode = "edit" | "preview" | "split";

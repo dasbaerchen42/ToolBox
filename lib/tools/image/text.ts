@@ -27,6 +27,8 @@ export type TextLayer = {
   stroke: number;
   strokeColor: string;
   shadow: boolean;
+  /** 英文字母換成哪一種花體(社群轉換區同一套);null 是不換 */
+  fancy?: string | null;
 };
 
 export const LINE_HEIGHT = 1.3;

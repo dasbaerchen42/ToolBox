@@ -207,3 +207,8 @@ export function getFontResults(input: string): FontResult[] {
     { key: "superscript", label: "上標風格", preview: "ᶠᵃⁿᶜʸ", value: mapTable(input, SUPERSCRIPT) },
   ];
 }
+
+/** 只轉一種花體(影像工作檯的放字用);找不到那種就原樣回傳 */
+export function convertFancy(input: string, key: string): string {
+  return getFontResults(input).find((result) => result.key === key)?.value ?? input;
+}
