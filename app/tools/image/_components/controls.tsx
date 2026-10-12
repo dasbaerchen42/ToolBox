@@ -148,6 +148,33 @@ export function ActionButton({
   );
 }
 
+/**
+ * 收起來的一組設定(預設收起):不常調的參數放這裡,面板才不會一路長下去。
+ */
+export function Collapse({
+  title,
+  children,
+  defaultOpen = false,
+  t,
+}: {
+  title: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+  t: ThemeClasses;
+}) {
+  return (
+    <details open={defaultOpen} className={`group rounded-xl border ${t.subPanel}`}>
+      <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2 text-sm tracking-[0.04em] [&::-webkit-details-marker]:hidden">
+        <span>{title}</span>
+        <span className={`text-xs transition group-open:rotate-180 ${t.muted}`} aria-hidden>
+          ▾
+        </span>
+      </summary>
+      <div className="space-y-3 px-3 pb-3">{children}</div>
+    </details>
+  );
+}
+
 /** 每個工作站上方那句「現在需要幾張圖」的說明 */
 export function StationHint({ children, t }: { children: ReactNode; t: ThemeClasses }) {
   return (

@@ -35,6 +35,7 @@ import {
   Segmented,
   StationHint,
   Toggle,
+  Collapse,
 } from "./controls";
 
 type Props = {
@@ -395,7 +396,7 @@ export default function PrintTool({ images, busy, t, onApply }: Props) {
           <div className="flex justify-center overflow-hidden rounded-2xl border border-(--border-light) bg-(--paper-bg-3) p-3">
             <canvas
               ref={canvasRef}
-              aria-label="沖印所預覽"
+              aria-label="效果沖印預覽"
               className={framed ? "cursor-grab touch-none active:cursor-grabbing" : undefined}
               onPointerDown={(event) => {
                 if (!framed) return;
@@ -470,7 +471,7 @@ export default function PrintTool({ images, busy, t, onApply }: Props) {
           <p className={`text-[11px] leading-5 ${t.muted}`}>{item.hint}</p>
 
           {framed && (
-            <div className={`space-y-3 rounded-xl border p-3 ${t.subPanel}`}>
+            <Collapse title="照片位置與縮放" t={t}>
               <p className={`text-[11px] leading-5 ${t.muted}`}>
                 {photoCropped
                   ? "照片比例跟框不一樣，可以拖曳預覽或用拉桿決定要留哪一塊。批次的每一張都套同一組位置。"
@@ -492,7 +493,7 @@ export default function PrintTool({ images, busy, t, onApply }: Props) {
                   t={t}
                 />
               )}
-            </div>
+            </Collapse>
           )}
 
           <div className={`space-y-3 rounded-xl border p-3 ${t.subPanel}`}>
