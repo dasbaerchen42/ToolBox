@@ -16,6 +16,26 @@ const LOADERS: Partial<Record<FontFamilyName, () => Promise<FontModule>>> = {
   wenkai: () => import("./wenkai"),
   iansui: () => import("./iansui"),
   cactus: () => import("./cactus"),
+  goround: () => import("./goround"),
+  chocolate: () => import("./chocolate"),
+  marker: () => import("./marker"),
+  lubrifont: () => import("./lubrifont"),
+  dancing: () => import("./dancing"),
+  caveat: () => import("./caveat"),
+  pacifico: () => import("./pacifico"),
+  permanent: () => import("./permanent"),
+  playfair: () => import("./playfair"),
+  bebas: () => import("./bebas"),
+};
+
+/** 英文字體缺中文字,一起載入補位的中文字體 */
+const COMPANIONS: Partial<Record<FontFamilyName, FontFamilyName>> = {
+  dancing: "sans",
+  caveat: "sans",
+  pacifico: "sans",
+  permanent: "sans",
+  bebas: "sans",
+  playfair: "serif",
 };
 
 const loading = new Map<FontFamilyName, Promise<void>>();
@@ -25,6 +45,12 @@ const loading = new Map<FontFamilyName, Promise<void>>();
  * 掛在 <html> 而不是某個元件上,轉圖時插在 body 底下的暫存節點也吃得到。
  */
 export function ensureWebFont(font: FontFamilyName): Promise<void> {
+  const companion = COMPANIONS[font];
+  if (companion) return Promise.all([loadOne(font), loadOne(companion)]).then(() => undefined);
+  return loadOne(font);
+}
+
+function loadOne(font: FontFamilyName): Promise<void> {
   const loader = LOADERS[font];
   if (!loader || typeof document === "undefined") return Promise.resolve();
 
@@ -81,4 +107,26 @@ export async function canvasFontFamily(
   );
   for (const result of results) if (result.status === "rejected") console.warn("字體載入失敗:", result.reason);
   return family;
+}
+
+/**
+ * 英文花體字母(𝓐、𝔄、🄰……)是 Unicode 裡的數學、符號字元,不少手機的系統字型缺幾種。
+ * 用到時載入 Noto Sans Math 與 Noto Sans Symbols 2 補上,回傳要接在 font-family 後面的字體。
+ */
+let fancyLoading: Promise<void> | null = null;
+export const FANCY_FALLBACK = '"Noto Sans Math", "Noto Sans Symbols 2"';
+
+export async function ensureFancyFallback(sample: string): Promise<string> {
+  if (typeof document === "undefined") return FANCY_FALLBACK;
+  fancyLoading ??= Promise.all([import("./math"), import("./symbols2")])
+    .then((mods) => {
+      for (const mod of mods) document.documentElement.classList.add(mod.default.variable);
+    })
+    .catch((error: unknown) => {
+      fancyLoading = null;
+      console.warn("花體字型載入失敗:", error);
+    });
+  await fancyLoading;
+  await Promise.allSettled(['48px "Noto Sans Math"', '48px "Noto Sans Symbols 2"'].map((font) => document.fonts?.load(font, sample)));
+  return FANCY_FALLBACK;
 }
