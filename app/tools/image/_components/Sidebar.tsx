@@ -5,16 +5,15 @@ import { formatBytes } from "@/lib/tools/image/format";
 import type { WorkImage } from "@/lib/tools/image/types";
 import type { ThemeClasses } from "@/lib/theme";
 
-export type ToolKey = "mask" | "slice" | "merge" | "frame" | "watermark" | "print" | "output";
+export type ToolKey = "slice" | "merge" | "frame" | "mark" | "print";
 
+/** 五個工作站;下載不是一站,是頁面右上角的按鈕 */
 export const TOOLS: { key: ToolKey; label: string; hint: string }[] = [
-  { key: "mask", label: "遮罩塗佈區", hint: "蓋掉不想露出來的東西" },
-  { key: "slice", label: "影像切割刀", hint: "等分切、自由下刀、框選裁切" },
-  { key: "merge", label: "圖片拼接台", hint: "照順序接成一張" },
-  { key: "frame", label: "邊框比例區", hint: "描邊、補成指定長寬比" },
-  { key: "watermark", label: "浮水印壓印台", hint: "文字或圖片浮水印、雜訊" },
-  { key: "print", label: "沖印所", hint: "網點、孔版、拍立得、郵票、海報" },
-  { key: "output", label: "輸出下載區", hint: "格式、品質，然後帶走" },
+  { key: "slice", label: "影像切割", hint: "自動等分、自由下刀、框選裁切" },
+  { key: "merge", label: "圖片拼接", hint: "照順序接成一張" },
+  { key: "frame", label: "尺寸邊框", hint: "描邊、補成指定比例" },
+  { key: "mark", label: "文字標記", hint: "浮水印、局部遮罩" },
+  { key: "print", label: "效果沖印", hint: "網點、孔版、拍立得、郵票、海報、社群介面" },
 ];
 
 type Props = {

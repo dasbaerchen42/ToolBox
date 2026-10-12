@@ -41,7 +41,7 @@ import type {
 
 import Sidebar, { TOOLS, type ToolKey } from "./_components/Sidebar";
 import { WorkbenchShell, ToolPane, EmptyWorkspace } from "./_components/WorkbenchLayout";
-import { StationHint } from "./_components/controls";
+import { Segmented, StationHint } from "./_components/controls";
 import MaskTool from "./_components/MaskTool";
 import SliceTool from "./_components/SliceTool";
 import MergeTool from "./_components/MergeTool";
@@ -60,7 +60,19 @@ type Notice = { kind: "info" | "error"; text: string } | null;
 export default function ImageWorkbenchPage() {
   const t = getThemeClasses();
 
-  const [tool, setTool] = useState<ToolKey>("mask");
+  const [tool, setTool] = useState<ToolKey>("slice");
+  /** 文字標記站裡的分頁 */
+  const [markTab, setMarkTab] = useState<"watermark" | "mask">("watermark");
+  const [downloadOpen, setDownloadOpen] = useState(false);
+
+  useEffect(() => {
+    if (!downloadOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDownloadOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [downloadOpen]);
   const [images, setImages] = useState<WorkImage[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [history, setHistory] = useState<WorkImage[][]>([]);
@@ -521,29 +533,25 @@ export default function ImageWorkbenchPage() {
             </p>
           </div>
 
-          <p
-            aria-live="polite"
-            className={`text-xs leading-6 tracking-[0.04em] ${
-              notice?.kind === "error" ? "" : t.muted
-            }`}
-          >
-            {busy ? "處理中……" : (notice?.text ?? "")}
-          </p>
+          <div className="flex items-center gap-3">
+            <p
+              aria-live="polite"
+              className={`text-xs leading-6 tracking-[0.04em] ${
+                notice?.kind === "error" ? "" : t.muted
+              }`}
+            >
+              {busy ? "處理中……" : (notice?.text ?? "")}
+            </p>
+            <button
+              type="button"
+              onClick={() => setDownloadOpen(true)}
+              disabled={images.length === 0}
+              className={`shrink-0 rounded-xl border px-4 py-2 text-sm tracking-[0.04em] transition disabled:opacity-40 ${t.primary}`}
+            >
+              下載
+            </button>
+          </div>
         </header>
-
-        {tool === "mask" &&
-          (active ? (
-            <MaskTool
-              key={active.id}
-              image={active}
-              busy={busy}
-              t={t}
-              onApply={(masks) => void handleMask(masks)}
-              onPickColor={(point: Point) => pickColorAt(active, point)}
-            />
-          ) : (
-            needImage
-          ))}
 
         {tool === "slice" &&
           (active ? (
@@ -578,13 +586,42 @@ export default function ImageWorkbenchPage() {
           />
         )}
 
-        {tool === "watermark" && (
-          <WatermarkTool
-            images={selected}
-            busy={busy}
-            t={t}
-            onApply={(job) => void handleWatermark(job)}
-          />
+        {tool === "mark" && (
+          <>
+            <div className="mb-4 max-w-sm">
+              <Segmented
+                value={markTab}
+                onChange={setMarkTab}
+                t={t}
+                label="文字標記"
+                options={[
+                  { value: "watermark", label: "浮水印" },
+                  { value: "mask", label: "局部遮罩" },
+                ]}
+              />
+            </div>
+            {markTab === "watermark" && (
+            <WatermarkTool
+              images={selected}
+              busy={busy}
+              t={t}
+              onApply={(job) => void handleWatermark(job)}
+            />
+          )}
+            {markTab === "mask" &&
+            (active ? (
+              <MaskTool
+                key={active.id}
+                image={active}
+                busy={busy}
+                t={t}
+                onApply={(masks) => void handleMask(masks)}
+                onPickColor={(point: Point) => pickColorAt(active, point)}
+              />
+            ) : (
+              needImage
+            ))}
+          </>
         )}
 
         {tool === "print" && (
@@ -596,19 +633,39 @@ export default function ImageWorkbenchPage() {
           />
         )}
 
-        {tool === "output" && (
-          <OutputTool
-            images={images}
-            selected={selected}
-            output={output}
-            busy={busy}
-            t={t}
-            onChange={setOutput}
-            onDownload={(targets) => void handleDownload(targets)}
-            onShare={canShare ? (targets) => void handleShare(targets) : undefined}
-          />
-        )}
       </WorkbenchShell>
+
+      {downloadOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/60 md:items-center md:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="下載"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setDownloadOpen(false);
+          }}
+        >
+          <div className={`flex h-dvh w-full max-w-4xl flex-col overflow-auto border p-4 shadow-lg md:h-auto md:max-h-[90vh] md:rounded-3xl md:p-5 ${t.page} border-(--border-light)`}>
+            <div className="mb-3 flex items-center justify-between">
+              <b className="tracking-[0.06em]">下載</b>
+              <button type="button" onClick={() => setDownloadOpen(false)} className={`rounded-xl border px-3 py-1.5 text-sm ${t.secondary}`}>
+                ✕ 關閉
+              </button>
+            </div>
+
+              <OutputTool
+                images={images}
+                selected={selected}
+                output={output}
+                busy={busy}
+                t={t}
+                onChange={setOutput}
+                onDownload={(targets) => void handleDownload(targets)}
+                onShare={canShare ? (targets) => void handleShare(targets) : undefined}
+              />
+          </div>
+        </div>
+      )}
     </main>
   );
 }
