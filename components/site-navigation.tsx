@@ -4,8 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import ThemeMenu from "@/components/theme-menu";
 
-const navItems = [
-  { href: "/", label: "首頁" },
+const home = { href: "/", label: "首頁" };
+
+const tools = [
   { href: "/editor", label: "通用編輯器" },
   { href: "/tools", label: "社群轉換區" },
   { href: "/tools/knife", label: "文字切割刀" },
@@ -16,39 +17,54 @@ const navItems = [
 ];
 
 export default function SiteNavigation() {
-  const pathname = usePathname();
+  // 靜態輸出的網址尾巴有斜線(/tools/beads/),比對前先拿掉,目前這頁才標得出來
+  const pathname = usePathname().replace(/(.)\/$/, "$1");
 
   return (
     <nav className="border-b border-(--border-light) bg-(--surface) backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-3">
         {/*
-          左側:導覽列按鈕區塊。
-          窄畫面改成單行橫向捲動而不是換行——七個項目換行會變成三列,
-          在手機上每一頁都先吃掉快五分之一個螢幕。
+          左側:首頁一顆膠囊,其他工具是用細線隔開的文字連結。
+          一律單行,放不下就橫向捲動,不換行。
         */}
-        <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto md:flex-wrap md:overflow-x-visible">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href;
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`shrink-0 rounded-xl border px-3 py-2 text-sm tracking-[0.04em] transition ${
-                  isActive
-                    ? "border-(--accent-fill) bg-(--accent-fill) text-(--on-accent)"
-                    : "border-(--border-light) text-(--ink-secondary) hover:bg-(--paper-bg-3)"
-                }`}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
+        <div className="flex min-w-0 flex-1 items-center gap-3 overflow-x-auto [scrollbar-width:none]">
+          <Link
+            href={home.href}
+            aria-current={pathname === home.href ? "page" : undefined}
+            className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm tracking-[0.04em] transition ${
+              pathname === home.href
+                ? "bg-(--accent-fill) text-(--on-accent)"
+                : "bg-(--accent-soft) text-(--ink-primary) hover:brightness-95"
+            }`}
+          >
+            {home.label}
+          </Link>
+          <div className="flex shrink-0 items-center">
+            {tools.map((item, index) => {
+              const isActive = pathname === item.href;
+              return (
+                <span key={item.href} className="flex items-center">
+                  {index > 0 && <span className="mx-3 h-3.5 w-px bg-(--border-dark) opacity-60" aria-hidden />}
+                  <Link
+                    href={item.href}
+                    aria-current={isActive ? "page" : undefined}
+                    className={`py-1.5 text-sm tracking-[0.04em] whitespace-nowrap transition ${
+                      isActive
+                        ? "font-semibold text-(--accent) underline decoration-2 underline-offset-[6px]"
+                        : "text-(--ink-secondary) hover:text-(--ink-primary)"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                </span>
+              );
+            })}
+          </div>
         </div>
 
         {/* 右側:專屬小熊記號 + 主題選擇 */}
         <div className="flex shrink-0 items-center gap-3">
-          <div className="hidden items-center text-[11px] tracking-[0.08em] text-(--ink-tertiary) opacity-50 transition-opacity duration-500 hover:opacity-100 md:flex">
+          <div className="hidden items-center text-[11px] tracking-[0.08em] text-(--ink-tertiary) opacity-50 transition-opacity duration-500 hover:opacity-100 xl:flex">
             <a
               href="https://elsewhere.zeabur.app/"
               target="_blank"
