@@ -33,7 +33,7 @@ export function paginateOf(pages: ExportPages | undefined): "auto" | "manual" {
 export type ExportMargin = "narrow" | "normal";
 
 export const EXPORT_MARGINS: Record<ExportMargin, { label: string; ratio: number }> = {
-  narrow: { label: "稍少", ratio: 0.045 },
+  narrow: { label: "稍窄", ratio: 0.045 },
   normal: { label: "一般", ratio: 0.06 },
 };
 
@@ -76,7 +76,7 @@ export function exportLayout(
   // 頁尾像書或論文:一條淡淡的線,下面一行小字(署名、頁碼)。內容與線之間留大約一個字
   const footerSize = Math.max(11, Math.round(fontSize * 0.5));
   const footerBottom = Math.round(padding * 0.35);
-  const footerGap = Math.round(footerSize * 0.6);
+  const footerGap = Math.round(footerSize * 1.1);
   const hasFooter = !!preferences.exportSignature?.trim() || !!preferences.exportPageNumbers;
   const paddingBottom = hasFooter
     ? Math.max(padding, Math.round(footerBottom + footerGap + footerSize * 1.4 + fontSize * 0.9))

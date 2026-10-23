@@ -4,7 +4,7 @@
 // 「裁切」刻意做在內容層而不是像素層:選段落的邊界永遠是乾淨的,
 // 在圖片上拖框一定會切到半行字。
 // 預覽照真正轉圖的排版縮小顯示(export-preview),看到的就是下載到的。
-// 設定盡量少:寬度固定、字級一條滑桿、切頁一個選單、配色只有跟網站與自選。
+// 設定盡量少:寬度固定、字級一條滑桿、切頁一個選單、配色只有預設(跟著網站)與自選。
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { EditorThemeConfig } from "@/lib/theme";
@@ -464,7 +464,7 @@ export default function EditorExportPanel({
       primary ? `${theme.primaryButton} ${theme.primaryButtonText}` : `${theme.secondaryButton} ${theme.secondaryButtonText}`
     }`;
   const fontLabel = FONT_OPTIONS.find((font) => font.key === preferences.fontFamily)?.label ?? "";
-  // 「跟網站」那顆圈圈要畫網站現在的顏色
+  // 「預設」(跟著網站主題)那顆圈圈要畫網站現在的顏色
   const rootStyle = getComputedStyle(document.documentElement);
   const siteColors = {
     bg: rootStyle.getPropertyValue("--paper-bg").trim() || "#ffffff",
@@ -582,7 +582,7 @@ export default function EditorExportPanel({
                 label="配色"
                 value={preferences.exportPalette}
                 options={[
-                  { value: "site", label: <><Swatch {...siteColors} />跟網站</> },
+                  { value: "site", label: <><Swatch {...siteColors} />預設</> },
                   { value: "custom", label: <><Swatch bg={preferences.exportCustomBg} ink={preferences.exportCustomInk} />自選</> },
                 ]}
                 onChange={choosePalette}

@@ -48,7 +48,7 @@ export type EditorPreferences = {
   exportPageNumbers: boolean;
   /** 每張左下角的署名(空字串就不放) */
   exportSignature: string;
-  /** 四周留白:稍少、一般 */
+  /** 四周留白:稍窄、一般 */
   exportMargin: "narrow" | "normal";
   /** 斜體改成淡色的正體(預覽與轉圖都適用) */
   softItalic: boolean;

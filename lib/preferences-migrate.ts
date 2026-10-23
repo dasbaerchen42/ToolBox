@@ -1,7 +1,7 @@
 // 讀回存在瀏覽器裡的編輯器偏好:跟預設值合併,並把舊版的轉圖設定換成新的。
 //
 // 舊版轉圖有寬度(600/800/1080)、字級四段、比例與分頁兩個選單、每個主題一個配色;
-// 新版寬度固定、字級是一行幾個字、切頁一個選單、配色只有「跟網站」與「自選」。
+// 新版寬度固定、字級是一行幾個字、切頁一個選單、配色只有「預設」(跟著網站)與「自選」。
 
 import { defaultPreferences, type EditorPreferences, type ExportPages } from "./preferences";
 import { PRESETS } from "./theme-core";
