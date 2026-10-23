@@ -1,7 +1,6 @@
 import {
   autoCuts,
   EXPORT_IMAGE_SCALE,
-  EXPORT_TEXT_SIZES,
   exportLayout,
   maxContentHeight,
   pageRanges,
@@ -51,10 +50,10 @@ describe("轉圖:分頁的尺寸", () => {
 
 describe("轉圖:字級", () => {
   it("照一行幾個字反推字級,寬度變了比例不變", () => {
-    const prefs = { ...defaultPreferences, exportTextSize: "m" as const };
+    const prefs = { ...defaultPreferences, exportPerLine: 24 };
     const wide = exportLayout(1080, prefs);
     const narrow = exportLayout(600, prefs);
-    const perLine = EXPORT_TEXT_SIZES.m.perLine;
+    const perLine = 24;
     expect(Math.floor(wide.contentWidth / wide.fontSize)).toBe(perLine);
     expect(Math.floor(narrow.contentWidth / narrow.fontSize)).toBe(perLine);
     // 1080 寬的圖字要夠大,手機上看才讀得下去(以前是 16px)
@@ -62,20 +61,20 @@ describe("轉圖:字級", () => {
   });
 
   it("字距沿用編輯器設定的比例,也算進一行的寬度", () => {
-    const layout = exportLayout(1080, { ...defaultPreferences, fontSize: 16, letterSpacing: 1.6, exportTextSize: "m" });
+    const layout = exportLayout(1080, { ...defaultPreferences, fontSize: 16, letterSpacing: 1.6, exportPerLine: 24 });
     expect(layout.letterSpacing / layout.fontSize).toBeCloseTo(0.1, 2);
-    expect(Math.floor(layout.contentWidth / (layout.fontSize + layout.letterSpacing))).toBe(EXPORT_TEXT_SIZES.m.perLine);
+    expect(Math.floor(layout.contentWidth / (layout.fontSize + layout.letterSpacing))).toBe(24);
   });
 
   it("字越大一行越少字", () => {
-    const sizes = (["s", "m", "l", "xl"] as const).map((size) => exportLayout(1080, { ...defaultPreferences, exportTextSize: size }).fontSize);
+    const sizes = [30, 24, 20, 16].map((perLine) => exportLayout(1080, { ...defaultPreferences, exportPerLine: perLine }).fontSize);
     expect([...sizes].sort((a, b) => a - b)).toEqual(sizes);
   });
 });
 
 describe("轉圖:固定比例", () => {
   it("4:5 每張都一樣高,內容區扣掉上下留白", () => {
-    const layout = exportLayout(1080, { ...defaultPreferences, exportRatio: "4:5" });
+    const layout = exportLayout(1080, { ...defaultPreferences, exportPages: "4:5" });
     expect(layout.pageHeight).toBe(1350);
     expect(maxContentHeight(1080, layout.padding, layout.pageHeight)).toBe(1350 - layout.padding * 2);
     const sizes = pageSizes(stack([100, 900]), new Set([0]), 1080, layout.padding, layout.pageHeight);

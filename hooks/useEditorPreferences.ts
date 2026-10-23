@@ -6,6 +6,7 @@ import {
   type EditorPreferences,
   defaultPreferences,
 } from "@/lib/preferences";
+import { migratePreferences } from "@/lib/preferences-migrate";
 import { ensureWebFont } from "@/lib/web-fonts";
 
 export function useEditorPreferences() {
@@ -18,10 +19,9 @@ export function useEditorPreferences() {
     try {
       const saved = localStorage.getItem(PREFERENCES_KEY);
       if (saved) {
-        // 與預設值合併:舊資料缺新欄位(或留有已棄用欄位)都不會壞
-        const parsed = JSON.parse(saved) as Partial<EditorPreferences>;
+        // 與預設值合併、舊版轉圖設定換成新的:舊資料缺新欄位(或留有已棄用欄位)都不會壞
         // eslint-disable-next-line react-hooks/set-state-in-effect -- client-only localStorage 水合
-        setPreferences({ ...defaultPreferences, ...parsed });
+        setPreferences(migratePreferences(JSON.parse(saved)));
       }
     } catch {
       localStorage.removeItem(PREFERENCES_KEY);

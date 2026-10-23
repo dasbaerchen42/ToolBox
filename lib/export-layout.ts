@@ -2,40 +2,40 @@
 // 轉圖視窗的預覽與真正的轉圖共用這一份,兩邊才會一模一樣。
 
 import { DEVICE_MAX_AREA, DEVICE_MAX_SIDE } from "@/lib/canvas-limits";
-import type { EditorPreferences } from "@/lib/preferences";
+import type { EditorPreferences, ExportPages } from "@/lib/preferences";
 import { blend, deriveVars } from "@/lib/theme-core";
 
-/** 輸出時的像素密度:1080 CSS px 會變成 2160 px 的圖 */
+/** 輸出時的像素密度:800 CSS px 會變成 1600 px 的圖 */
 export const EXPORT_IMAGE_SCALE = 2;
 
-/** 圖片上的字級。用「一行大約幾個字」定義,換寬度只是換解析度,版面比例不變 */
-export type ExportTextSize = "s" | "m" | "l" | "xl";
+/**
+ * 圖片寬度固定 800 CSS px(輸出 1600 px)。字級是照「一行幾個字」算的,
+ * 寬度只影響清晰度、不影響排版;1600 已經比社群平台保留的 1080 還寬,不需要給選項。
+ */
+export const EXPORT_IMAGE_WIDTH = 800;
 
-export const EXPORT_TEXT_SIZES: Record<ExportTextSize, { label: string; perLine: number }> = {
-  s: { label: "小字", perLine: 30 },
-  m: { label: "中字", perLine: 24 },
-  l: { label: "大字", perLine: 20 },
-  xl: { label: "特大", perLine: 16 },
-};
+/** 切頁選單:自動、手動、固定比例(高/寬) */
+export const EXPORT_PAGES: { value: ExportPages; label: string; ratio: number | null }[] = [
+  { value: "auto", label: "自動", ratio: null },
+  { value: "manual", label: "手動", ratio: null },
+  { value: "1:1", label: "1:1", ratio: 1 },
+  { value: "4:5", label: "4:5", ratio: 5 / 4 },
+  { value: "3:4", label: "3:4", ratio: 4 / 3 },
+  { value: "9:16", label: "9:16", ratio: 16 / 9 },
+];
 
-/** 每張圖的比例(高/寬);free 是照內容多長就多長 */
-export type ExportRatio = "free" | "1:1" | "4:5" | "3:4" | "9:16";
-
-export const EXPORT_RATIOS: Record<ExportRatio, { label: string; ratio: number | null }> = {
-  free: { label: "照內容長度", ratio: null },
-  "1:1": { label: "1:1 方形", ratio: 1 },
-  "4:5": { label: "4:5 IG 貼文", ratio: 5 / 4 },
-  "3:4": { label: "3:4 直式", ratio: 4 / 3 },
-  "9:16": { label: "9:16 限動", ratio: 16 / 9 },
-};
+/** 切頁方式:手動只在使用者點的地方切;其他(含固定比例)都由系統照長度切 */
+export function paginateOf(pages: ExportPages | undefined): "auto" | "manual" {
+  return pages === "manual" ? "manual" : "auto";
+}
 
 /** 四周留白佔寬度的比例 */
 export type ExportMargin = "narrow" | "normal" | "wide";
 
 export const EXPORT_MARGINS: Record<ExportMargin, { label: string; ratio: number }> = {
-  narrow: { label: "留白窄", ratio: 0.04 },
-  normal: { label: "留白標準", ratio: 0.06 },
-  wide: { label: "留白寬", ratio: 0.09 },
+  narrow: { label: "少", ratio: 0.04 },
+  normal: { label: "中", ratio: 0.06 },
+  wide: { label: "多", ratio: 0.09 },
 };
 
 export type ExportLayout = {
@@ -61,12 +61,12 @@ export type ExportLayout = {
  */
 export function exportLayout(
   width: number,
-  preferences: Pick<EditorPreferences, "fontSize" | "letterSpacing" | "lineHeight" | "exportTextSize"> &
-    Partial<Pick<EditorPreferences, "exportRatio" | "exportMargin">>
+  preferences: Pick<EditorPreferences, "fontSize" | "letterSpacing" | "lineHeight" | "exportPerLine"> &
+    Partial<Pick<EditorPreferences, "exportPages" | "exportMargin">>
 ): ExportLayout {
   const padding = Math.round(width * (EXPORT_MARGINS[preferences.exportMargin ?? "normal"] ?? EXPORT_MARGINS.normal).ratio);
   const contentWidth = width - padding * 2;
-  const perLine = (EXPORT_TEXT_SIZES[preferences.exportTextSize] ?? EXPORT_TEXT_SIZES.m).perLine;
+  const perLine = preferences.exportPerLine > 0 ? preferences.exportPerLine : 24;
   const spacingEm = preferences.fontSize > 0 ? preferences.letterSpacing / preferences.fontSize : 0;
   // 中文一個字一個 em,再加字距;留 0.3 個字的餘裕,剛好滿行時才不會被擠到下一行
   const fontSize = Math.floor((contentWidth / ((perLine + 0.3) * (1 + spacingEm))) * 10) / 10;
@@ -77,14 +77,14 @@ export function exportLayout(
     fontSize,
     letterSpacing: Math.round(fontSize * spacingEm * 100) / 100,
     lineHeight: preferences.lineHeight,
-    pageHeight: ratioHeight(width, preferences.exportRatio ?? "free"),
+    pageHeight: ratioHeight(width, preferences.exportPages),
     footerSize: Math.max(11, Math.round(fontSize * 0.5)),
     footerBottom: Math.round(padding * 0.3),
   };
 }
 
-function ratioHeight(width: number, ratio: ExportRatio): number | null {
-  const value = EXPORT_RATIOS[ratio]?.ratio;
+function ratioHeight(width: number, pages: ExportPages | undefined): number | null {
+  const value = EXPORT_PAGES.find((option) => option.value === pages)?.ratio;
   return value ? Math.round(width * value) : null;
 }
 
@@ -176,15 +176,13 @@ export function planSlices(height: number, maxHeight: number, lineGaps: number[]
 }
 
 /**
- * 圖片配色要掛到紙上的東西:內建主題掛 data-theme(主題的 CSS 變數是 [data-theme] 選擇器),
+ * 圖片配色要掛到紙上的東西:跟網站就什麼都不用掛;
  * 自選配色直接給一整組 CSS 變數(次要字色、引用線、分隔線都從底色和字色推出來)。
  */
 export function exportPalette(
   preferences: Pick<EditorPreferences, "exportPalette" | "exportCustomBg" | "exportCustomInk">
-): { theme?: string; vars?: Record<string, string> } {
-  const palette = preferences.exportPalette;
-  if (!palette || palette === "site") return {};
-  if (palette !== "custom") return { theme: palette };
+): { vars?: Record<string, string> } {
+  if (preferences.exportPalette !== "custom") return {};
   const bg = preferences.exportCustomBg || "#ffffff";
   const ink = preferences.exportCustomInk || "#000000";
   return { vars: deriveVars({ bg, bg2: blend(bg, ink, 0.06), ink, accent: blend(ink, bg, 0.35) }) };

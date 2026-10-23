@@ -1,6 +1,6 @@
 "use client";
 
-// 轉圖視窗裡的預覽:照真正轉圖的寬度、字級、留白排一次,再整張縮小顯示,
+// 出圖畫面的預覽:照真正轉圖的寬度、字級、留白排一次,再整張縮小顯示,
 // 換行、段距、分頁都跟下載下來的圖一樣。每一張圖是一張「紙」,
 // 左邊勾選要不要轉、右邊「Aa」調這一段的樣式;手動分頁時點段落就在它後面切一刀。
 
@@ -28,8 +28,8 @@ type SheetProps = {
   /** 這張是第幾張(從 1 數)、總共幾張:頁碼用 */
   number: number;
   total: number;
-  /** 圖片配色:內建主題的 id,或自選配色的整組顏色變數 */
-  palette: { theme?: string; vars?: Record<string, string> };
+  /** 圖片配色:自選配色的整組顏色變數(跟網站時是空的) */
+  palette: { vars?: Record<string, string> };
   signature: string;
   pageNumbers: boolean;
   layout: ExportLayout;
@@ -102,7 +102,6 @@ function PageSheet({
         ref={innerRef}
         className={`${contentClass} export-sheet absolute left-0 top-0 rounded-[24px] shadow-md`}
         data-cutting={cutting ? "" : undefined}
-        data-theme={palette.theme}
         style={{
           width: layout.width,
           minHeight: layout.pageHeight ?? undefined,
@@ -136,7 +135,6 @@ function PageSheet({
       {(signature || (pageNumbers && total > 1)) && (
         <div
           aria-hidden
-          data-theme={palette.theme}
           className="pointer-events-none absolute flex justify-between gap-4"
           style={{
             left: layout.padding * scale,
@@ -222,18 +220,13 @@ export default function ExportPreview({
       {boxWidth > 0 &&
         pages.map((page, index) => (
           <div key={index}>
-            {(many || page.size) && (
+            {(many || page.size?.over) && (
               <div
                 className="mb-1 flex flex-wrap items-center gap-x-2 text-[11px] leading-5"
                 style={{ marginLeft: GUTTER_LEFT, color: page.size?.over ? "var(--danger, #c0392b)" : "var(--ink-tertiary)" }}
               >
                 <span className="font-semibold">第 {index + 1} 張</span>
-                {page.size && (
-                  <span>
-                    {page.size.width} × {page.size.height}
-                    {page.size.over ? `・${overLabel(page.size.slices)}` : ""}
-                  </span>
-                )}
+                {page.size?.over && <span>{overLabel(page.size.slices)}</span>}
                 {page.cutBefore !== null && (
                   <button
                     type="button"

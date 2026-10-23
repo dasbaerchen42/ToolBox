@@ -17,7 +17,7 @@ import { blockStylesToMarkup, renderToSafeHtml } from "@/lib/markdown";
 // 所見即所得編輯器比較大,用到才載
 const RichEditor = dynamic(() => import("@/components/editor/rich/rich-editor"), { ssr: false });
 const RichFormatBar = dynamic(() => import("@/components/editor/rich/rich-format-bar"), { ssr: false });
-import EditorExportModal from "@/components/editor/editor-export-modal";
+import EditorExportPanel from "@/components/editor/editor-export-panel";
 import EditorFindReplace from "@/components/editor/editor-find-replace";
 import EditorStatusPanel from "@/components/editor/editor-status-panel";
 import { validateContent } from "@/lib/validators";
@@ -58,7 +58,8 @@ export default function EditorPage() {
   } = useEditorPreferences();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [exportOpen, setExportOpen] = useState(false);
+  /** 編輯 / 出圖:同一頁切換,不再開一個蓋住全畫面的視窗 */
+  const [view, setView] = useState<"write" | "image">("write");
   const [pasteHint, setPasteHint] = useState<string | null>(null);
   // 剪貼簿裡有格式時先問要不要保留,問完才真的貼
   const [pendingPaste, setPendingPaste] = useState<
@@ -147,7 +148,7 @@ export default function EditorPage() {
 
       setPendingPaste(null);
       setPasteHint(null);
-      if (thenExport) setExportOpen(true);
+      if (thenExport) setView("image");
     },
     [addDoc]
   );
@@ -252,13 +253,31 @@ export default function EditorPage() {
                     className={`min-w-0 flex-1 rounded-2xl border px-4 py-2.5 text-lg font-semibold tracking-[0.04em] outline-none transition ${theme.border} ${theme.inputBg}`}
                     placeholder="請輸入文件標題"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setExportOpen(true)}
-                    className={`shrink-0 rounded-full border border-(--accent) px-3 py-2.5 text-sm sm:hidden ${theme.primaryButton} ${theme.primaryButtonText}`}
+                  <div
+                    role="tablist"
+                    aria-label="編輯或出圖"
+                    className={`flex shrink-0 rounded-full border p-1 ${theme.border} ${theme.inputBg}`}
                   >
-                    匯出圖片
-                  </button>
+                    {(
+                      [
+                        ["write", "編輯"],
+                        ["image", "出圖"],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        role="tab"
+                        aria-selected={view === key}
+                        onClick={() => setView(key)}
+                        className={`rounded-full px-3.5 py-1.5 text-sm tracking-[0.06em] transition ${
+                          view === key ? "bg-(--accent-fill) text-(--on-accent)" : `${theme.mutedText} hover:text-(--ink-primary)`
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 {/* 標題下面一行小字:儲存時間、字數 */}
                 <div className="mb-1 px-1">
@@ -266,9 +285,24 @@ export default function EditorPage() {
                 </div>
               </div>
 
+              {view === "image" && (
+                <div className={`mx-auto w-full ${areaWidthClass}`}>
+                  <EditorExportPanel
+                    key={activeDoc.id}
+                    title={activeDoc.title}
+                    content={activeDoc.content}
+                    mode={activeDoc.mode}
+                    preferences={preferences}
+                    setPreferences={setPreferences}
+                    theme={theme}
+                  />
+                </div>
+              )}
+
+              {/* 出圖時編輯區藏起來但不拆掉,切回來復原紀錄還在 */}
               <div
                 onKeyDown={handleEditorKeyDown}
-                className="flex min-h-0 flex-1 flex-col"
+                className={`min-h-0 flex-1 flex-col ${view === "write" ? "flex" : "hidden"}`}
               >
                 {/* 工具列與尋找面板:往下捲時固定在畫面頂端 */}
                 <div className={`sticky top-0 z-30 mx-auto w-full ${areaWidthClass} ${theme.pageBg}`}>
@@ -324,7 +358,6 @@ export default function EditorPage() {
                           adjustLetterSpacing={adjustLetterSpacing}
                         />
                       }
-                      onExportImage={() => setExportOpen(true)}
                       theme={theme}
                     />
                   <EditorFindReplace
@@ -376,7 +409,7 @@ export default function EditorPage() {
                 </div>
               </div>
 
-              <div className={`mx-auto mt-2 w-full ${areaWidthClass}`}>
+              <div className={`mx-auto mt-2 w-full ${areaWidthClass} ${view === "write" ? "" : "hidden"}`}>
                 {pasteHint && <p className={`mb-1 text-xs ${theme.subtleText}`}>{pasteHint}</p>}
                 {showHints && (
                   <div className={`mt-3 rounded-2xl border px-4 py-3 ${theme.border} ${theme.panelBg}`}>
@@ -391,18 +424,6 @@ export default function EditorPage() {
             </div>
           )}
 
-          {activeDoc && (
-            <EditorExportModal
-              open={exportOpen}
-              onClose={() => setExportOpen(false)}
-              title={activeDoc.title}
-              content={activeDoc.content}
-              mode={activeDoc.mode}
-              preferences={preferences}
-              setPreferences={setPreferences}
-              theme={theme}
-            />
-          )}
 
           {pendingPaste && (
             <div
