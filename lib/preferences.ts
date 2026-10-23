@@ -21,11 +21,11 @@ export type FontFamilyName =
 /** 編輯區的呈現方式：純文字、渲染結果、左右並排 */
 export type EditorViewMode = "edit" | "preview" | "split";
 
-/** 文轉圖的輸出寬度(CSS px,實際像素還會再乘上 EXPORT_IMAGE_SCALE) */
-export type ExportImageWidth = 600 | 800 | 1080;
-
-/** 匯出圖片的分頁方式 */
-export type ExportPaginate = "auto" | "manual" | "none";
+/**
+ * 匯出圖片怎麼切頁,一個選單就決定:自動(照內容長度,太長才切)、手動(自己點段落切),
+ * 或固定比例(每張一樣大,系統照比例自動切)。比例跟手動不能並存,選了比例就是懶人模式。
+ */
+export type ExportPages = "auto" | "manual" | "1:1" | "4:5" | "3:4" | "9:16";
 
 export type EditorPreferences = {
   fontSize: number;
@@ -35,15 +35,12 @@ export type EditorPreferences = {
   viewMode: EditorViewMode;
   /** 文件要用哪種方式編輯:rich 是直接看排好的樣子,source 是改 Markdown 原文 */
   docView: "rich" | "source";
-  exportImageWidth: ExportImageWidth;
   exportImageTitle: boolean;
-  exportPaginate: ExportPaginate;
-  /** 圖片上的字級(一行大約幾個字),見 lib/export-layout */
-  exportTextSize: "s" | "m" | "l" | "xl";
-  /** 每張圖的比例:free 是照內容長度,其他是固定比例(社群輪播) */
-  exportRatio: "free" | "1:1" | "4:5" | "3:4" | "9:16";
-  /** 圖片配色:site 跟著網站目前的主題,custom 是自選的底色與字色,其他是主題的 id */
-  exportPalette: string;
+  exportPages: ExportPages;
+  /** 圖片上的字級:一行大約幾個字(越少字越大),見 lib/export-layout */
+  exportPerLine: number;
+  /** 圖片配色:site 跟著網站目前的主題,custom 是自選的底色與字色 */
+  exportPalette: "site" | "custom";
   /** 自選配色的底色與字色 */
   exportCustomBg: string;
   exportCustomInk: string;
@@ -71,11 +68,9 @@ export const defaultPreferences: EditorPreferences = {
   fontFamily: "mono",
   viewMode: "edit",
   docView: "rich",
-  exportImageWidth: 1080,
   exportImageTitle: false,
-  exportPaginate: "auto",
-  exportTextSize: "m",
-  exportRatio: "free",
+  exportPages: "auto",
+  exportPerLine: 24,
   exportPalette: "site",
   exportCustomBg: "#fdf6ec",
   exportCustomInk: "#4a3a32",

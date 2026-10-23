@@ -9,7 +9,6 @@ import {
   maxContentHeight,
   pageRanges,
   planSlices,
-  spanHeight,
   type ExportLayout,
   type UnitBox,
 } from "@/lib/export-layout";
@@ -27,15 +26,7 @@ export type { ExportedImage };
 
 export { autoCuts, EXPORT_IMAGE_SCALE, exportLayout, pageSizes } from "@/lib/export-layout";
 
-export type PaginateMode = "auto" | "manual" | "none";
-
-/** 「一律單張」但內容放不下時丟這個,UI 才知道要提示改用分頁 */
-export class ExportTooLongError extends Error {
-  constructor(readonly contentHeight: number, readonly maxHeight: number) {
-    super("內容太長,超過瀏覽器單張圖片的上限");
-    this.name = "ExportTooLongError";
-  }
-}
+export type PaginateMode = "auto" | "manual";
 
 /** 手動分頁時某一張自己就超過上限,要使用者再切一刀 */
 export class ExportPageTooLongError extends Error {
@@ -58,7 +49,7 @@ export type ExportImageOptions = {
   fileTitle: string;
   /** 輸出寬度(CSS px) */
   width: number;
-  /** auto: 太長就自動分頁;manual: 只在 cuts 指定的地方切;none: 一律單張 */
+  /** auto: 太長就自動分頁(固定比例也是);manual: 只在 cuts 指定的地方切 */
   paginate: PaginateMode;
   /** 手動分頁時,要在第幾個區塊之後切開(含標題時標題算第 0 個) */
   cuts?: Set<number>;
@@ -210,9 +201,7 @@ function buildStage(html: string, title: string | null, width: number, preferenc
 
   const page = document.createElement("div");
   page.dataset.exportPage = "";
-  // 另外挑了配色就把主題掛在這張紙上:主題的 CSS 變數是 [data-theme] 選擇器,掛在哪個元素都吃得到
   const palette = exportPalette(preferences);
-  if (palette.theme) page.dataset.theme = palette.theme;
   page.style.cssText = [
     "position: relative",
     `width: ${width}px`,
@@ -388,14 +377,7 @@ export async function exportContentToImages({
       return [{ name: `${sanitizeFileName(fileTitle)}.png`, blob: await toBlob(canvas) }];
     }
 
-    if (paginate === "none" && spanHeight(boxes, 0, boxes.length - 1) > maxHeight) {
-      throw new ExportTooLongError(Math.round(spanHeight(boxes, 0, boxes.length - 1)), maxHeight);
-    }
-
-    const ranges =
-      paginate === "none"
-        ? [[0, els.length - 1] as [number, number]]
-        : pageRanges(els.length, paginate === "manual" ? (cuts ?? new Set<number>()) : autoCuts(boxes, maxHeight));
+    const ranges = pageRanges(els.length, paginate === "manual" ? (cuts ?? new Set<number>()) : autoCuts(boxes, maxHeight));
 
     // 只留這一張的區塊,其餘 display:none。被藏起來的完全不佔空間,
     // 所以每一張的高度就是它自己內容的高度。第一段不留上外距、最後一段不留下外距,

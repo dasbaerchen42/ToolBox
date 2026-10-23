@@ -1,7 +1,7 @@
 "use client";
 
 // 編輯區上方的一條工具列(捲動時固定在畫面頂端)。
-// 最常用的格式按鈕排最前面,其次復原重做;尋找、「⋯」選單、匯出成圖片靠右。
+// 最常用的格式按鈕排最前面,其次復原重做;尋找、「⋯」選單靠右(出圖在標題旁邊切換)。
 // 不常用的(檢視切換、設定、從剪貼簿開新文件、Google Docs)都收進「⋯」。
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
@@ -151,7 +151,6 @@ type Props = {
   /** 「⋯」選單裡的 Google Docs 選項 */
   googleItems: ReactNode;
   settings: ReactNode;
-  onExportImage: () => void;
   theme: EditorThemeConfig;
 };
 
@@ -196,7 +195,7 @@ function MoreMenu({
           用剪貼簿的內容開新文件
         </button>
         <button type="button" role="menuitem" onClick={onPasteExport} className={MENU_ITEM}>
-          開新文件並匯出成圖片
+          開新文件並出圖
         </button>
         {line}
         {googleItems}
@@ -219,7 +218,6 @@ export default function EditorMainToolbar({
   onPasteExport,
   googleItems,
   settings,
-  onExportImage,
   theme,
 }: Props) {
   const plain = `${TOOL_BUTTON} ${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`;
@@ -251,10 +249,6 @@ export default function EditorMainToolbar({
           <MoreMenu viewItems={viewItems} onPaste={onPaste} onPasteExport={onPasteExport} googleItems={googleItems} settings={settings} close={close} theme={theme} />
         )}
       </ToolPopover>
-      {/* 手機上匯出鈕放在標題旁邊(頁面那邊),這裡只給寬螢幕 */}
-      <button type="button" onClick={onExportImage} className={`${TOOL_BUTTON} hidden border-(--accent) sm:flex ${theme.primaryButton} ${theme.primaryButtonText}`}>
-        匯出成圖片
-      </button>
     </div>
   );
 }

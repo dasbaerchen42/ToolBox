@@ -1,18 +1,15 @@
 "use client";
 
-// 匯出圖片視窗:挑段落 → 產生 → 挑張數 → 下載。
+// 出圖畫面(編輯器的「出圖」分頁):挑段落 → 產生 → 挑張數 → 下載。
 // 「裁切」刻意做在內容層而不是像素層:選段落的邊界永遠是乾淨的,
 // 在圖片上拖框一定會切到半行字。
 // 預覽照真正轉圖的排版縮小顯示(export-preview),看到的就是下載到的。
+// 設定盡量少:寬度固定、字級一條滑桿、切頁一個選單、配色只有跟網站與自選。
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { EditorThemeConfig } from "@/lib/theme";
-import {
-  type EditorPreferences,
-  type ExportImageWidth,
-  type ExportPaginate,
-  type FontFamilyName,
-} from "@/lib/preferences";
+import { type EditorPreferences, type FontFamilyName } from "@/lib/preferences";
+import { PER_LINE_MAX, PER_LINE_MIN } from "@/lib/preferences-migrate";
 import { FONT_OPTIONS } from "@/lib/editor-font";
 import { downloadEach, shareImages } from "@/lib/download";
 import { useCanShareImages } from "@/hooks/useCanShareImages";
@@ -23,35 +20,31 @@ import {
   splitBlocks,
   toPlainHtml,
 } from "@/lib/markdown";
-import { contrastRatio, PRESETS } from "@/lib/theme-core";
+import { contrastRatio } from "@/lib/theme-core";
 import {
   contentClassFor,
   downloadBlob,
   exportContentToImages,
   measureExport,
   ExportPageTooLongError,
-  ExportTooLongError,
   zipImages,
   type ExportedImage,
   type ExportMeasure,
 } from "@/lib/export-image";
 import {
   autoCuts,
+  EXPORT_IMAGE_WIDTH,
   EXPORT_MARGINS,
-  EXPORT_RATIOS,
-  EXPORT_TEXT_SIZES,
+  EXPORT_PAGES,
   exportLayout,
   exportPalette,
   pageSizes,
+  paginateOf,
   type ExportMargin,
-  type ExportRatio,
-  type ExportTextSize,
 } from "@/lib/export-layout";
 import ExportPreview, { type PreviewPage, type SheetItem } from "./export-preview";
 
-type EditorExportModalProps = {
-  open: boolean;
-  onClose: () => void;
+type EditorExportPanelProps = {
   title: string;
   content: string;
   mode: WritingMode;
@@ -60,32 +53,85 @@ type EditorExportModalProps = {
   theme: EditorThemeConfig;
 };
 
-const WIDTH_OPTIONS: { value: ExportImageWidth; label: string }[] = [
-  { value: 600, label: "寬 600" },
-  { value: 800, label: "寬 800" },
-  { value: 1080, label: "寬 1080（社群）" },
-];
-
-const PAGINATE_OPTIONS: { value: ExportPaginate; label: string }[] = [
-  { value: "auto", label: "太長自動分頁" },
-  { value: "manual", label: "手動分頁" },
-  { value: "none", label: "一律單張" },
-];
+const WIDTH = EXPORT_IMAGE_WIDTH;
 
 function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export default function EditorExportModal({
-  open,
-  onClose,
+/** 一排互斥的小按鈕(切頁、留白、配色) */
+function Choices<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+  theme,
+  fill = false,
+}: {
+  label: string;
+  value: T;
+  options: { value: T; label: ReactNode }[];
+  onChange: (value: T) => void;
+  theme: EditorThemeConfig;
+  /** 平均分成一格一格、排滿一行(切頁六個選項在手機上才不會斷成兩行) */
+  fill?: boolean;
+}) {
+  return (
+    <div
+      className={fill ? "grid w-full max-w-md gap-1" : "flex flex-wrap gap-1.5"}
+      style={fill ? { gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` } : undefined}
+      role="radiogroup"
+      aria-label={label}
+    >
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(option.value)}
+            className={`flex h-8 items-center justify-center gap-1.5 rounded-full border text-sm whitespace-nowrap transition ${fill ? "px-0" : "min-w-10 px-3"} ${
+              active ? "border-(--accent-fill) bg-(--accent-fill) text-(--on-accent)" : `${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`
+            }`}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 設定的一列:左邊小標、右邊控制項 */
+function Row({ label, children, theme }: { label: string; children: ReactNode; theme: EditorThemeConfig }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:gap-x-3">
+      <span className={`w-7 shrink-0 text-xs ${theme.mutedText}`}>{label}</span>
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{children}</div>
+    </div>
+  );
+}
+
+/** 配色圈圈:大的是底色、小的是字色 */
+function Swatch({ bg, ink }: { bg: string; ink: string }) {
+  return (
+    <span className="relative inline-block h-5 w-7 shrink-0" aria-hidden>
+      <span className="absolute left-0 top-0 h-5 w-5 rounded-full" style={{ background: bg, boxShadow: "0 0 0 1px rgba(128, 128, 128, 0.6)" }} />
+      <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full" style={{ background: ink, boxShadow: "0 0 0 1.5px rgba(128, 128, 128, 0.6)" }} />
+    </span>
+  );
+}
+
+export default function EditorExportPanel({
   title,
   content,
   mode,
   preferences,
   setPreferences,
   theme,
-}: EditorExportModalProps) {
+}: EditorExportPanelProps) {
   const [blocks, setBlocks] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [cuts, setCuts] = useState<Set<number>>(new Set());
@@ -114,9 +160,8 @@ export default function EditorExportModal({
     setPickedPages(new Set());
   }, [revokeUrls]);
 
-  // 開啟時渲染一次;內容或模式變了也重新拆段
+  // 切到出圖時渲染一次;內容或模式變了也重新拆段
   useEffect(() => {
-    if (!open) return;
     let cancelled = false;
 
     (async () => {
@@ -137,18 +182,9 @@ export default function EditorExportModal({
     return () => {
       cancelled = true;
     };
-  }, [open, content, mode]);
+  }, [content, mode]);
 
   useEffect(() => () => revokeUrls(), [revokeUrls]);
-
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
 
   const selectedIndexes = useMemo(
     () => blocks.map((_, index) => index).filter((index) => selected.has(index)),
@@ -160,7 +196,8 @@ export default function EditorExportModal({
     [blocks, selectedIndexes]
   );
 
-  const isManual = preferences.exportPaginate === "manual";
+  const paginate = paginateOf(preferences.exportPages);
+  const isManual = paginate === "manual";
   const exportTitle = preferences.exportImageTitle && title ? title : null;
   const titleOffset = exportTitle ? 1 : 0;
   const unitCount = selectedIndexes.length + titleOffset;
@@ -181,9 +218,8 @@ export default function EditorExportModal({
   const measureKey = [
     selectedHtml,
     exportTitle,
-    preferences.exportImageWidth,
-    preferences.exportTextSize,
-    preferences.exportRatio,
+    preferences.exportPerLine,
+    preferences.exportPages,
     preferences.exportMargin,
     preferences.fontFamily,
     preferences.fontSize,
@@ -193,10 +229,10 @@ export default function EditorExportModal({
     preferences.softItalicBold,
   ].join("\u0000");
   useEffect(() => {
-    if (!open || !selectedHtml) return;
+    if (!selectedHtml) return;
     let cancelled = false;
     const timer = setTimeout(() => {
-      void measureExport({ html: selectedHtml, title: exportTitle, width: preferences.exportImageWidth, preferences })
+      void measureExport({ html: selectedHtml, title: exportTitle, width: WIDTH, preferences })
         .then((result) => {
           if (!cancelled) setMeasured({ key: measureKey, ...result });
         })
@@ -206,22 +242,22 @@ export default function EditorExportModal({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [open, selectedHtml, exportTitle, preferences, measureKey]);
+  }, [selectedHtml, exportTitle, preferences, measureKey]);
 
   // 量到的是現在這份內容才用(內容一變,舊的位置就不準了)
   const fresh = measured && measured.key === measureKey && measured.units.length === unitCount ? measured : null;
-  const layout = useMemo(() => exportLayout(preferences.exportImageWidth, preferences), [preferences]);
+  const layout = useMemo(() => exportLayout(WIDTH, preferences), [preferences]);
 
   /** 實際會在哪幾個匯出區塊之後切 */
   const effectiveCuts = useMemo(() => {
-    if (preferences.exportPaginate === "manual") return exportCuts;
-    if (preferences.exportPaginate === "auto" && fresh) return autoCuts(fresh.units, fresh.maxHeight);
+    if (isManual) return exportCuts;
+    if (fresh) return autoCuts(fresh.units, fresh.maxHeight);
     return new Set<number>();
-  }, [preferences.exportPaginate, exportCuts, fresh]);
+  }, [isManual, exportCuts, fresh]);
 
   const sizes = useMemo(
-    () => (fresh && unitCount > 0 ? pageSizes(fresh.units, effectiveCuts, preferences.exportImageWidth, fresh.padding, fresh.layout.pageHeight) : null),
-    [fresh, unitCount, effectiveCuts, preferences.exportImageWidth]
+    () => (fresh && unitCount > 0 ? pageSizes(fresh.units, effectiveCuts, WIDTH, fresh.padding, fresh.layout.pageHeight) : null),
+    [fresh, unitCount, effectiveCuts]
   );
 
   /** 預覽的每一張:沒勾的段落跟著前一段,放在同一張裡(縮成一行) */
@@ -303,7 +339,7 @@ export default function EditorExportModal({
 
   // 手動分頁:點區塊本身 = 在它後面切一刀(勾選框仍然是選取/不選取)
   function toggleCut(index: number) {
-    if (preferences.exportPaginate !== "manual") return;
+    if (!isManual) return;
     if (!selected.has(index)) return;
     dropImages();
     setCuts((prev) => {
@@ -340,8 +376,8 @@ export default function EditorExportModal({
         html: selectedHtml,
         title: exportTitle,
         fileTitle: title,
-        width: preferences.exportImageWidth,
-        paginate: preferences.exportPaginate,
+        width: WIDTH,
+        paginate,
         cuts: exportCuts,
         preferences,
         onProgress: (done, total) => setStatus(total > 1 ? `產生中…… 第 ${done} / ${total} 張` : "產生中……"),
@@ -356,10 +392,8 @@ export default function EditorExportModal({
       setImages(null);
       setStatus(
         error instanceof ExportPageTooLongError
-          ? `第 ${error.pageIndex} 張約 ${error.pageHeight} px，超過單張上限 ${error.maxHeight} px，請在那一張中間再切一刀。`
-          : error instanceof ExportTooLongError
-            ? `內容約 ${error.contentHeight} px，超過單張上限 ${error.maxHeight} px。改用分頁，或少選幾段。`
-            : "轉圖失敗了。可能是內容太長或手機記憶體不夠：試試少選幾段、改用分頁，或把寬度調窄一點再按一次。"
+          ? `第 ${error.pageIndex} 張太長了，請在那一張中間再切一刀。`
+          : "轉圖失敗了。可能是內容太長或手機記憶體不夠：試試少選幾段，或改用固定比例分成好幾張再按一次。"
       );
     } finally {
       setBusy(false);
@@ -422,228 +456,167 @@ export default function EditorExportModal({
     }
   }
 
-  if (!open) return null;
-
-  const select = `rounded-2xl border px-3 py-1.5 outline-none ${theme.border} ${theme.inputBg}`;
   const smallButton = `rounded-2xl border px-3 py-1 text-xs disabled:opacity-40 ${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`;
   const bigButton = (primary: boolean) =>
     `rounded-2xl border px-4 py-2 text-sm transition disabled:opacity-50 ${theme.border} ${
       primary ? `${theme.primaryButton} ${theme.primaryButtonText}` : `${theme.secondaryButton} ${theme.secondaryButtonText}`
     }`;
   const fontLabel = FONT_OPTIONS.find((font) => font.key === preferences.fontFamily)?.label ?? "";
-  const palettePreset = PRESETS.find((preset) => preset.id === preferences.exportPalette);
-  const paletteLabel = palettePreset ? palettePreset.name : preferences.exportPalette === "custom" ? "自選配色" : null;
-  // 「跟網站主題」那顆圈圈要畫網站現在的顏色
+  // 「跟網站」那顆圈圈要畫網站現在的顏色
   const rootStyle = getComputedStyle(document.documentElement);
   const siteColors = {
     bg: rootStyle.getPropertyValue("--paper-bg").trim() || "#ffffff",
     ink: rootStyle.getPropertyValue("--ink-primary").trim() || "#000000",
   };
-  const paletteChoices = [
-    { id: "site", name: "跟網站", ...siteColors },
-    ...PRESETS.map((preset) => ({ id: preset.id, name: preset.name, bg: preset.input.bg, ink: preset.input.ink })),
-    { id: "custom", name: "自選", bg: preferences.exportCustomBg, ink: preferences.exportCustomInk },
-  ];
   const customContrast = contrastRatio(preferences.exportCustomBg, preferences.exportCustomInk);
+  const pagesLabel = EXPORT_PAGES.find((option) => option.value === preferences.exportPages)?.label ?? "自動";
   const summary = [
-    preferences.exportImageWidth,
-    preferences.exportRatio !== "free" ? preferences.exportRatio : null,
-    EXPORT_TEXT_SIZES[preferences.exportTextSize]?.label,
-    PAGINATE_OPTIONS.find((option) => option.value === preferences.exportPaginate)?.label,
+    `切頁 ${pagesLabel}`,
+    `一行 ${preferences.exportPerLine} 字`,
+    `留白${EXPORT_MARGINS[preferences.exportMargin]?.label ?? "中"}`,
     fontLabel,
-    paletteLabel,
+    preferences.exportPalette === "custom" ? "自選配色" : null,
   ]
     .filter(Boolean)
     .join("・");
   // 自動分頁時,太長的那張會在段落中間再切開,算張數時要一起算;手動分頁則要使用者自己再切
   const pageCount = isManual ? previewPages.length : previewPages.reduce((sum, page) => sum + (page.size?.slices ?? 1), 0);
-  const tooLong = isManual || preferences.exportPaginate === "none" ? previewPages.findIndex((page) => page.size?.over) : -1;
+  const tooLong = isManual ? previewPages.findIndex((page) => page.size?.over) : -1;
+
+  /** 自選配色:第一次點的時候先帶入網站現在的兩個顏色,再讓人改 */
+  function choosePalette(next: "site" | "custom") {
+    if (next === "custom" && preferences.exportPalette !== "custom") {
+      updatePreference({ exportPalette: "custom", exportCustomBg: toHex(siteColors.bg, preferences.exportCustomBg), exportCustomInk: toHex(siteColors.ink, preferences.exportCustomInk) });
+    } else {
+      updatePreference({ exportPalette: next });
+    }
+  }
+
+  const check = (label: string, checked: boolean, onChange: (checked: boolean) => void) => (
+    <label className={`flex items-center gap-1.5 text-sm ${theme.mutedText}`}>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      {label}
+    </label>
+  );
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/60 md:items-center md:p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="匯出圖片"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        className={`flex h-dvh w-full max-w-3xl flex-col border p-3 shadow-lg md:h-auto md:max-h-[90vh] md:rounded-3xl md:p-5 ${theme.border} ${theme.panelBg} ${theme.text}`}
-      >
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <b className="tracking-[0.06em]">匯出圖片</b>
-          <button type="button" onClick={onClose} className={`rounded-2xl border px-3 py-1.5 text-sm ${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}>
-            ✕ 關閉
-          </button>
-        </div>
-
-        {/* 設定:手機上收成一行摘要,點開才展開 */}
+    <div className={theme.text}>
+      {/* 設定:手機上收成一行摘要,點開才展開 */}
+      <div className={`mb-3 rounded-2xl border ${theme.border} ${theme.cardBg}`}>
         <button
           type="button"
           onClick={() => setSettingsOpen((value) => !value)}
           aria-expanded={settingsOpen}
-          className={`mb-2 flex items-center gap-2 rounded-2xl border px-3 py-1.5 text-left text-sm ${theme.border} ${theme.cardBg}`}
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm"
         >
-          <span className={theme.mutedText}>設定</span>
-          <span className="min-w-0 flex-1 truncate">{summary}</span>
+          <span className="font-semibold tracking-[0.06em]">設定</span>
+          <span className={`min-w-0 flex-1 truncate text-xs ${theme.mutedText}`}>{settingsOpen ? "" : summary}</span>
           <span aria-hidden className={theme.subtleText}>
             {settingsOpen ? "▴" : "▾"}
           </span>
         </button>
 
         {settingsOpen && (
-          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
-            <select
-              value={preferences.exportImageWidth}
-              onChange={(e) => updatePreference({ exportImageWidth: Number(e.target.value) as ExportImageWidth })}
-              className={select}
-              aria-label="圖片寬度"
-            >
-              {WIDTH_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+          <div className="flex flex-col gap-3 px-3 pb-3">
+            <Row label="切頁" theme={theme}>
+              <Choices
+                label="切頁"
+                value={preferences.exportPages}
+                options={EXPORT_PAGES.map((option) => ({ value: option.value, label: option.label }))}
+                onChange={(exportPages) => updatePreference({ exportPages })}
+                theme={theme}
+                fill
+              />
+            </Row>
 
-            <select
-              value={preferences.exportTextSize}
-              onChange={(e) => updatePreference({ exportTextSize: e.target.value as ExportTextSize })}
-              className={select}
-              aria-label="字級"
-            >
-              {(Object.entries(EXPORT_TEXT_SIZES) as [ExportTextSize, { label: string; perLine: number }][]).map(([value, size]) => (
-                <option key={value} value={value}>
-                  {size.label}（一行約 {size.perLine} 字）
-                </option>
-              ))}
-            </select>
+            <Row label="字級" theme={theme}>
+              <span className="text-xs" aria-hidden>
+                A
+              </span>
+              {/* 往右字越大:滑桿的值反過來就是一行幾個字 */}
+              <input
+                type="range"
+                min={PER_LINE_MIN}
+                max={PER_LINE_MAX}
+                step={1}
+                value={PER_LINE_MIN + PER_LINE_MAX - preferences.exportPerLine}
+                onChange={(e) => updatePreference({ exportPerLine: PER_LINE_MIN + PER_LINE_MAX - Number(e.target.value) })}
+                aria-label="字級"
+                aria-valuetext={`一行約 ${preferences.exportPerLine} 字`}
+                className="min-w-0 max-w-64 flex-1 accent-(--accent)"
+              />
+              <span className="text-lg leading-none" aria-hidden>
+                A
+              </span>
+            </Row>
 
-            <select
-              value={preferences.exportRatio}
-              onChange={(e) => updatePreference({ exportRatio: e.target.value as ExportRatio })}
-              className={select}
-              aria-label="每張的比例"
-            >
-              {(Object.entries(EXPORT_RATIOS) as [ExportRatio, { label: string }][]).map(([value, ratio]) => (
-                <option key={value} value={value}>
-                  {ratio.label}
-                </option>
-              ))}
-            </select>
+            <Row label="留白" theme={theme}>
+              <Choices
+                label="留白"
+                value={preferences.exportMargin}
+                options={(Object.entries(EXPORT_MARGINS) as [ExportMargin, { label: string }][]).map(([value, margin]) => ({ value, label: margin.label }))}
+                onChange={(exportMargin) => updatePreference({ exportMargin })}
+                theme={theme}
+              />
+            </Row>
 
-            <select
-              value={preferences.exportPaginate}
-              onChange={(e) => updatePreference({ exportPaginate: e.target.value as ExportPaginate })}
-              className={select}
-              aria-label="分頁方式"
-            >
-              {PAGINATE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <Row label="字體" theme={theme}>
+              <select
+                value={preferences.fontFamily}
+                onChange={(e) => updatePreference({ fontFamily: e.target.value as FontFamilyName })}
+                className={`rounded-full border px-3 py-1 text-sm outline-none ${theme.border} ${theme.inputBg}`}
+                aria-label="字體"
+              >
+                {FONT_OPTIONS.map((font) => (
+                  <option key={font.key} value={font.key}>
+                    {font.label}
+                  </option>
+                ))}
+              </select>
+            </Row>
 
-            <select
-              value={preferences.fontFamily}
-              onChange={(e) => updatePreference({ fontFamily: e.target.value as FontFamilyName })}
-              className={select}
-              aria-label="字體"
-            >
-              {FONT_OPTIONS.map((font) => (
-                <option key={font.key} value={font.key}>
-                  {font.label}
-                </option>
-              ))}
-            </select>
+            <Row label="配色" theme={theme}>
+              <Choices
+                label="配色"
+                value={preferences.exportPalette}
+                options={[
+                  { value: "site", label: <><Swatch {...siteColors} />跟網站</> },
+                  { value: "custom", label: <><Swatch bg={preferences.exportCustomBg} ink={preferences.exportCustomInk} />自選</> },
+                ]}
+                onChange={choosePalette}
+                theme={theme}
+              />
+              {preferences.exportPalette === "custom" && (
+                <div className={`flex flex-wrap items-center gap-3 text-xs ${theme.mutedText}`}>
+                  <label className="flex items-center gap-1.5">
+                    底色
+                    <input
+                      type="color"
+                      value={preferences.exportCustomBg}
+                      onChange={(e) => updatePreference({ exportCustomBg: e.target.value })}
+                      className="h-8 w-10 cursor-pointer rounded-lg border-0 bg-transparent p-0"
+                    />
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    文字
+                    <input
+                      type="color"
+                      value={preferences.exportCustomInk}
+                      onChange={(e) => updatePreference({ exportCustomInk: e.target.value })}
+                      className="h-8 w-10 cursor-pointer rounded-lg border-0 bg-transparent p-0"
+                    />
+                  </label>
+                  {customContrast < 3 && <span style={{ color: "var(--danger, #c0392b)" }}>兩個顏色太接近，字會看不清楚</span>}
+                </div>
+              )}
+            </Row>
 
-            <select
-              value={preferences.exportMargin}
-              onChange={(e) => updatePreference({ exportMargin: e.target.value as ExportMargin })}
-              className={select}
-              aria-label="留白"
-            >
-              {(Object.entries(EXPORT_MARGINS) as [ExportMargin, { label: string }][]).map(([value, margin]) => (
-                <option key={value} value={value}>
-                  {margin.label}
-                </option>
-              ))}
-            </select>
-
-            <label className={`flex items-center gap-2 ${theme.mutedText}`}>
-              <input type="checkbox" checked={preferences.exportImageTitle} onChange={(e) => updatePreference({ exportImageTitle: e.target.checked })} />
-              含標題
-            </label>
-
-            <label className={`flex items-center gap-2 ${theme.mutedText}`}>
-              <input type="checkbox" checked={preferences.softItalic} onChange={(e) => updatePreference({ softItalic: e.target.checked })} />
-              斜體改淡色正體
-            </label>
-
-            {preferences.softItalic && (
-              <label className={`flex items-center gap-2 ${theme.mutedText}`}>
-                <input type="checkbox" checked={preferences.softItalicBold} onChange={(e) => updatePreference({ softItalicBold: e.target.checked })} />
-                對白加粗
-              </label>
-            )}
-
-            <label className={`flex items-center gap-2 ${theme.mutedText}`}>
-              <input type="checkbox" checked={preferences.exportPageNumbers} onChange={(e) => updatePreference({ exportPageNumbers: e.target.checked })} />
-              頁碼
-            </label>
-
-            {/* 配色:每個選項畫兩個圈圈,大的是底色、小的是字色 */}
-            <div className="flex basis-full flex-wrap items-center gap-1.5" role="radiogroup" aria-label="配色">
-              <span className={`mr-1 text-xs ${theme.mutedText}`}>配色</span>
-              {paletteChoices.map((choice) => {
-                const active = preferences.exportPalette === choice.id;
-                return (
-                  <button
-                    key={choice.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    onClick={() => updatePreference({ exportPalette: choice.id })}
-                    className={`flex items-center gap-1.5 rounded-2xl border py-1 pl-1.5 pr-2.5 text-xs ${
-                      active ? `${theme.primaryButton} ${theme.primaryButtonText}` : `${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`
-                    }`}
-                  >
-                    <span className="relative inline-block h-5 w-7 shrink-0" aria-hidden>
-                      <span className="absolute left-0 top-0 h-5 w-5 rounded-full" style={{ background: choice.bg, boxShadow: "0 0 0 1px rgba(128, 128, 128, 0.6)" }} />
-                      <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full" style={{ background: choice.ink, boxShadow: "0 0 0 1.5px rgba(128, 128, 128, 0.6)" }} />
-                    </span>
-                    {choice.name}
-                  </button>
-                );
-              })}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+              {check("含標題", preferences.exportImageTitle, (exportImageTitle) => updatePreference({ exportImageTitle }))}
+              {check("頁碼", preferences.exportPageNumbers, (exportPageNumbers) => updatePreference({ exportPageNumbers }))}
+              {check("斜體改淡色正體", preferences.softItalic, (softItalic) => updatePreference({ softItalic }))}
+              {preferences.softItalic && check("對白加粗", preferences.softItalicBold, (softItalicBold) => updatePreference({ softItalicBold }))}
             </div>
-
-            {preferences.exportPalette === "custom" && (
-              <div className={`flex basis-full flex-wrap items-center gap-3 text-xs ${theme.mutedText}`}>
-                <label className="flex items-center gap-1.5">
-                  底色
-                  <input
-                    type="color"
-                    value={preferences.exportCustomBg}
-                    onChange={(e) => updatePreference({ exportCustomBg: e.target.value })}
-                    className="h-8 w-10 cursor-pointer rounded-lg border-0 bg-transparent p-0"
-                  />
-                </label>
-                <label className="flex items-center gap-1.5">
-                  文字
-                  <input
-                    type="color"
-                    value={preferences.exportCustomInk}
-                    onChange={(e) => updatePreference({ exportCustomInk: e.target.value })}
-                    className="h-8 w-10 cursor-pointer rounded-lg border-0 bg-transparent p-0"
-                  />
-                </label>
-                {customContrast < 3 && <span style={{ color: "var(--danger, #c0392b)" }}>兩個顏色太接近，字會看不清楚</span>}
-              </div>
-            )}
 
             <input
               type="text"
@@ -651,10 +624,11 @@ export default function EditorExportModal({
               onChange={(e) => updatePreference({ exportSignature: e.target.value.slice(0, 40) })}
               placeholder="署名（例如 @你的帳號）"
               aria-label="署名"
-              className={`min-w-0 flex-1 basis-40 rounded-2xl border px-3 py-1.5 outline-none ${theme.border} ${theme.inputBg}`}
+              className={`w-full rounded-2xl border px-3 py-1.5 text-base outline-none sm:text-sm ${theme.border} ${theme.inputBg}`}
             />
           </div>
         )}
+      </div>
 
         {!images && (
           <div className={`mb-2 flex flex-wrap items-center gap-2 text-xs ${theme.mutedText}`}>
@@ -706,7 +680,7 @@ export default function EditorExportModal({
           </div>
         )}
 
-        <div className={`min-h-0 flex-1 overflow-auto rounded-2xl border p-2 md:p-3 ${theme.border} ${theme.cardBg}`}>
+      <div className={`rounded-2xl border p-2 md:p-3 ${theme.border} ${theme.cardBg}`}>
           {images ? (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {images.map((image, index) => (
@@ -750,14 +724,13 @@ export default function EditorExportModal({
               onToggleSelect={toggleBlock}
               onToggleCut={toggleCut}
               onRemoveCut={toggleCut}
-              overLabel={(slices) =>
-                isManual ? "太長，在中間再切一刀" : preferences.exportPaginate === "none" ? "超過單張上限" : `太長，會在段落中間切成 ${slices} 張`
-              }
+              overLabel={(slices) => (isManual ? "太長，在中間再切一刀" : `太長，會在段落中間切成 ${slices} 張`)}
             />
           )}
         </div>
 
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+      {/* 動作列:捲到哪裡都在畫面底部 */}
+      <div className={`sticky bottom-0 z-20 -mx-1 mt-2 flex flex-wrap items-center gap-2 px-1 py-2 ${theme.pageBg}`}>
           {status && <span className={`basis-full text-xs sm:basis-auto ${theme.subtleText}`}>{status}</span>}
           {images ? (
             <>
@@ -789,14 +762,19 @@ export default function EditorExportModal({
               {busy
                 ? "處理中……"
                 : tooLong >= 0
-                  ? isManual
-                    ? `第 ${tooLong + 1} 張太長，先在中間再切一刀`
-                    : "太長了，改用分頁或少選幾段"
+                  ? `第 ${tooLong + 1} 張太長，先在中間再切一刀`
                   : `產生圖片（${pageCount} 張）`}
             </button>
           )}
-        </div>
       </div>
     </div>
   );
+}
+
+/** getComputedStyle 讀到的顏色可能是 rgb(),顏色選擇器只吃 #rrggbb */
+function toHex(color: string, fallback: string): string {
+  if (/^#[0-9a-f]{6}$/i.test(color)) return color;
+  const match = color.match(/rgba?\((\d+)[ ,]+(\d+)[ ,]+(\d+)/);
+  if (!match) return fallback;
+  return `#${match.slice(1, 4).map((n) => Number(n).toString(16).padStart(2, "0")).join("")}`;
 }
