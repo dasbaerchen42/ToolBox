@@ -44,6 +44,9 @@ export function migratePreferences(raw: unknown): EditorPreferences {
           : "auto";
   }
 
+  // 留白:「寬」拿掉了,併進一般
+  if (next.exportMargin !== "narrow" && next.exportMargin !== "normal") next.exportMargin = "normal";
+
   // 配色:以前挑了某個主題的,換成自選並帶入那個主題的底色與字色,圖看起來不會變
   const palette = raw.exportPalette;
   if (palette !== "site" && palette !== "custom") {

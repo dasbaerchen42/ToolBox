@@ -35,4 +35,9 @@ describe("編輯器偏好:舊版轉圖設定換成新的", () => {
     expect(migratePreferences({ exportPalette: "gone" }).exportPalette).toBe("site");
     expect(migratePreferences({ exportPalette: "custom", exportCustomBg: "#123456" }).exportCustomBg).toBe("#123456");
   });
+
+  it("留白的「寬」拿掉了,併進一般", () => {
+    expect(migratePreferences({ exportMargin: "wide" }).exportMargin).toBe("normal");
+    expect(migratePreferences({ exportMargin: "narrow" }).exportMargin).toBe("narrow");
+  });
 });

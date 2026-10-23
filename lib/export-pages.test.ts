@@ -86,6 +86,31 @@ describe("轉圖:固定比例", () => {
   });
 });
 
+describe("轉圖:頁尾(署名、頁碼)", () => {
+  it("沒有頁尾時上下留白一樣", () => {
+    const layout = exportLayout(800, defaultPreferences);
+    expect(layout.paddingBottom).toBe(layout.padding);
+  });
+
+  it("有署名或頁碼時下方留白加高,放得下分隔線與一行小字,不壓到內容", () => {
+    for (const extra of [{ exportSignature: "@me" }, { exportPageNumbers: true }]) {
+      for (const exportMargin of ["narrow", "normal"] as const) {
+        const layout = exportLayout(800, { ...defaultPreferences, exportMargin, ...extra });
+        const footerTop = layout.footerBottom + layout.footerGap + layout.footerSize * 1.4;
+        expect(layout.paddingBottom).toBeGreaterThan(footerTop + layout.fontSize * 0.5);
+      }
+    }
+  });
+
+  it("固定比例時,頁尾佔的高度從內容區扣掉", () => {
+    const plain = exportLayout(800, { ...defaultPreferences, exportPages: "4:5" });
+    const signed = exportLayout(800, { ...defaultPreferences, exportPages: "4:5", exportSignature: "@me" });
+    expect(maxContentHeight(800, signed.padding, signed.pageHeight, signed.paddingBottom)).toBeLessThan(
+      maxContentHeight(800, plain.padding, plain.pageHeight, plain.paddingBottom)
+    );
+  });
+});
+
 describe("轉圖:超長段落切在兩行之間", () => {
   it("每一刀挑放得下的最後一個行縫", () => {
     // 每行 50 高,行縫在 50、100、150……;一張最多 120 → 切在 100、200
@@ -109,9 +134,9 @@ describe("轉圖:超長段落切在兩行之間", () => {
     expect(planSlices(90, 100, [30, 60])).toEqual([[0, 90]]);
   });
 
-  it("留白可以調寬窄", () => {
+  it("留白可以調稍少或一般", () => {
     const narrow = exportLayout(1080, { ...defaultPreferences, exportMargin: "narrow" });
-    const wide = exportLayout(1080, { ...defaultPreferences, exportMargin: "wide" });
+    const wide = exportLayout(1080, { ...defaultPreferences, exportMargin: "normal" });
     expect(narrow.padding).toBeLessThan(wide.padding);
     // 留白變寬,一行的字數不變,字會跟著變小
     expect(wide.fontSize).toBeLessThan(narrow.fontSize);

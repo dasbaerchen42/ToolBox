@@ -206,7 +206,7 @@ function buildStage(html: string, title: string | null, width: number, preferenc
     "position: relative",
     `width: ${width}px`,
     ...(layout.pageHeight ? [`height: ${layout.pageHeight}px`, "overflow: hidden"] : []),
-    `padding: ${padding}px`,
+    `padding: ${padding}px ${padding}px ${layout.paddingBottom}px`,
     "box-sizing: border-box",
     "background: var(--paper-bg)",
     "color: var(--ink-primary)",
@@ -275,6 +275,8 @@ function buildFooter(layout: ExportLayout, preferences: EditorPreferences) {
     "line-height: 1.4",
     "letter-spacing: 0.05em",
     "color: var(--ink-tertiary)",
+    "border-top: 1px solid var(--border-light)",
+    `padding-top: ${layout.footerGap}px`,
   ].join("; ");
   const left = document.createElement("span");
   left.textContent = signature;
@@ -305,7 +307,7 @@ export async function measureExport({
   try {
     await ensureWebFont(preferences.fontFamily);
     await loadFontsFor(page);
-    return { units: collectUnits(content).boxes, padding, maxHeight: maxContentHeight(width, padding, layout.pageHeight), layout };
+    return { units: collectUnits(content).boxes, padding, maxHeight: maxContentHeight(width, padding, layout.pageHeight, layout.paddingBottom), layout };
   } finally {
     stage.remove();
   }
@@ -349,7 +351,7 @@ export async function exportContentToImages({
       useCORS: true,
       logging: false,
       width,
-      ...(height === null ? {} : { height: layout.pageHeight ?? height + padding * 2 }),
+      ...(height === null ? {} : { height: layout.pageHeight ?? height + padding + layout.paddingBottom }),
       // html2canvas 在另一份複製的文件裡排版,那邊的網路字型要自己再等一次
       onclone: async (clonedDoc: Document) => {
         // 樣式直接內嵌,不等複製頁自己去下載 CSS
@@ -368,7 +370,7 @@ export async function exportContentToImages({
     await loadFontsFor(page);
     if (document.fonts?.ready) await document.fonts.ready;
 
-    const maxHeight = maxContentHeight(width, padding, layout.pageHeight);
+    const maxHeight = maxContentHeight(width, padding, layout.pageHeight, layout.paddingBottom);
     const { els, boxes } = collectUnits(content);
 
     if (els.length === 0) {

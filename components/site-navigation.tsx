@@ -21,7 +21,8 @@ export default function SiteNavigation() {
   const pathname = usePathname().replace(/(.)\/$/, "$1");
 
   return (
-    <nav className="border-b border-(--border-light) bg-(--surface) backdrop-blur">
+    // z-40:主題選單要蓋過編輯器那條固定在頂端的工具列(z-30)
+    <nav className="relative z-40 border-b border-(--border-light) bg-(--surface) backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-3">
         {/*
           左側:首頁一顆膠囊,其他工具是用細線隔開的文字連結。

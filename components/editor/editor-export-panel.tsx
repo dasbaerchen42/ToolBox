@@ -108,7 +108,7 @@ function Choices<T extends string>({
 function Row({ label, children, theme }: { label: string; children: ReactNode; theme: EditorThemeConfig }) {
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:gap-x-3">
-      <span className={`w-7 shrink-0 text-xs ${theme.mutedText}`}>{label}</span>
+      <span className={`shrink-0 whitespace-nowrap text-xs tracking-normal ${theme.mutedText}`}>{label}</span>
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{children}</div>
     </div>
   );
@@ -220,6 +220,8 @@ export default function EditorExportPanel({
     exportTitle,
     preferences.exportPerLine,
     preferences.exportPages,
+    preferences.exportSignature.trim() !== "",
+    preferences.exportPageNumbers,
     preferences.exportMargin,
     preferences.fontFamily,
     preferences.fontSize,
@@ -256,7 +258,7 @@ export default function EditorExportPanel({
   }, [isManual, exportCuts, fresh]);
 
   const sizes = useMemo(
-    () => (fresh && unitCount > 0 ? pageSizes(fresh.units, effectiveCuts, WIDTH, fresh.padding, fresh.layout.pageHeight) : null),
+    () => (fresh && unitCount > 0 ? pageSizes(fresh.units, effectiveCuts, WIDTH, fresh.padding, fresh.layout.pageHeight, fresh.layout.paddingBottom) : null),
     [fresh, unitCount, effectiveCuts]
   );
 
@@ -473,7 +475,7 @@ export default function EditorExportPanel({
   const summary = [
     `切頁 ${pagesLabel}`,
     `一行 ${preferences.exportPerLine} 字`,
-    `留白${EXPORT_MARGINS[preferences.exportMargin]?.label ?? "中"}`,
+    `留白${EXPORT_MARGINS[preferences.exportMargin]?.label ?? "一般"}`,
     fontLabel,
     preferences.exportPalette === "custom" ? "自選配色" : null,
   ]
