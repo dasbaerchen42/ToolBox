@@ -4,7 +4,8 @@
 // 最常用的格式按鈕排最前面,其次復原重做;尋找、「⋯」選單、匯出成圖片靠右。
 // 不常用的(檢視切換、設定、從剪貼簿開新文件、Google Docs)都收進「⋯」。
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import type { EditorThemeConfig } from "@/lib/theme";
 import { IconRedo, IconSearch, IconUndo } from "./editor-icons";
 
@@ -13,7 +14,11 @@ export const TOOL_BUTTON = "flex h-9 shrink-0 items-center justify-center gap-1.
 /** 按下時不要把焦點從編輯區搶走:選取的字才會一直反白,知道自己在改哪幾個字 */
 export const keepEditorFocus = (e: React.MouseEvent) => e.preventDefault();
 
-/** 工具列上的按鈕 + 點開的小視窗;點外面或按 Esc 就收起來 */
+/**
+ * 工具列上的按鈕 + 點開的小視窗;點外面或按 Esc 就收起來。
+ * 小視窗用 portal 掛在 body 上、照按鈕的位置擺:放在工具列裡面的話,
+ * iPhone 會被可以左右捲的工具列裁掉,點了什麼都看不到。
+ */
 export function ToolPopover({
   label,
   title,
@@ -36,12 +41,16 @@ export function ToolPopover({
   buttonClassName?: (open: boolean) => string;
 }) {
   const [open, setOpen] = useState(false);
-  const boxRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const onDown = (e: PointerEvent) => {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
@@ -54,34 +63,72 @@ export function ToolPopover({
     };
   }, [open]);
 
+  // 擺在按鈕正下方,左右不超出畫面;高度不超過看得到的範圍(手機鍵盤打開時會變矮)
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const button = buttonRef.current?.getBoundingClientRect();
+      if (!button) return;
+      const menuWidth = menuRef.current?.offsetWidth ?? 0;
+      const viewWidth = document.documentElement.clientWidth;
+      const view = window.visualViewport;
+      const viewBottom = view ? view.offsetTop + view.height : window.innerHeight;
+      const wanted = align === "right" ? button.right - menuWidth : button.left;
+      const top = button.bottom + 8;
+      setPos({
+        top,
+        left: Math.max(8, Math.min(wanted, viewWidth - menuWidth - 8)),
+        maxHeight: Math.max(160, viewBottom - top - 12),
+      });
+    };
+    place();
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    window.visualViewport?.addEventListener("resize", place);
+    window.visualViewport?.addEventListener("scroll", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+      window.visualViewport?.removeEventListener("resize", place);
+      window.visualViewport?.removeEventListener("scroll", place);
+    };
+  }, [open, align]);
+
   const active = "border-(--accent-fill) bg-(--accent-fill) text-(--on-accent)";
   const idle = `${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`;
 
   return (
-    <div ref={boxRef} className="relative shrink-0">
+    <div className="relative shrink-0">
       <button
+        ref={buttonRef}
         type="button"
         title={title}
         aria-label={title}
         aria-haspopup="true"
         aria-expanded={open}
         onMouseDown={keepFocus ? keepEditorFocus : undefined}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          // 先藏起來,量好位置再出現,不會在左上角閃一下
+          setPos(null);
+          setOpen((value) => !value);
+        }}
         className={buttonClassName ? buttonClassName(open) : `${TOOL_BUTTON} ${open ? active : idle}`}
       >
         {label}
       </button>
-      {open && (
-        <div
-          role="menu"
-          onMouseDown={keepFocus ? keepEditorFocus : undefined}
-          className={`fixed inset-x-3 top-auto z-40 mt-2 max-h-[70vh] overflow-auto rounded-2xl border p-3 shadow-xl sm:absolute sm:inset-x-auto ${
-            align === "right" ? "sm:right-0" : "sm:left-0"
-          } ${width} max-w-none sm:max-w-[90vw] ${theme.border} ${theme.panelBg} ${theme.text}`}
-        >
-          {children(() => setOpen(false))}
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            onMouseDown={keepFocus ? keepEditorFocus : undefined}
+            style={pos ? { top: pos.top, left: pos.left, maxHeight: pos.maxHeight } : { top: 0, left: 0, visibility: "hidden" }}
+            className={`fixed z-50 max-w-[calc(100vw-16px)] overflow-auto rounded-2xl border p-3 shadow-xl ${width} ${theme.border} ${theme.panelBg} ${theme.text}`}
+          >
+            {children(() => setOpen(false))}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
@@ -179,7 +226,7 @@ export default function EditorMainToolbar({
   const divider = <span className="mx-0.5 h-5 w-px shrink-0" style={{ background: "var(--border-light)" }} aria-hidden />;
 
   return (
-    <div className="flex items-center gap-1.5 overflow-x-auto py-2 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible" role="toolbar" aria-label="編輯工具列">
+    <div className="flex flex-wrap items-center gap-1.5 py-2" role="toolbar" aria-label="編輯工具列">
       {formatBar ?? modeControl}
       {(formatBar || modeControl) && divider}
       <button type="button" onMouseDown={keepEditorFocus} onClick={onUndo} disabled={!canUndo} title="還原（Ctrl+Z）" aria-label="還原" className={`${plain} w-9 px-0`}>
