@@ -24,7 +24,7 @@ import { validateContent } from "@/lib/validators";
 import EditorStatsBar from "@/components/editor/editor-stats-bar";
 import { getEditorStats } from "@/lib/editor-stats";
 import EditorMainToolbar from "@/components/editor/editor-main-toolbar";
-import { formatDateTime24h } from "@/lib/datetime";
+import { formatShortDateTime } from "@/lib/datetime";
 import { isRenderableMode } from "@/lib/markdown";
 import {
   hasRichFormatting,
@@ -243,7 +243,7 @@ export default function EditorPage() {
           {activeDoc ? (
             <div className="flex h-full flex-col">
               <div className={`mx-auto w-full ${areaWidthClass}`}>
-                <div className="mb-3 flex items-center gap-2">
+                <div className="mb-1.5 flex items-center gap-2">
                   <input
                     type="text"
                     value={activeDoc.title}
@@ -259,6 +259,10 @@ export default function EditorPage() {
                   >
                     匯出圖片
                   </button>
+                </div>
+                {/* 標題下面一行小字:儲存時間、字數 */}
+                <div className="mb-1 px-1">
+                  <EditorStatsBar stats={editorStats} theme={theme} savedAt={formatShortDateTime(activeDoc.updatedAt)} linked={!!activeDoc.googleDocId} />
                 </div>
               </div>
 
@@ -374,7 +378,6 @@ export default function EditorPage() {
 
               <div className={`mx-auto mt-2 w-full ${areaWidthClass}`}>
                 {pasteHint && <p className={`mb-1 text-xs ${theme.subtleText}`}>{pasteHint}</p>}
-                <EditorStatsBar stats={editorStats} theme={theme} savedAt={formatDateTime24h(activeDoc.updatedAt)} linked={!!activeDoc.googleDocId} />
                 {showHints && (
                   <div className={`mt-3 rounded-2xl border px-4 py-3 ${theme.border} ${theme.panelBg}`}>
                     <EditorStatusPanel result={validationResult} theme={theme} />

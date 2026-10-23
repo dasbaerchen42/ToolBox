@@ -13,15 +13,18 @@ type EditorStatsBarProps = {
   };
 };
 
-/** 編輯區下面的一行小字:儲存時間、字數、段落數 */
+/** 標題下面的一行小字:儲存時間、字數、段落數(手機上只留儲存時間與字數,不換行) */
 export default function EditorStatsBar({ stats, savedAt, linked, theme }: EditorStatsBarProps) {
   return (
     <div className={`flex flex-wrap gap-x-3 gap-y-0.5 text-xs leading-6 ${theme.subtleText}`}>
       <span>已儲存 {savedAt}</span>
       <span title={`含標點及空白 ${stats.totalChars}・不含空白 ${stats.totalCharsNoSpaces}・不含標點及空白 ${stats.totalCharsNoSpacesNoPunctuation}`}>
-        字數 {stats.totalCharsNoSpaces}（不含標點 {stats.totalCharsNoSpacesNoPunctuation}）
+        字數 {stats.totalCharsNoSpaces}
+        <span className="hidden sm:inline">（不含標點 {stats.totalCharsNoSpacesNoPunctuation}）</span>
       </span>
-      <span>{stats.lineCount} 行・{stats.paragraphCount} 段</span>
+      <span className="hidden sm:inline">
+        {stats.lineCount} 行・{stats.paragraphCount} 段
+      </span>
       {linked && <span>↗ 已連結 Google Docs，下次匯出會直接複寫</span>}
     </div>
   );

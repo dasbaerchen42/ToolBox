@@ -3,6 +3,7 @@
 // 文件編輯模式的格式按鈕:段落樣式、粗體斜體底線刪除線、字色、底色、對齊。
 // 按這些按鈕都不會把焦點從編輯區搶走,選起來的字一直反白。
 // 字色、底色分成兩半:左邊直接套上次用的顏色,右邊 ▾ 打開色盤換色。
+// 手機上排成兩行:段落、對齊和復原、尋找一行,粗斜體到底色一行(用 order 換位置,不用左右滑)。
 
 import { useState } from "react";
 import { useEditorState, type Editor } from "@tiptap/react";
@@ -72,7 +73,9 @@ export default function RichFormatBar({ editor, theme }: { editor: Editor; theme
   const chain = () => editor.chain().focus();
   const on = "border-(--accent-fill) bg-(--accent-fill) text-(--on-accent)";
   const off = `${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`;
-  const square = (active: boolean) => `${TOOL_BUTTON} w-9 px-0 ${active ? on : off}`;
+  // 第二行(手機)的東西
+  const row2 = "max-sm:order-3";
+  const square = (active: boolean) => `${TOOL_BUTTON} ${row2} w-9 px-0 ${active ? on : off}`;
   const item = (active: boolean) =>
     `flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-(--paper-bg-3) ${active ? "font-semibold text-(--accent)" : ""}`;
   const swatch = "h-8 w-8 rounded-full border-2 transition";
@@ -117,6 +120,8 @@ export default function RichFormatBar({ editor, theme }: { editor: Editor; theme
           </div>
         )}
       </ToolPopover>
+      {/* 手機上的換行 */}
+      <span className="hidden h-0 basis-full max-sm:order-2 max-sm:block" aria-hidden />
 
       <button type="button" title="粗體（Ctrl+B）" aria-label="粗體" aria-pressed={state.bold} onMouseDown={keepEditorFocus} onClick={() => chain().toggleBold().run()} className={square(state.bold)}>
         <b>B</b>
@@ -132,7 +137,7 @@ export default function RichFormatBar({ editor, theme }: { editor: Editor; theme
       </button>
 
       {/* 字色:左半直接套上次的顏色 */}
-      <div className="flex shrink-0">
+      <div className={`flex shrink-0 ${row2}`}>
         <button
           type="button"
           title="套用字色（右邊 ▾ 換顏色）"
@@ -174,7 +179,7 @@ export default function RichFormatBar({ editor, theme }: { editor: Editor; theme
       </div>
 
       {/* 底色:左半直接套上次的底色 */}
-      <div className="flex shrink-0">
+      <div className={`flex shrink-0 ${row2}`}>
         <button
           type="button"
           title="套用底色（右邊 ▾ 換顏色）"
