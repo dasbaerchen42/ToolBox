@@ -46,6 +46,8 @@ export type EditorPreferences = {
   exportCustomInk: string;
   /** 每張右下角標「1/5」 */
   exportPageNumbers: boolean;
+  /** 轉圖時要遮起來的字(逗號、頓號或換行隔開),見 lib/export-mask */
+  exportMasks: string;
   /** 每張左下角的署名(空字串就不放) */
   exportSignature: string;
   /** 四周留白:稍窄、一般 */
@@ -76,6 +78,7 @@ export const defaultPreferences: EditorPreferences = {
   exportCustomInk: "#4a3a32",
   exportPageNumbers: false,
   exportSignature: "",
+  exportMasks: "",
   exportMargin: "normal",
   softItalic: false,
   softItalicBold: false,

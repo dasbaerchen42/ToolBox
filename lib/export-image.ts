@@ -18,6 +18,7 @@ import {
   zipImages,
   type ExportedImage,
 } from "@/lib/download";
+import { maskHtml, parseMaskTerms } from "./export-mask";
 
 // 這三個原本住在這裡,影像工作檯也要用,搬去 lib/download 後從這裡轉出,
 // 既有的匯入路徑就不用動。
@@ -234,14 +235,16 @@ function buildStage(html: string, title: string | null, width: number, preferenc
 
   // 標題與內文都直接放在 content 底下:分頁是照 content 的直接子元素切,
   // 中間多包一層 div 的話就只剩下一個巨大的子元素可以切。
+  // 要遮起來的字(人名之類)蓋成主題色;量高度與截圖都用遮好的這份,版面不會變
+  const masks = parseMaskTerms(preferences.exportMasks ?? "");
   if (title) {
     const heading = document.createElement("div");
     heading.className = "md-preview-title";
-    heading.textContent = title;
+    heading.innerHTML = maskHtml(escapeTitle(title), masks);
     content.appendChild(heading);
   }
 
-  content.insertAdjacentHTML("beforeend", html);
+  content.insertAdjacentHTML("beforeend", maskHtml(html, masks));
 
   shift.appendChild(content);
   viewport.appendChild(shift);
@@ -256,6 +259,10 @@ function buildStage(html: string, title: string | null, width: number, preferenc
   const colors = getComputedStyle(page);
   const background = colors.getPropertyValue("--paper-bg").trim() || readThemeColor("--paper-bg", "#ffffff");
   return { stage, page, viewport, shift, content, background, padding, layout, footer };
+}
+
+function escapeTitle(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /** 頁碼、署名那一列(兩個都沒開就是 null) */

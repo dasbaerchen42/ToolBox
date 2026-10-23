@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { EditorThemeConfig } from "@/lib/theme";
 import { type EditorPreferences, type FontFamilyName } from "@/lib/preferences";
 import { PER_LINE_MAX, PER_LINE_MIN } from "@/lib/preferences-migrate";
+import { maskHtml, parseMaskTerms } from "@/lib/export-mask";
 import { FONT_OPTIONS } from "@/lib/editor-font";
 import { downloadEach, shareImages } from "@/lib/download";
 import { useCanShareImages } from "@/hooks/useCanShareImages";
@@ -222,6 +223,7 @@ export default function EditorExportPanel({
     preferences.exportPages,
     preferences.exportSignature.trim() !== "",
     preferences.exportPageNumbers,
+    preferences.exportMasks,
     preferences.exportMargin,
     preferences.fontFamily,
     preferences.fontSize,
@@ -262,6 +264,9 @@ export default function EditorExportPanel({
     [fresh, unitCount, effectiveCuts]
   );
 
+  /** 要遮起來的字:預覽在這裡遮,轉圖在 export-image 裡遮(同一個函式) */
+  const masks = useMemo(() => parseMaskTerms(preferences.exportMasks), [preferences.exportMasks]);
+
   /** 預覽的每一張:沒勾的段落跟著前一段,放在同一張裡(縮成一行) */
   const previewPages = useMemo<PreviewPage[]>(() => {
     const pageOfUnit = (unit: number) => {
@@ -282,7 +287,7 @@ export default function EditorExportPanel({
         if (effectiveCuts.has(unit)) pages[pageOfUnit(unit) + 1].cutBefore = blockIndex;
       });
     }
-    if (exportTitle) pages[0].items.push({ kind: "title", html: `<div class="md-preview-title">${escapeHtml(exportTitle)}</div>` });
+    if (exportTitle) pages[0].items.push({ kind: "title", html: `<div class="md-preview-title">${maskHtml(escapeHtml(exportTitle), masks)}</div>` });
     let current = 0;
     let position = 0;
     blocks.forEach((_, index) => {
@@ -291,11 +296,11 @@ export default function EditorExportPanel({
         current = pageOfUnit(position + titleOffset);
         position += 1;
       }
-      const item: SheetItem = { kind: "block", index, html: blocks[index], selected: isSelected };
+      const item: SheetItem = { kind: "block", index, html: maskHtml(blocks[index], masks), selected: isSelected };
       pages[Math.min(current, pages.length - 1)].items.push(item);
     });
     return pages;
-  }, [effectiveCuts, unitCount, sizes, fresh, isManual, titleOffset, selectedIndexes, exportTitle, blocks, selected]);
+  }, [effectiveCuts, unitCount, sizes, fresh, isManual, titleOffset, selectedIndexes, exportTitle, blocks, selected, masks]);
 
   function seedAutoCuts() {
     if (!fresh) return;
@@ -478,6 +483,7 @@ export default function EditorExportPanel({
     `留白${EXPORT_MARGINS[preferences.exportMargin]?.label ?? "一般"}`,
     fontLabel,
     preferences.exportPalette === "custom" ? "自選配色" : null,
+    masks.length > 0 ? `遮罩 ${masks.length} 個詞` : null,
   ]
     .filter(Boolean)
     .join("・");
@@ -619,6 +625,17 @@ export default function EditorExportPanel({
               {check("斜體改淡色正體", preferences.softItalic, (softItalic) => updatePreference({ softItalic }))}
               {preferences.softItalic && check("對白加粗", preferences.softItalicBold, (softItalicBold) => updatePreference({ softItalicBold }))}
             </div>
+
+            <Row label="遮罩" theme={theme}>
+              <input
+                type="text"
+                value={preferences.exportMasks}
+                onChange={(e) => updatePreference({ exportMasks: e.target.value.slice(0, 300) })}
+                placeholder="要遮起來的字，用逗號隔開（例如人名）"
+                aria-label="遮罩文字"
+                className={`min-w-0 flex-1 rounded-2xl border px-3 py-1.5 text-base outline-none sm:text-sm ${theme.border} ${theme.inputBg}`}
+              />
+            </Row>
 
             <input
               type="text"
