@@ -4,7 +4,7 @@
 // 「裁切」刻意做在內容層而不是像素層:選段落的邊界永遠是乾淨的,
 // 在圖片上拖框一定會切到半行字。
 // 預覽照真正轉圖的排版縮小顯示(export-preview),看到的就是下載到的。
-// 設定盡量少:寬度固定、字級一條滑桿、切頁一個選單、配色只有跟網站與自選。
+// 設定盡量少:寬度固定、字級一條滑桿、切頁一個選單、配色只有預設(跟著網站)與自選。
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { EditorThemeConfig } from "@/lib/theme";
@@ -108,7 +108,7 @@ function Choices<T extends string>({
 function Row({ label, children, theme }: { label: string; children: ReactNode; theme: EditorThemeConfig }) {
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:gap-x-3">
-      <span className={`w-7 shrink-0 text-xs ${theme.mutedText}`}>{label}</span>
+      <span className={`shrink-0 whitespace-nowrap text-xs tracking-normal ${theme.mutedText}`}>{label}</span>
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{children}</div>
     </div>
   );
@@ -220,6 +220,8 @@ export default function EditorExportPanel({
     exportTitle,
     preferences.exportPerLine,
     preferences.exportPages,
+    preferences.exportSignature.trim() !== "",
+    preferences.exportPageNumbers,
     preferences.exportMargin,
     preferences.fontFamily,
     preferences.fontSize,
@@ -256,7 +258,7 @@ export default function EditorExportPanel({
   }, [isManual, exportCuts, fresh]);
 
   const sizes = useMemo(
-    () => (fresh && unitCount > 0 ? pageSizes(fresh.units, effectiveCuts, WIDTH, fresh.padding, fresh.layout.pageHeight) : null),
+    () => (fresh && unitCount > 0 ? pageSizes(fresh.units, effectiveCuts, WIDTH, fresh.padding, fresh.layout.pageHeight, fresh.layout.paddingBottom) : null),
     [fresh, unitCount, effectiveCuts]
   );
 
@@ -462,7 +464,7 @@ export default function EditorExportPanel({
       primary ? `${theme.primaryButton} ${theme.primaryButtonText}` : `${theme.secondaryButton} ${theme.secondaryButtonText}`
     }`;
   const fontLabel = FONT_OPTIONS.find((font) => font.key === preferences.fontFamily)?.label ?? "";
-  // 「跟網站」那顆圈圈要畫網站現在的顏色
+  // 「預設」(跟著網站主題)那顆圈圈要畫網站現在的顏色
   const rootStyle = getComputedStyle(document.documentElement);
   const siteColors = {
     bg: rootStyle.getPropertyValue("--paper-bg").trim() || "#ffffff",
@@ -473,7 +475,7 @@ export default function EditorExportPanel({
   const summary = [
     `切頁 ${pagesLabel}`,
     `一行 ${preferences.exportPerLine} 字`,
-    `留白${EXPORT_MARGINS[preferences.exportMargin]?.label ?? "中"}`,
+    `留白${EXPORT_MARGINS[preferences.exportMargin]?.label ?? "一般"}`,
     fontLabel,
     preferences.exportPalette === "custom" ? "自選配色" : null,
   ]
@@ -580,7 +582,7 @@ export default function EditorExportPanel({
                 label="配色"
                 value={preferences.exportPalette}
                 options={[
-                  { value: "site", label: <><Swatch {...siteColors} />跟網站</> },
+                  { value: "site", label: <><Swatch {...siteColors} />預設</> },
                   { value: "custom", label: <><Swatch bg={preferences.exportCustomBg} ink={preferences.exportCustomInk} />自選</> },
                 ]}
                 onChange={choosePalette}

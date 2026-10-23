@@ -30,17 +30,19 @@ export function paginateOf(pages: ExportPages | undefined): "auto" | "manual" {
 }
 
 /** 四周留白佔寬度的比例 */
-export type ExportMargin = "narrow" | "normal" | "wide";
+export type ExportMargin = "narrow" | "normal";
 
 export const EXPORT_MARGINS: Record<ExportMargin, { label: string; ratio: number }> = {
-  narrow: { label: "少", ratio: 0.04 },
-  normal: { label: "中", ratio: 0.06 },
-  wide: { label: "多", ratio: 0.09 },
+  narrow: { label: "稍窄", ratio: 0.045 },
+  normal: { label: "一般", ratio: 0.06 },
 };
 
 export type ExportLayout = {
   width: number;
+  /** 上、左、右的留白 */
   padding: number;
+  /** 下方留白:有頁碼或署名時加高,放得下分隔線與那一行小字 */
+  paddingBottom: number;
   contentWidth: number;
   /** 字級(CSS px,輸出時再乘 EXPORT_IMAGE_SCALE) */
   fontSize: number;
@@ -49,9 +51,10 @@ export type ExportLayout = {
   lineHeight: number;
   /** 固定比例時每張的高度(CSS px);照內容長度時是 null */
   pageHeight: number | null;
-  /** 頁碼、署名的字級與離底邊的距離(放在下方留白裡,不佔內容的位置) */
+  /** 頁碼、署名的字級、離底邊的距離、分隔線到字的距離(放在下方留白裡,不佔內容的位置) */
   footerSize: number;
   footerBottom: number;
+  footerGap: number;
 };
 
 /**
@@ -62,7 +65,7 @@ export type ExportLayout = {
 export function exportLayout(
   width: number,
   preferences: Pick<EditorPreferences, "fontSize" | "letterSpacing" | "lineHeight" | "exportPerLine"> &
-    Partial<Pick<EditorPreferences, "exportPages" | "exportMargin">>
+    Partial<Pick<EditorPreferences, "exportPages" | "exportMargin" | "exportSignature" | "exportPageNumbers">>
 ): ExportLayout {
   const padding = Math.round(width * (EXPORT_MARGINS[preferences.exportMargin ?? "normal"] ?? EXPORT_MARGINS.normal).ratio);
   const contentWidth = width - padding * 2;
@@ -70,16 +73,26 @@ export function exportLayout(
   const spacingEm = preferences.fontSize > 0 ? preferences.letterSpacing / preferences.fontSize : 0;
   // 中文一個字一個 em,再加字距;留 0.3 個字的餘裕,剛好滿行時才不會被擠到下一行
   const fontSize = Math.floor((contentWidth / ((perLine + 0.3) * (1 + spacingEm))) * 10) / 10;
+  // 頁尾像書或論文:一條淡淡的線,下面一行小字(署名、頁碼)。內容與線之間留大約一個字
+  const footerSize = Math.max(11, Math.round(fontSize * 0.5));
+  const footerBottom = Math.round(padding * 0.35);
+  const footerGap = Math.round(footerSize * 1.1);
+  const hasFooter = !!preferences.exportSignature?.trim() || !!preferences.exportPageNumbers;
+  const paddingBottom = hasFooter
+    ? Math.max(padding, Math.round(footerBottom + footerGap + footerSize * 1.4 + fontSize * 0.9))
+    : padding;
   return {
     width,
     padding,
+    paddingBottom,
     contentWidth,
     fontSize,
     letterSpacing: Math.round(fontSize * spacingEm * 100) / 100,
     lineHeight: preferences.lineHeight,
     pageHeight: ratioHeight(width, preferences.exportPages),
-    footerSize: Math.max(11, Math.round(fontSize * 0.5)),
-    footerBottom: Math.round(padding * 0.3),
+    footerSize,
+    footerBottom,
+    footerGap,
   };
 }
 
@@ -89,12 +102,13 @@ function ratioHeight(width: number, pages: ExportPages | undefined): number | nu
 }
 
 /** 一頁內容區(不含留白)最多能有多高,超過就得換頁;固定比例時就是那個比例扣掉留白 */
-export function maxContentHeight(width: number, padding: number, pageHeight: number | null = null): number {
-  if (pageHeight) return Math.max(100, pageHeight - padding * 2);
+export function maxContentHeight(width: number, padding: number, pageHeight: number | null = null, paddingBottom = padding): number {
+  const vertical = padding + paddingBottom;
+  if (pageHeight) return Math.max(100, pageHeight - vertical);
   const scale = EXPORT_IMAGE_SCALE;
   const bySide = DEVICE_MAX_SIDE / scale;
   const byArea = DEVICE_MAX_AREA / (width * scale * scale);
-  return Math.max(200, Math.floor(Math.min(bySide, byArea)) - padding * 2);
+  return Math.max(200, Math.floor(Math.min(bySide, byArea)) - vertical);
 }
 
 /**
@@ -137,14 +151,21 @@ export function autoCuts(units: UnitBox[], maxHeight: number): Set<number> {
 export type PageSize = { from: number; to: number; width: number; height: number; content: number };
 
 /** 每一張的範圍與輸出尺寸(像素) */
-export function pageSizes(units: UnitBox[], cuts: Set<number>, width: number, padding: number, pageHeight: number | null = null): PageSize[] {
+export function pageSizes(
+  units: UnitBox[],
+  cuts: Set<number>,
+  width: number,
+  padding: number,
+  pageHeight: number | null = null,
+  paddingBottom = padding
+): PageSize[] {
   return pageRanges(units.length, cuts).map(([from, to]) => {
     const content = spanHeight(units, from, to);
     return {
       from,
       to,
       width: Math.round(width * EXPORT_IMAGE_SCALE),
-      height: Math.round((pageHeight ?? content + padding * 2) * EXPORT_IMAGE_SCALE),
+      height: Math.round((pageHeight ?? content + padding + paddingBottom) * EXPORT_IMAGE_SCALE),
       content,
     };
   });

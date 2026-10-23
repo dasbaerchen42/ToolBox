@@ -105,7 +105,7 @@ function PageSheet({
         style={{
           width: layout.width,
           minHeight: layout.pageHeight ?? undefined,
-          padding: layout.padding,
+          padding: `${layout.padding}px ${layout.padding}px ${layout.paddingBottom}px`,
           transform: `scale(${scale})`,
           transformOrigin: "0 0",
           ...palette.vars,
@@ -146,6 +146,8 @@ function PageSheet({
             lineHeight: 1.4,
             color: "var(--ink-tertiary)",
             background: "transparent",
+            borderTop: `${Math.max(0.5, scale)}px solid var(--border-light)`,
+            paddingTop: layout.footerGap * scale,
           }}
         >
           <span>{signature}</span>
