@@ -16,7 +16,6 @@ export type WritingDoc = {
   mode: WritingMode;
   createdAt: string;
   updatedAt: string;
-  googleDocId?: string;
   /** 文轉圖時個別段落的樣式(置中、底色……),見 lib/markdown */
   blockStyles?: StoredBlockStyle[];
 };

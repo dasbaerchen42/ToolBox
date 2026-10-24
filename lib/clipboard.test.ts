@@ -9,7 +9,7 @@ describe("hasItalicMarkup", () => {
     expect(hasItalicMarkup("<i>斜體</i>")).toBe(true);
   });
 
-  it("也認得 Google Docs 那種 inline style", () => {
+  it("也認得文書編輯器常用的 inline style", () => {
     expect(hasItalicMarkup('<span style="font-style:italic">旁白</span>')).toBe(true);
   });
 
