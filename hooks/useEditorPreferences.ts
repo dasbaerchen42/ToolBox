@@ -14,6 +14,7 @@ export function useEditorPreferences() {
     useState<EditorPreferences>(defaultPreferences);
   // 載入完成前不寫回 localStorage,避免掛載瞬間用預設值蓋掉已存偏好
   const [loaded, setLoaded] = useState(false);
+  const [storageError, setStorageError] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -31,7 +32,13 @@ export function useEditorPreferences() {
 
   useEffect(() => {
     if (!loaded) return;
-    localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences));
+    try {
+      localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences));
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 反映這次同步寫入的結果
+      setStorageError(null);
+    } catch {
+      setStorageError("編輯器設定無法儲存到瀏覽器，請確認不是無痕模式且仍有可用空間。");
+    }
   }, [preferences, loaded]);
 
   // 中文網路字體是選到才載入的
@@ -72,5 +79,6 @@ export function useEditorPreferences() {
     adjustFontSize,
     adjustLineHeight,
     adjustLetterSpacing,
+    storageError,
   };
 }

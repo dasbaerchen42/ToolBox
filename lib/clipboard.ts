@@ -143,7 +143,7 @@ const BLOCK_TAGS = new Set([
 
 function isItalicElement(element: Element): boolean {
   if (ITALIC_TAGS.has(element.tagName)) return true;
-  // Google Docs 之類的來源不用 <em>,而是 <span style="font-style:italic">
+  // 有些文書編輯器不用 <em>,而是 <span style="font-style:italic">
   return /font-style\s*:\s*italic/i.test(element.getAttribute("style") ?? "");
 }
 

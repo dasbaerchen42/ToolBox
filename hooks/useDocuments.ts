@@ -7,6 +7,8 @@ import { ACTIVE_DOC_KEY } from "@/lib/preferences";
 export function useDocuments() {
   const [docs, setDocs] = useState<WritingDoc[]>([]);
   const [activeDocId, setActiveDocId] = useState<string>("");
+  const [storageError, setStorageError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     try {
@@ -46,19 +48,29 @@ export function useDocuments() {
       setDocs([firstDoc]);
       setActiveDocId(firstDoc.id);
     }
+    setLoaded(true);
   }, []);
 
   useEffect(() => {
-    if (docs.length > 0) {
+    if (!loaded || docs.length === 0) return;
+    try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(docs));
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 反映這次同步寫入的結果
+      setStorageError(null);
+    } catch {
+      setStorageError("自動儲存失敗：瀏覽器空間可能已滿，或目前是無痕模式。請立即下載完整備份。");
     }
-  }, [docs]);
+  }, [docs, loaded]);
 
   useEffect(() => {
-    if (activeDocId) {
+    if (!loaded || !activeDocId) return;
+    try {
       localStorage.setItem(ACTIVE_DOC_KEY, activeDocId);
+    } catch {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 失敗必須立刻顯示資料風險
+      setStorageError("自動儲存失敗：瀏覽器不允許寫入本機資料。請立即下載完整備份。");
     }
-  }, [activeDocId]);
+  }, [activeDocId, loaded]);
 
   const activeDoc = docs.find((d) => d.id === activeDocId) ?? null;
 
@@ -96,6 +108,15 @@ export function useDocuments() {
     setActiveDocId(doc.id);
   }
 
+  function replaceDocuments(nextDocs: WritingDoc[], nextActiveDocId: string) {
+    setDocs(nextDocs);
+    setActiveDocId(
+      nextDocs.some((doc) => doc.id === nextActiveDocId)
+        ? nextActiveDocId
+        : nextDocs[0]?.id ?? ""
+    );
+  }
+
   return {
     docs,
     activeDoc,
@@ -105,5 +126,7 @@ export function useDocuments() {
     handleDeleteDoc,
     updateActiveDoc,
     addDoc,
+    replaceDocuments,
+    storageError,
   };
 }

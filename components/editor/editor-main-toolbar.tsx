@@ -2,7 +2,7 @@
 
 // 編輯區上方的一條工具列(捲動時固定在畫面頂端)。
 // 最常用的格式按鈕排最前面,其次復原重做;尋找、「⋯」選單靠右(出圖在標題旁邊切換)。
-// 不常用的(檢視切換、設定、從剪貼簿開新文件、Google Docs)都收進「⋯」。
+// 不常用的(檢視切換、設定、從剪貼簿開新文件、本機匯入匯出)都收進「⋯」。
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -148,8 +148,8 @@ type Props = {
   viewItems?: ReactNode;
   onPaste: () => void;
   onPasteExport: () => void;
-  /** 「⋯」選單裡的 Google Docs 選項 */
-  googleItems: ReactNode;
+  /** 「⋯」選單裡的本機檔案與備份選項 */
+  fileItems: (close: () => void) => ReactNode;
   settings: ReactNode;
   theme: EditorThemeConfig;
 };
@@ -160,11 +160,11 @@ function MoreMenu({
   viewItems,
   onPaste,
   onPasteExport,
-  googleItems,
+  fileItems,
   settings,
   close,
   theme,
-}: Pick<Props, "viewItems" | "onPaste" | "onPasteExport" | "googleItems" | "settings" | "theme"> & { close: () => void }) {
+}: Pick<Props, "viewItems" | "onPaste" | "onPasteExport" | "fileItems" | "settings" | "theme"> & { close: () => void }) {
   const [page, setPage] = useState<"menu" | "settings">("menu");
   const line = <div className="my-1 h-px" style={{ background: "var(--border-light)" }} />;
 
@@ -197,9 +197,9 @@ function MoreMenu({
         <button type="button" role="menuitem" onClick={onPasteExport} className={MENU_ITEM}>
           開新文件並出圖
         </button>
-        {line}
-        {googleItems}
       </div>
+      {line}
+      {fileItems(close)}
     </div>
   );
 }
@@ -216,7 +216,7 @@ export default function EditorMainToolbar({
   viewItems,
   onPaste,
   onPasteExport,
-  googleItems,
+  fileItems,
   settings,
   theme,
 }: Props) {
@@ -244,9 +244,9 @@ export default function EditorMainToolbar({
       >
         <IconSearch />
       </button>
-      <ToolPopover label="⋯" title="更多：檢視、設定、開新文件、Google Docs" theme={theme} align="right" width="w-80" buttonClassName={(open) => `${TOOL_BUTTON} w-9 px-0 text-lg leading-none ${open ? "border-(--accent-fill) bg-(--accent-fill) text-(--on-accent)" : `${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}`}>
+      <ToolPopover label="⋯" title="更多：檢視、設定、本機檔案與備份" theme={theme} align="right" width="w-80" buttonClassName={(open) => `${TOOL_BUTTON} w-9 px-0 text-lg leading-none ${open ? "border-(--accent-fill) bg-(--accent-fill) text-(--on-accent)" : `${theme.border} ${theme.secondaryButton} ${theme.secondaryButtonText}`}`}>
         {(close) => (
-          <MoreMenu viewItems={viewItems} onPaste={onPaste} onPasteExport={onPasteExport} googleItems={googleItems} settings={settings} close={close} theme={theme} />
+          <MoreMenu viewItems={viewItems} onPaste={onPaste} onPasteExport={onPasteExport} fileItems={fileItems} settings={settings} close={close} theme={theme} />
         )}
       </ToolPopover>
     </div>

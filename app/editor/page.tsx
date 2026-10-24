@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createNewDoc } from "@/lib/storage";
 import { EDITOR_THEME } from "@/lib/theme";
 import EditorSidebar from "@/components/editor/editor-sidebar";
-import EditorGoogleToolbar from "@/components/editor/editor-google-toolbar";
+import EditorLocalFiles, { type EditorFileNotice } from "@/components/editor/editor-local-files";
 import EditorSettingsPanel from "@/components/editor/editor-settings-panel";
 import EditorTextarea from "@/components/editor/editor-textarea";
 import EditorPreview from "@/components/editor/editor-preview";
@@ -47,6 +47,8 @@ export default function EditorPage() {
     handleDeleteDoc,
     updateActiveDoc,
     addDoc,
+    replaceDocuments,
+    storageError: documentStorageError,
   } = useDocuments();
 
   const {
@@ -55,12 +57,14 @@ export default function EditorPage() {
     adjustFontSize,
     adjustLineHeight,
     adjustLetterSpacing,
+    storageError: preferenceStorageError,
   } = useEditorPreferences();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   /** 編輯 / 出圖:同一頁切換,不再開一個蓋住全畫面的視窗 */
   const [view, setView] = useState<"write" | "image">("write");
   const [pasteHint, setPasteHint] = useState<string | null>(null);
+  const [fileNotice, setFileNotice] = useState<EditorFileNotice | null>(null);
   // 剪貼簿裡有格式時先問要不要保留,問完才真的貼
   const [pendingPaste, setPendingPaste] = useState<
     { payload: PastePayload; thenExport: boolean } | null
@@ -227,6 +231,7 @@ export default function EditorPage() {
     () => getEditorStats(activeDoc?.content ?? ""),
     [activeDoc?.content]
   );
+  const storageError = documentStorageError ?? preferenceStorageError;
 
   return (
     <main className={`flex flex-1 flex-col ${theme.pageBg} ${theme.text}`}>
@@ -281,7 +286,20 @@ export default function EditorPage() {
                 </div>
                 {/* 標題下面一行小字:儲存時間、字數 */}
                 <div className="mb-1 px-1">
-                  <EditorStatsBar stats={editorStats} theme={theme} savedAt={formatShortDateTime(activeDoc.updatedAt)} linked={!!activeDoc.googleDocId} />
+                  <EditorStatsBar stats={editorStats} theme={theme} savedAt={formatShortDateTime(activeDoc.updatedAt)} saveError={storageError} />
+                  {(storageError || fileNotice) && (
+                    <p
+                      role="status"
+                      aria-live="polite"
+                      className={`mt-1 rounded-xl border px-3 py-2 text-xs leading-5 ${
+                        storageError || fileNotice?.kind === "error"
+                          ? "border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
+                          : `${theme.border} ${theme.panelBg} ${theme.mutedText}`
+                      }`}
+                    >
+                      {storageError ?? fileNotice?.text}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -343,9 +361,20 @@ export default function EditorPage() {
                       }
                       onPaste={() => void pasteFromClipboard(false)}
                       onPasteExport={() => void pasteFromClipboard(true)}
-                      googleItems={
-                        <EditorGoogleToolbar activeDoc={activeDoc} updateActiveDoc={updateActiveDoc} addDoc={addDoc} theme={theme} />
-                      }
+                      fileItems={(close) => (
+                        <EditorLocalFiles
+                          activeDoc={activeDoc}
+                          activeDocId={activeDocId}
+                          documents={docs}
+                          preferences={preferences}
+                          setPreferences={setPreferences}
+                          addDoc={addDoc}
+                          replaceDocuments={replaceDocuments}
+                          onNotice={setFileNotice}
+                          onClose={close}
+                          mutedText={theme.mutedText}
+                        />
+                      )}
                       settings={
                         <EditorSettingsPanel
                           preferences={preferences}

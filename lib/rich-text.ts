@@ -123,7 +123,7 @@ export function htmlToMarkdown(html: string): string {
     .trim();
 }
 
-/** 拿掉文件裡的字色、底色、底線、對齊標籤,只留文字(匯出成純文字時用,例如 Google Docs) */
+/** 拿掉文件裡的字色、底色、底線、對齊標籤,只留下純文字 */
 export function stripRichTags(markdown: string): string {
   return markdown
     .replace(/<\/?(?:span|mark|u)\b[^>]*>/g, "")
