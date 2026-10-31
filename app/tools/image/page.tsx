@@ -30,6 +30,7 @@ import {
   pickColorAt,
   sliceImage,
   WORKING_OUTPUT,
+  type SlicePad,
 } from "@/lib/tools/image/render";
 import type {
   Axis,
@@ -299,10 +300,10 @@ export default function ImageWorkbenchPage() {
       return `放上 ${layers.length} 段字。`;
     });
 
-  const handleSlice = (spans: Span[], axis: Axis) =>
+  const handleSlice = (spans: Span[], axis: Axis, pad?: SlicePad) =>
     run(async () => {
       if (!active) return;
-      const pieces = await sliceImage(active, spans, axis, WORKING_OUTPUT);
+      const pieces = await sliceImage(active, spans, axis, WORKING_OUTPUT, pad);
       replaceImage(active.id, pieces);
       return `切成 ${pieces.length} 段。`;
     });
@@ -571,7 +572,7 @@ export default function ImageWorkbenchPage() {
               image={active}
               busy={busy}
               t={t}
-              onSlice={(spans, axis) => void handleSlice(spans, axis)}
+              onSlice={(spans, axis, pad) => void handleSlice(spans, axis, pad)}
               onCrop={(rect) => void handleCrop(rect)}
             />
           ) : (

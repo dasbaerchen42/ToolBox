@@ -27,6 +27,29 @@ export function equalCutPositions(total: number, parts: number): number[] {
   return cuts;
 }
 
+/**
+ * 照比例切時每一段要多長:另一邊(寬或高)整個保留,沿著下刀方向照比例算。
+ * 橫刀(分上下)時一段的高 = 寬 × h/w;直刀(分左右)時一段的寬 = 高 × w/h。
+ */
+export function ratioPieceLength(size: Size, axis: Axis, ratio: { w: number; h: number }): number {
+  if (ratio.w <= 0 || ratio.h <= 0) return 0;
+  const length = axis === "y" ? (size.width * ratio.h) / ratio.w : (size.height * ratio.w) / ratio.h;
+  return Math.max(1, Math.round(length));
+}
+
+/**
+ * 比例切:每隔一段長度下一刀,最後剩多少就是多少(要不要補滿由呼叫端決定)。
+ * 整張還不到一段長就不下刀。
+ */
+export function ratioCutPositions(total: number, pieceLength: number): number[] {
+  const step = Math.round(pieceLength);
+  if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(step) || step < 1) return [];
+
+  const cuts: number[] = [];
+  for (let position = step; position < total; position += step) cuts.push(position);
+  return cuts;
+}
+
 /** 排序、去重、丟掉落在範圍外或會切出 0px 的刀 */
 export function normalizeCuts(cuts: number[], total: number): number[] {
   const seen = new Set<number>();
