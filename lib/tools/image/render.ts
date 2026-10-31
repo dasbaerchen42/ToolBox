@@ -222,12 +222,16 @@ export async function cropImage(
   }
 }
 
+/** 比例切時把不夠長的段補滿:length 是一段該有的長度,background 是 null 就留透明 */
+export type SlicePad = { length: number; background: string | null };
+
 /** 切割:一張變多張,名字補序號 */
 export async function sliceImage(
   image: WorkImage,
   spans: Span[],
   axis: Axis,
-  output: OutputOptions
+  output: OutputOptions,
+  pad?: SlicePad
 ): Promise<WorkImage[]> {
   const bitmap = await decode(image.blob, image.name);
   const width = String(spans.length).length;
@@ -237,11 +241,14 @@ export async function sliceImage(
 
     for (const [index, span] of spans.entries()) {
       const rect = spanToRect(span, axis, image);
+      // 不夠長的那段(通常是最後一張)往後補背景,原圖貼在開頭、不縮放
+      const padded = !!pad && span.size < pad.length;
+      const along = padded ? pad.length : span.size;
 
       const blob = await drawToBlob({
-        width: rect.width,
-        height: rect.height,
-        background: null,
+        width: axis === "y" ? rect.width : along,
+        height: axis === "y" ? along : rect.height,
+        background: padded ? pad.background : null,
         output,
         draw: (ctx) => {
           ctx.drawImage(

@@ -9,7 +9,7 @@ export type ToolKey = "slice" | "merge" | "frame" | "mark" | "print";
 
 /** 五個工作站;下載不是一站,是頁面右上角的按鈕 */
 export const TOOLS: { key: ToolKey; label: string; hint: string }[] = [
-  { key: "slice", label: "影像切割", hint: "自動等分、自由下刀、框選裁切" },
+  { key: "slice", label: "影像切割", hint: "自動等分、照比例切、自由下刀、框選裁切" },
   { key: "merge", label: "圖片拼接", hint: "照順序接成一張" },
   { key: "frame", label: "尺寸邊框", hint: "描邊、補成指定比例" },
   { key: "mark", label: "文字標記", hint: "放字、浮水印、局部遮罩" },

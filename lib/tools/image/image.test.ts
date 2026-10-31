@@ -14,6 +14,8 @@ import {
   cutsToSpans,
   equalCutPositions,
   normalizeCuts,
+  ratioCutPositions,
+  ratioPieceLength,
   spanToRect,
 } from "./slice";
 import { balancedRows, coverRect, layoutGrid, layoutJustified, layoutMerge, layoutWaterfall, suggestCellWidth } from "./merge";
@@ -113,6 +115,35 @@ describe("slice:等分切", () => {
 
   it("份數比像素還多時不給切", () => {
     expect(equalCutPositions(3, 10)).toEqual([]);
+  });
+});
+
+describe("slice:比例切", () => {
+  it("上下切時一段的高 = 寬 × h/w", () => {
+    expect(ratioPieceLength({ width: 1080, height: 5000 }, "y", { w: 4, h: 5 })).toBe(1350);
+  });
+
+  it("左右切時一段的寬 = 高 × w/h", () => {
+    expect(ratioPieceLength({ width: 4000, height: 1080 }, "x", { w: 1, h: 1 })).toBe(1080);
+  });
+
+  it("每隔一段長度下一刀,最後剩多少是多少", () => {
+    const cuts = ratioCutPositions(5000, 1350);
+    expect(cuts).toEqual([1350, 2700, 4050]);
+    expect(cutsToSpans(cuts, 5000).map((span) => span.size)).toEqual([1350, 1350, 1350, 950]);
+  });
+
+  it("剛好整除時不會多出一張 0px", () => {
+    expect(ratioCutPositions(2700, 1350)).toEqual([1350]);
+  });
+
+  it("整張不到一段長就不下刀", () => {
+    expect(ratioCutPositions(1000, 1350)).toEqual([]);
+  });
+
+  it("比例或長度不合理時不給切", () => {
+    expect(ratioPieceLength({ width: 1080, height: 5000 }, "y", { w: 0, h: 5 })).toBe(0);
+    expect(ratioCutPositions(5000, 0)).toEqual([]);
   });
 });
 
