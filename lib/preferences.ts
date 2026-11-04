@@ -16,7 +16,19 @@ export type FontFamilyName =
   | "pacifico"
   | "permanent"
   | "playfair"
-  | "bebas";
+  | "bebas"
+  | "shippori"
+  | "peak"
+  | "thenkhung"
+  | "wenkaiMono"
+  | "fraunces"
+  | "lora"
+  | "nunito"
+  | "quicksand"
+  | "chenyu"
+  | "ryusenkei"
+  | "kaitou"
+  | "konatu";
 
 /** 編輯區的呈現方式：純文字、渲染結果、左右並排 */
 export type EditorViewMode = "edit" | "preview" | "split";
@@ -67,7 +79,7 @@ export const defaultPreferences: EditorPreferences = {
   fontSize: 16,
   lineHeight: 1.8,
   letterSpacing: 0,
-  fontFamily: "mono",
+  fontFamily: "wenkaiMono",
   viewMode: "edit",
   docView: "rich",
   exportImageTitle: false,

@@ -41,8 +41,8 @@ const ALIGNS = [
 ] as const;
 
 export default function RichFormatBar({ editor, theme }: { editor: Editor; theme: EditorThemeConfig }) {
-  const [lastColor, setLastColor] = useState<string>("red");
-  const [lastHighlight, setLastHighlight] = useState<string>("yellow");
+  const [lastColor, setLastColor] = useState<string>("azuki");
+  const [lastHighlight, setLastHighlight] = useState<string>("kigaracha");
 
   const state = useEditorState({
     editor,

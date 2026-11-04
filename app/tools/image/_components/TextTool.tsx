@@ -7,12 +7,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { FONT_OPTIONS } from "@/lib/editor-font";
-import type { FontFamilyName } from "@/lib/preferences";
+import { fontWeightFor, IMAGE_FONT_OPTIONS } from "@/lib/editor-font";
+import FontPicker from "@/components/font-picker";
 import { canvasFontFamily, ensureFancyFallback } from "@/lib/web-fonts";
 import { convertFancy, getFontResults } from "@/app/tools/_lib/fancy-fonts";
 import {
   dragHandle,
+  canvasLetterSpacing,
   drawTextLayer,
   fontString,
   handlePoint,
@@ -81,7 +82,7 @@ export default function TextTool({ image, busy, t, onApply }: Props) {
       void Promise.all(
         layers.map(async (layer) => {
           const text = shown(layer).text;
-          let family = await canvasFontFamily(layer.font, text, layer.bold ? 700 : 400);
+          let family = await canvasFontFamily(layer.font, text, fontWeightFor(layer.font, layer.bold));
           // 花體字母不在一般字型裡,接上數學、符號字型補位
           if (layer.fancy) family = `${family}, ${await ensureFancyFallback(text)}`;
           return [layer.id, family] as const;
@@ -106,6 +107,7 @@ export default function TextTool({ image, busy, t, onApply }: Props) {
     if (!ctx) return map;
     for (const layer of layers) {
       ctx.font = fontString(layer, families[layer.id] ?? "sans-serif");
+      (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = canvasLetterSpacing(layer);
       map.set(layer.id, layoutTextLayer(shown(layer), (text) => ctx.measureText(text)));
     }
     return map;
@@ -275,20 +277,9 @@ export default function TextTool({ image, busy, t, onApply }: Props) {
                 />
               </Field>
 
-              <Field label="字體" t={t}>
-                <div className="flex gap-2">
-                  <select
-                    value={selected.font}
-                    onChange={(event) => update(selected.id, { font: event.target.value as FontFamilyName })}
-                    aria-label="字體"
-                    className={`min-w-0 flex-1 rounded-xl border px-3 py-2 text-sm ${t.input}`}
-                  >
-                    {FONT_OPTIONS.map((font) => (
-                      <option key={font.key} value={font.key}>
-                        {font.label}
-                      </option>
-                    ))}
-                  </select>
+              <Field label="字體" hint="每一項直接用實際字體預覽；效果字只在影像工作臺出現" t={t}>
+                <FontPicker value={selected.font} options={IMAGE_FONT_OPTIONS} onChange={(font) => update(selected.id, { font })} />
+                <div className="mt-2">
                   <Toggle checked={selected.bold} onChange={(bold) => update(selected.id, { bold })} label="粗體" t={t} />
                 </div>
               </Field>

@@ -4,6 +4,7 @@
 import { DEVICE_MAX_AREA, DEVICE_MAX_SIDE } from "@/lib/canvas-limits";
 import type { EditorPreferences, ExportPages } from "@/lib/preferences";
 import { blend, deriveVars } from "@/lib/theme-core";
+import { fontExtraLetterSpacingEm } from "@/lib/editor-font";
 
 /** 輸出時的像素密度:800 CSS px 會變成 1600 px 的圖 */
 export const EXPORT_IMAGE_SCALE = 2;
@@ -65,12 +66,14 @@ export type ExportLayout = {
 export function exportLayout(
   width: number,
   preferences: Pick<EditorPreferences, "fontSize" | "letterSpacing" | "lineHeight" | "exportPerLine"> &
+    Partial<Pick<EditorPreferences, "fontFamily">> &
     Partial<Pick<EditorPreferences, "exportPages" | "exportMargin" | "exportSignature" | "exportPageNumbers">>
 ): ExportLayout {
   const padding = Math.round(width * (EXPORT_MARGINS[preferences.exportMargin ?? "normal"] ?? EXPORT_MARGINS.normal).ratio);
   const contentWidth = width - padding * 2;
   const perLine = preferences.exportPerLine > 0 ? preferences.exportPerLine : 24;
-  const spacingEm = preferences.fontSize > 0 ? preferences.letterSpacing / preferences.fontSize : 0;
+  const spacingEm = (preferences.fontSize > 0 ? preferences.letterSpacing / preferences.fontSize : 0) +
+    (preferences.fontFamily ? fontExtraLetterSpacingEm(preferences.fontFamily) : 0);
   // 中文一個字一個 em,再加字距;留 0.3 個字的餘裕,剛好滿行時才不會被擠到下一行
   const fontSize = Math.floor((contentWidth / ((perLine + 0.3) * (1 + spacingEm))) * 10) / 10;
   // 頁尾像書或論文:一條淡淡的線,下面一行小字(署名、頁碼)。內容與線之間留大約一個字

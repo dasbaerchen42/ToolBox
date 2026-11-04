@@ -55,9 +55,9 @@ export const SoftHighlight = Mark.create({
   addAttributes() {
     return {
       color: {
-        default: "yellow",
-        parseHTML: (el) => highlightFromClass(el.getAttribute("class")) ?? "yellow",
-        renderHTML: (attrs) => ({ class: `hl-${attrs.color ?? "yellow"}` }),
+        default: "kigaracha",
+        parseHTML: (el) => highlightFromClass(el.getAttribute("class")) ?? "kigaracha",
+        renderHTML: (attrs) => ({ class: `hl-${attrs.color ?? "kigaracha"}` }),
       },
     };
   },

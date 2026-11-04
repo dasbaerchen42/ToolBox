@@ -3,6 +3,7 @@
 // 看到的就是輸出的。座標一律是原圖像素;x、y 是那段字的中心點。
 
 import type { FontFamilyName } from "@/lib/preferences";
+import { fontExtraLetterSpacingEm, fontWeightFor } from "@/lib/editor-font";
 import type { Point, Size } from "./types";
 
 /** 文字底下要不要墊東西:無、每行一塊色底(限動的「螢光筆」)、整段半透明底 */
@@ -69,8 +70,12 @@ export type TextBox = {
   lineHeight: number;
 };
 
-export function fontString(layer: Pick<TextLayer, "bold" | "size">, family: string): string {
-  return `${layer.bold ? 700 : 400} ${layer.size}px ${family}`;
+export function fontString(layer: Pick<TextLayer, "bold" | "size" | "font">, family: string): string {
+  return `${fontWeightFor(layer.font, layer.bold)} ${layer.size}px ${family}`;
+}
+
+export function canvasLetterSpacing(layer: Pick<TextLayer, "font" | "size">): string {
+  return `${layer.size * fontExtraLetterSpacingEm(layer.font)}px`;
 }
 
 /** 排一段字:每行多寬、整段多大(不含旋轉)。measure 用 ctx.measureText,可以換成假的來測 */
@@ -119,6 +124,7 @@ export function drawTextLayer(ctx: CanvasRenderingContext2D, layer: TextLayer, f
   ctx.translate(layer.x, layer.y);
   ctx.rotate((layer.rotation * Math.PI) / 180);
   ctx.font = fontString(layer, family);
+  (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = canvasLetterSpacing(layer);
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
 

@@ -166,39 +166,34 @@ function MoreMenu({
   theme,
 }: Pick<Props, "viewItems" | "onPaste" | "onPasteExport" | "fileItems" | "settings" | "theme"> & { close: () => void }) {
   const [page, setPage] = useState<"menu" | "settings">("menu");
-  const line = <div className="my-1 h-px" style={{ background: "var(--border-light)" }} />;
-
   if (page === "settings") {
     return (
       <div>
         <button type="button" onClick={() => setPage("menu")} className={`${MENU_ITEM} mb-2 ${theme.mutedText}`}>
-          ← 設定
+          ← 進階設定
         </button>
         {settings}
       </div>
     );
   }
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col gap-2">
       {viewItems && (
-        <>
-          <div onClick={close}>{viewItems}</div>
-          {line}
-        </>
+        <div className="rounded-xl bg-(--paper-bg-2) p-1" onClick={close}>{viewItems}</div>
       )}
       <button type="button" role="menuitem" onClick={() => setPage("settings")} className={MENU_ITEM}>
-        ⚙ 設定（字體、字級、行高……）
+        ⚙ 進階設定（字體、字級、行高……）
       </button>
-      {line}
-      <div className="flex flex-col" onClick={close}>
-        <button type="button" role="menuitem" onClick={onPaste} className={MENU_ITEM} title="也可以在編輯區外按 ⌘V / Ctrl+V">
-          用剪貼簿的內容開新文件
-        </button>
-        <button type="button" role="menuitem" onClick={onPasteExport} className={MENU_ITEM}>
-          開新文件並出圖
-        </button>
+      <div className="overflow-hidden rounded-xl border border-(--border-light)" onClick={close}>
+        <div className="grid grid-cols-2 divide-x divide-(--border-light)">
+          <button type="button" role="menuitem" onClick={onPaste} className={`${MENU_ITEM} min-h-12 rounded-none leading-snug`} title="也可以在編輯區外按 ⌘V / Ctrl+V">
+            讀取剪貼簿為新文件
+          </button>
+          <button type="button" role="menuitem" onClick={onPasteExport} className={`${MENU_ITEM} min-h-12 rounded-none leading-snug`}>
+            讀取新剪貼簿並出圖
+          </button>
+        </div>
       </div>
-      {line}
       {fileItems(close)}
     </div>
   );

@@ -5,7 +5,7 @@ import {
   describeSocial,
 } from "./social-marks";
 import { applyToSelection, insertAt, replaceRange, selectionScope } from "./text-edit";
-import { buildDivider, DIVIDER_UNITS } from "./dividers";
+import { buildDecoratedDivider, buildDivider, DIVIDER_PRESET_GROUPS, DIVIDER_UNITS } from "./dividers";
 import { addToRecent } from "./recent";
 import { filterSymbols, SYMBOL_GROUPS } from "./symbols";
 import { filterKaomoji, KAOMOJI_GROUPS } from "./kaomoji";
@@ -150,6 +150,16 @@ describe("dividers:分隔線產生器", () => {
   it("長度會被夾在上下限之間", () => {
     expect(buildDivider(line, 0)).toBe("─");
     expect(buildDivider(line, 999).length).toBe(60);
+  });
+
+  it("進階產生器可以同時加中央與兩端裝飾", () => {
+    expect(buildDecoratedDivider(line, 6, { center: "✦", left: "【", right: "】" })).toBe("【─── ✦ ───】");
+  });
+
+  it("預設造型有足夠選擇且不重複", () => {
+    const presets = DIVIDER_PRESET_GROUPS.flatMap((group) => group.items.map((item) => item.value));
+    expect(presets.length).toBeGreaterThanOrEqual(30);
+    expect(new Set(presets).size).toBe(presets.length);
   });
 });
 
