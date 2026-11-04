@@ -1,32 +1,41 @@
 // 「文件」的所見即所得編輯:畫面上是排好的樣子,存起來還是 Markdown。
 // 字色、底色、底線這些 Markdown 沒有的,存成很短的 HTML 標籤(用 class,不寫死顏色):
-//   <span class="tc-red">紅字</span>、<mark class="hl-yellow">黃底</mark>、<u>底線</u>
+//   <span class="tc-azuki">彩色字</span>、<mark class="hl-azuki">底色</mark>、<u>底線</u>
 // 置中、置右的段落存成 <p style="text-align: center">……</p>。
 // 渲染(預覽、轉圖)走 lib/markdown 的 renderToSafeHtml,class 與 text-align 都會留著。
 
 import TurndownService from "turndown";
 
-/** 字色:深淺主題上都看得清楚的中間色 */
+/** 日本傳統色系的 12 色；名稱僅供無障礙標籤使用，選單只顯示色票。 */
 export const TEXT_COLORS = [
-  { key: "red", label: "紅", color: "#e0574f" },
-  { key: "orange", label: "橘", color: "#e8893a" },
-  { key: "gold", label: "金", color: "#c99a1e" },
-  { key: "green", label: "綠", color: "#3fa36f" },
-  { key: "teal", label: "青", color: "#2f9fa6" },
-  { key: "blue", label: "藍", color: "#4a8fe0" },
-  { key: "purple", label: "紫", color: "#9372d8" },
-  { key: "pink", label: "粉", color: "#e0679f" },
-  { key: "gray", label: "灰", color: "var(--ink-tertiary)" },
+  { key: "azuki", label: "小豆色", color: "var(--tc-azuki)" },
+  { key: "kuriume", label: "栗梅", color: "var(--tc-kuriume)" },
+  { key: "kigaracha", label: "黄唐茶", color: "var(--tc-kigaracha)" },
+  { key: "uguisu", label: "鶯色", color: "var(--tc-uguisu)" },
+  { key: "chitose", label: "千歳緑", color: "var(--tc-chitose)" },
+  { key: "sabiasagi", label: "錆浅葱", color: "var(--tc-sabiasagi)" },
+  { key: "omeshicha", label: "御召茶", color: "var(--tc-omeshicha)" },
+  { key: "kon", label: "紺色", color: "var(--tc-kon)" },
+  { key: "fujinando", label: "藤納戸", color: "var(--tc-fujinando)" },
+  { key: "kodaimurasaki", label: "古代紫", color: "var(--tc-kodaimurasaki)" },
+  { key: "ebizome", label: "蒲葡", color: "var(--tc-ebizome)" },
+  { key: "sumi", label: "墨", color: "var(--tc-sumi)" },
 ] as const;
 
-/** 底色:半透明,淺色、深色主題上字都還看得清楚 */
+/** 底色與字色同為 12 色；CSS 會按頁面深淺選用不同明度。 */
 export const HIGHLIGHTS = [
-  { key: "yellow", label: "黃", color: "rgba(255, 200, 60, 0.32)" },
-  { key: "pink", label: "粉", color: "rgba(255, 120, 160, 0.28)" },
-  { key: "blue", label: "藍", color: "rgba(90, 160, 255, 0.28)" },
-  { key: "green", label: "綠", color: "rgba(100, 200, 130, 0.28)" },
-  { key: "purple", label: "紫", color: "rgba(160, 120, 230, 0.28)" },
-  { key: "gray", label: "灰", color: "rgba(140, 140, 140, 0.25)" },
+  { key: "azuki", label: "小豆色", color: "var(--hl-azuki)" },
+  { key: "kuriume", label: "栗梅", color: "var(--hl-kuriume)" },
+  { key: "kigaracha", label: "黄唐茶", color: "var(--hl-kigaracha)" },
+  { key: "uguisu", label: "鶯色", color: "var(--hl-uguisu)" },
+  { key: "chitose", label: "千歳緑", color: "var(--hl-chitose)" },
+  { key: "sabiasagi", label: "錆浅葱", color: "var(--hl-sabiasagi)" },
+  { key: "omeshicha", label: "御召茶", color: "var(--hl-omeshicha)" },
+  { key: "kon", label: "紺色", color: "var(--hl-kon)" },
+  { key: "fujinando", label: "藤納戸", color: "var(--hl-fujinando)" },
+  { key: "kodaimurasaki", label: "古代紫", color: "var(--hl-kodaimurasaki)" },
+  { key: "ebizome", label: "蒲葡", color: "var(--hl-ebizome)" },
+  { key: "sumi", label: "墨", color: "var(--hl-sumi)" },
 ] as const;
 
 export type TextColorKey = (typeof TEXT_COLORS)[number]["key"];
@@ -88,7 +97,7 @@ function turndown(): TurndownService {
   td.addRule("highlight", {
     filter: (node) => node.nodeName === "MARK",
     replacement: (content, node) => {
-      const key = highlightFromClass((node as HTMLElement).className) ?? "yellow";
+      const key = highlightFromClass((node as HTMLElement).className) ?? "kigaracha";
       return content ? `<mark class="hl-${key}">${content}</mark>` : "";
     },
   });

@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import type { EditorThemeConfig } from "@/lib/theme";
 import { type EditorPreferences } from "@/lib/preferences";
 import { contentClassFor } from "@/lib/export-image";
-import { getFontFamily } from "@/lib/editor-font";
+import { getFontStyle } from "@/lib/editor-font";
 import { renderToSafeHtml, type RenderableMode } from "@/lib/markdown";
 
 type EditorPreviewProps = {
@@ -64,8 +64,7 @@ export default function EditorPreview({
             style={{
               fontSize: `${preferences.fontSize}px`,
               lineHeight: preferences.lineHeight,
-              letterSpacing: `${preferences.letterSpacing}px`,
-              fontFamily: getFontFamily(preferences.fontFamily),
+              ...getFontStyle(preferences.fontFamily, preferences.letterSpacing),
             }}
             dangerouslySetInnerHTML={{ __html: html }}
           />

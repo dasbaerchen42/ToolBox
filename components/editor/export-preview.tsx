@@ -6,7 +6,7 @@
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { EditorThemeConfig } from "@/lib/theme";
-import { getFontFamily } from "@/lib/editor-font";
+import { fontWeightFor, getFontFamily } from "@/lib/editor-font";
 import type { ExportLayout, PageSize } from "@/lib/export-layout";
 import type { FontFamilyName } from "@/lib/preferences";
 
@@ -114,6 +114,7 @@ function PageSheet({
           // 用 outline 不用 border:border 會吃掉內容寬度,換行就跟圖片不一樣了
           outline: `${1 / scale}px solid var(--border-light)`,
           fontFamily: getFontFamily(fontFamily),
+          fontWeight: fontWeightFor(fontFamily),
           fontSize: layout.fontSize,
           lineHeight: layout.lineHeight,
           letterSpacing: layout.letterSpacing,
@@ -143,6 +144,7 @@ function PageSheet({
             fontSize: layout.footerSize * scale,
             ...palette.vars,
             fontFamily: getFontFamily(fontFamily),
+            fontWeight: fontWeightFor(fontFamily),
             lineHeight: 1.4,
             color: "var(--ink-tertiary)",
             background: "transparent",

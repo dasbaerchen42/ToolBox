@@ -26,6 +26,18 @@ const LOADERS: Partial<Record<FontFamilyName, () => Promise<FontModule>>> = {
   permanent: () => import("./permanent"),
   playfair: () => import("./playfair"),
   bebas: () => import("./bebas"),
+  shippori: () => import("./shippori"),
+  peak: () => import("./peak"),
+  thenkhung: () => import("./thenkhung"),
+  wenkaiMono: () => import("./wenkai-mono"),
+  fraunces: () => import("./fraunces"),
+  lora: () => import("./lora"),
+  nunito: () => import("./nunito"),
+  quicksand: () => import("./quicksand"),
+  chenyu: () => import("./chenyu"),
+  ryusenkei: () => import("./ryusenkei"),
+  kaitou: () => import("./kaitou"),
+  konatu: () => import("./konatu"),
 };
 
 /** 英文字體缺中文字,一起載入補位的中文字體 */
@@ -36,6 +48,10 @@ const COMPANIONS: Partial<Record<FontFamilyName, FontFamilyName>> = {
   permanent: "sans",
   bebas: "sans",
   playfair: "serif",
+  fraunces: "serif",
+  lora: "serif",
+  nunito: "sans",
+  quicksand: "sans",
 };
 
 const loading = new Map<FontFamilyName, Promise<void>>();

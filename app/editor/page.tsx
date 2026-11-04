@@ -36,6 +36,7 @@ import { usePagePaste } from "@/hooks/usePagePaste";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useEditorPreferences } from "@/hooks/useEditorPreferences";
 import { useEditorHistory } from "@/hooks/useEditorHistory";
+import { ensureWebFont } from "@/lib/web-fonts";
 
 export default function EditorPage() {
   const {
@@ -77,6 +78,10 @@ export default function EditorPage() {
     selector: ({ editor }) => ({ canUndo: !!editor?.can().undo(), canRedo: !!editor?.can().redo() }),
   });
   const history = useEditorHistory(activeDocId);
+
+  useEffect(() => {
+    void ensureWebFont(preferences.fontFamily);
+  }, [preferences.fontFamily]);
 
   // 文件首次出現時建立歷史基底快照
   useEffect(() => {

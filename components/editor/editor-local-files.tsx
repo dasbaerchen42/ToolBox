@@ -16,7 +16,7 @@ import type { WritingDoc } from "@/lib/storage";
 const DOCUMENT_LIMIT = 4 * 1024 * 1024;
 const BACKUP_LIMIT = 20 * 1024 * 1024;
 const MENU_ITEM =
-  "flex w-full items-center rounded-xl px-3 py-2 text-left text-sm transition hover:bg-(--paper-bg-3) disabled:opacity-40";
+  "flex min-h-12 w-full items-center px-3 py-2 text-left text-sm leading-snug transition hover:bg-(--paper-bg-3) disabled:opacity-40";
 
 export type EditorFileNotice = {
   kind: "success" | "error";
@@ -147,21 +147,28 @@ export default function EditorLocalFiles({
         className="hidden"
         tabIndex={-1}
       />
-      <button type="button" role="menuitem" onClick={() => documentInput.current?.click()} className={MENU_ITEM}>
-        從本機匯入文件
-      </button>
-      <button type="button" role="menuitem" onClick={exportDocument} className={MENU_ITEM}>
-        匯出目前文件
-      </button>
-      <div className="my-1 h-px bg-(--border-light)" />
-      <button type="button" role="menuitem" onClick={exportBackup} className={MENU_ITEM}>
-        下載完整備份
-      </button>
-      <button type="button" role="menuitem" onClick={() => backupInput.current?.click()} className={MENU_ITEM}>
-        從完整備份還原
-      </button>
-      <p className={`px-3 pt-2 text-xs leading-5 ${mutedText}`}>
-        文件只存在這個瀏覽器。清除網站資料或換裝置後不會自動帶過去，請定期下載完整備份。
+      <div className="mt-2 overflow-hidden rounded-xl border border-(--border-light)">
+        <div className="grid grid-cols-2 divide-x divide-(--border-light)">
+          <button type="button" role="menuitem" onClick={() => documentInput.current?.click()} className={MENU_ITEM}>
+            本機匯入文件
+          </button>
+          <button type="button" role="menuitem" onClick={exportDocument} className={MENU_ITEM}>
+            匯出目前文件保存
+          </button>
+        </div>
+      </div>
+      <div className="mt-2 overflow-hidden rounded-xl border border-(--border-light)">
+        <div className="grid grid-cols-2 divide-x divide-(--border-light)">
+          <button type="button" role="menuitem" onClick={exportBackup} className={MENU_ITEM}>
+            下載完整備份
+          </button>
+          <button type="button" role="menuitem" onClick={() => backupInput.current?.click()} className={MENU_ITEM}>
+            從完整備份還原
+          </button>
+        </div>
+      </div>
+      <p className={`px-1 pt-2 text-xs leading-5 ${mutedText}`}>
+        文件只存在此瀏覽器，請定期下載完整備份。
       </p>
     </>
   );

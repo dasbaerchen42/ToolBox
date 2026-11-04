@@ -1,7 +1,6 @@
 // 分隔線產生器。
 //
-// 做成產生器而不是二十條寫死的線:單位字元 × 長度的組合遠比固定清單有彈性,
-// 而且想要的長度往往取決於貼文寬度,不是我們能先決定的。
+// 常用造型直接點，想微調時再進進階產生器。
 
 export type DividerUnit = {
   key: string;
@@ -33,7 +32,56 @@ export const DIVIDER_UNITS: DividerUnit[] = [
   { key: "arrowLine", label: "箭頭", unit: "➤", spaced: true },
   { key: "boxTop", label: "上框線", unit: "▔" },
   { key: "boxBottom", label: "下框線", unit: "▁" },
+  { key: "spark", label: "閃光", unit: "✧", spaced: true },
+  { key: "petal", label: "花瓣", unit: "❁", spaced: true },
+  { key: "cross", label: "十字", unit: "┈┈✦┈┈" },
 ];
+
+export type DividerPresetGroup = {
+  key: string;
+  label: string;
+  items: { label: string; value: string }[];
+};
+
+export const DIVIDER_PRESET_GROUPS: DividerPresetGroup[] = [
+  { key: "simple", label: "簡潔線條", items: [
+    { label: "細線", value: "────────────────" }, { label: "粗線", value: "━━━━━━━━━━━━━━━━" },
+    { label: "雙線", value: "════════════════" }, { label: "點線", value: "· · · · · · · · · ·" },
+    { label: "短虛線", value: "╌╌╌╌╌╌╌╌╌╌╌╌" }, { label: "上下框", value: "▔▔▔▔▔▔▔▔▔▔▔▔" },
+  ] },
+  { key: "star", label: "星光", items: [
+    { label: "小星", value: "✦ · · · · · ✦" }, { label: "閃光", value: "✧･ﾟ: *✧･ﾟ:*" },
+    { label: "星鏈", value: "⋆｡°✩ ⋆｡°✩ ⋆｡°✩" }, { label: "星河", value: "☆。*。☆。*。☆" },
+    { label: "中央星", value: "━━━ ✦ ━━━" }, { label: "雙星", value: "✦ ───── ✦" },
+  ] },
+  { key: "flower", label: "花草", items: [
+    { label: "小花", value: "❀ · ─ · ❀ · ─ · ❀" }, { label: "花枝", value: "❁ ───── ❁" },
+    { label: "葉片", value: "❧ ─────── ☙" }, { label: "花園", value: "✿°•∘ɷ∘•°✿" },
+    { label: "雪花", value: "❄︎ · · ❄︎ · · ❄︎" }, { label: "花點", value: "･ﾟ✧ ❀ ✧ﾟ･" },
+  ] },
+  { key: "heart", label: "愛心", items: [
+    { label: "輕心", value: "♡ · · · ♡ · · · ♡" }, { label: "心線", value: "♡ ─────── ♡" },
+    { label: "雙心", value: "♥︎ ┈┈┈┈┈ ♥︎" }, { label: "心花", value: "❀ ♡ ❀ ♡ ❀" },
+    { label: "相連", value: "୨୧ ───── ୨୧" }, { label: "中央心", value: "──── ♡ ────" },
+  ] },
+  { key: "cute", label: "可愛裝飾", items: [
+    { label: "蝴蝶結", value: "୨୧ ┈┈┈┈┈ ୨୧" }, { label: "小熊腳步", value: "ʕ·ᴥ·ʔ ─ ʕ·ᴥ·ʔ" },
+    { label: "糖果", value: "꒰ა ☆ ໒꒱ ─ ꒰ა ☆ ໒꒱" }, { label: "柔波", value: "〜 〜 〜 〜 〜 〜" },
+    { label: "小珍珠", value: "○ ◦ ○ ◦ ○ ◦ ○" }, { label: "泡泡", value: "｡･:*˚:✧｡" },
+  ] },
+  { key: "classic", label: "古典裝飾", items: [
+    { label: "菱飾", value: "◆◇◆◇◆◇◆◇◆" }, { label: "中央菱", value: "━━━━ ◈ ━━━━" },
+    { label: "卷葉", value: "☙ ───────── ❧" }, { label: "章節", value: "§ ───────── §" },
+    { label: "細菱", value: "⋄ ─ ⋄ ─ ⋄ ─ ⋄" }, { label: "宮廷花", value: "⚜ ─────── ⚜" },
+  ] },
+];
+
+export const DIVIDER_CENTERS = ["", "✦", "♡", "❀", "◈", "୨୧", "§", "文字"] as const;
+export const DIVIDER_ENDPOINTS = [
+  { label: "無", left: "", right: "" }, { label: "圓括號", left: "（", right: "）" },
+  { label: "方括號", left: "【", right: "】" }, { label: "葉片", left: "☙ ", right: " ❧" },
+  { label: "星星", left: "✦ ", right: " ✦" }, { label: "愛心", left: "♡ ", right: " ♡" },
+] as const;
 
 export const DIVIDER_MIN = 1;
 export const DIVIDER_MAX = 60;
@@ -43,4 +91,17 @@ export function buildDivider(unit: DividerUnit, length: number): string {
   const count = Math.min(Math.max(Math.round(length), DIVIDER_MIN), DIVIDER_MAX);
   const parts = Array.from({ length: count }, () => unit.unit);
   return parts.join(unit.spaced ? " " : "");
+}
+
+export function buildDecoratedDivider(
+  unit: DividerUnit,
+  length: number,
+  decoration: { center?: string; left?: string; right?: string } = {}
+): string {
+  const count = Math.min(Math.max(Math.round(length), DIVIDER_MIN), DIVIDER_MAX);
+  const center = decoration.center?.trim() ?? "";
+  const body = center
+    ? `${buildDivider(unit, Math.floor(count / 2))} ${center} ${buildDivider(unit, Math.ceil(count / 2))}`
+    : buildDivider(unit, count);
+  return `${decoration.left ?? ""}${body}${decoration.right ?? ""}`;
 }

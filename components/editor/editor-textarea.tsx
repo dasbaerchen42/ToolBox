@@ -1,6 +1,6 @@
 import { forwardRef, useImperativeHandle, useLayoutEffect, useRef } from "react";
 import { EditorPreferences } from "@/lib/preferences";
-import { getFontFamily } from "@/lib/editor-font";
+import { getFontStyle } from "@/lib/editor-font";
 
 type EditorTextareaProps = {
   content: string;
@@ -50,8 +50,7 @@ const EditorTextarea = forwardRef<HTMLTextAreaElement, EditorTextareaProps>(
             style={{
               fontSize: `${preferences.fontSize}px`,
               lineHeight: preferences.lineHeight,
-              letterSpacing: `${preferences.letterSpacing}px`,
-              fontFamily: getFontFamily(preferences.fontFamily),
+              ...getFontStyle(preferences.fontFamily, preferences.letterSpacing),
             }}
             className={`block min-h-[60vh] w-full resize-none overflow-hidden bg-transparent outline-none ${theme.text}`}
             placeholder="在這裡開始寫字……"

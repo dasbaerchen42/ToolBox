@@ -211,8 +211,9 @@ export function blockStylesToMarkup(html: string, stored: StoredBlockStyle[] | u
         : (Array.from(el.querySelectorAll("p, h1, h2, h3, h4, h5, h6, li")).filter((node) => !node.querySelector("p, li")) as HTMLElement[]);
       for (const target of targets) {
         let inner = target.innerHTML;
-        if (style.underline) inner = `<u>${inner}</u>`;
-        if (style.fill !== "none") inner = `<mark class="hl-${style.fill}">${inner}</mark>`;
+        if (style.underline && !target.querySelector("u")) inner = `<u>${inner}</u>`;
+        // 新版的逐字底色已經存在時，不再套舊版的整段底色；避免出圖時重複包裹。
+        if (style.fill !== "none" && !target.querySelector('mark[class*="hl-"]')) inner = `<mark class="hl-${style.fill}">${inner}</mark>`;
         target.innerHTML = inner;
         if (style.align !== "left" && target.tagName !== "LI") target.style.textAlign = style.align;
       }

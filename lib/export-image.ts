@@ -1,4 +1,4 @@
-import { getFontFamily } from "@/lib/editor-font";
+import { fontWeightFor, getFontFamily } from "@/lib/editor-font";
 import { ensureWebFont, loadableFamilies } from "@/lib/web-fonts";
 import { type EditorPreferences } from "@/lib/preferences";
 import {
@@ -212,6 +212,7 @@ function buildStage(html: string, title: string | null, width: number, preferenc
     "background: var(--paper-bg)",
     "color: var(--ink-primary)",
     `font-family: ${getFontFamily(preferences.fontFamily)}`,
+    `font-weight: ${fontWeightFor(preferences.fontFamily)}`,
     `font-size: ${layout.fontSize}px`,
     `line-height: ${layout.lineHeight}`,
     `letter-spacing: ${layout.letterSpacing}px`,

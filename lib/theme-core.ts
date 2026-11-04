@@ -195,7 +195,9 @@ export function applyTheme(id: string) {
     id = PRESETS[0].id;
   }
   clearCustomVars();
+  const preset = PRESETS.find((item) => item.id === id) ?? PRESETS[0];
   document.documentElement.setAttribute("data-theme", id);
+  document.documentElement.setAttribute("data-color-mode", isDarkColor(preset.input.bg) ? "dark" : "light");
   localStorage.setItem(K_ID, id);
 }
 export function applyCustomTheme(input: BaseInput) {
@@ -204,6 +206,7 @@ export function applyCustomTheme(input: BaseInput) {
   clearCustomVars();
   applyVarsToRoot(vars);
   document.documentElement.setAttribute("data-theme", "custom");
+  document.documentElement.setAttribute("data-color-mode", isDarkColor(safe.bg) ? "dark" : "light");
   localStorage.setItem(K_ID, "custom");
   localStorage.setItem(K_INPUT, JSON.stringify(safe));
   localStorage.setItem(K_VARS, JSON.stringify(vars));
@@ -252,8 +255,9 @@ export function deleteRandomScheme(i: number): BaseInput[] {
 export const BOOTSTRAP_SCRIPT = `(function(){try{
 var id=localStorage.getItem('${K_ID}')||'${PRESETS[0].id}';
 if(id!=='custom'&&${JSON.stringify(PRESETS.map((p) => p.id))}.indexOf(id)<0)id='${PRESETS[0].id}';
-if(id==='custom'){var v=JSON.parse(localStorage.getItem('${K_VARS}')||'{}');var s=document.documentElement.style;for(var k in v)s.setProperty(k,v[k]);document.documentElement.setAttribute('data-theme','custom');}
-else{document.documentElement.setAttribute('data-theme',id);}
+var dark=function(h){if(!/^#[0-9a-f]{6}$/i.test(h||''))return false;var n=parseInt(h.slice(1),16),c=[n>>16&255,n>>8&255,n&255].map(function(x){x/=255;return x<=.03928?x/12.92:Math.pow((x+.055)/1.055,2.4)});return .2126*c[0]+.7152*c[1]+.0722*c[2]<.4};
+if(id==='custom'){var v=JSON.parse(localStorage.getItem('${K_VARS}')||'{}');var i=JSON.parse(localStorage.getItem('${K_INPUT}')||'{}');var s=document.documentElement.style;for(var k in v)s.setProperty(k,v[k]);document.documentElement.setAttribute('data-theme','custom');document.documentElement.setAttribute('data-color-mode',dark(i.bg)?'dark':'light');}
+else{var modes={sage:'light',grape:'light',huninn:'dark',latte:'light',stone:'light',peach:'dark',butterfly:'dark',melon:'light'};document.documentElement.setAttribute('data-theme',id);document.documentElement.setAttribute('data-color-mode',modes[id]||'light');}
 }catch(e){}
 try{var ua=navigator.userAgent;if(/iPad|iPhone|iPod/.test(ua)||(/Macintosh/.test(ua)&&navigator.maxTouchPoints>1)){
 var fix=function(){var ms=document.querySelectorAll('meta[name=viewport]');for(var i=0;i<ms.length;i++){if(!/maximum-scale/.test(ms[i].content))ms[i].content+=', maximum-scale=1';}};

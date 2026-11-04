@@ -188,22 +188,51 @@ body {
 }
 
 /* ── 文件的字色、底色(編輯器、預覽、轉圖共用;見 lib/rich-text) ── */
-.tc-red { color: #e0574f; }
-.tc-orange { color: #e8893a; }
-.tc-gold { color: #c99a1e; }
-.tc-green { color: #3fa36f; }
-.tc-teal { color: #2f9fa6; }
-.tc-blue { color: #4a8fe0; }
-.tc-purple { color: #9372d8; }
-.tc-pink { color: #e0679f; }
-.tc-gray { color: var(--ink-tertiary); }
-mark[class*="hl-"] { color: inherit; border-radius: 0.2em; padding: 0 0.1em; }
-.hl-yellow { background: rgba(255, 200, 60, 0.32); }
-.hl-pink { background: rgba(255, 120, 160, 0.28); }
-.hl-blue { background: rgba(90, 160, 255, 0.28); }
-.hl-green { background: rgba(100, 200, 130, 0.28); }
-.hl-purple { background: rgba(160, 120, 230, 0.28); }
-.hl-gray { background: rgba(140, 140, 140, 0.25); }
+:root {
+  --tc-azuki: #a64b55; --tc-kuriume: #9b5237; --tc-kigaracha: #8c671f;
+  --tc-uguisu: #6f7028; --tc-chitose: #2e7657; --tc-sabiasagi: #277775;
+  --tc-omeshicha: #2e6f7d; --tc-kon: #3f5f9a; --tc-fujinando: #695da2;
+  --tc-kodaimurasaki: #82588a; --tc-ebizome: #8c4f75; --tc-sumi: #555c65;
+  --hl-azuki: #e9dfe5; --hl-kuriume: #e4d2d8; --hl-kigaracha: #f2c9ac;
+  --hl-uguisu: #efcd9a; --hl-chitose: #e4dc8a; --hl-sabiasagi: #c1d8ac;
+  --hl-omeshicha: #bed2c3; --hl-kon: #bed3ca; --hl-fujinando: #bcd3d2;
+  --hl-kodaimurasaki: #bbc8e6; --hl-ebizome: #dbd0e6; --hl-sumi: #e5e4e6;
+}
+[data-color-mode="dark"] {
+  --tc-azuki: #f0a0aa; --tc-kuriume: #e9ab88; --tc-kigaracha: #e2c06f;
+  --tc-uguisu: #c4c96e; --tc-chitose: #75c39d; --tc-sabiasagi: #6fc4c1;
+  --tc-omeshicha: #72bed1; --tc-kon: #8db2ef; --tc-fujinando: #b3a3ea;
+  --tc-kodaimurasaki: #d1a3d6; --tc-ebizome: #e09abb; --tc-sumi: #c1c7cf;
+  --hl-azuki: #4b3543; --hl-kuriume: #563944; --hl-kigaracha: #5c3d2f;
+  --hl-uguisu: #5b472b; --hl-chitose: #4f4d29; --hl-sabiasagi: #354a36;
+  --hl-omeshicha: #2e4b43; --hl-kon: #2e4c4a; --hl-fujinando: #2d4650;
+  --hl-kodaimurasaki: #354461; --hl-ebizome: #4a3d5d; --hl-sumi: #46474c;
+}
+.tc-azuki { color: var(--tc-azuki); } .tc-kuriume { color: var(--tc-kuriume); }
+.tc-kigaracha { color: var(--tc-kigaracha); } .tc-uguisu { color: var(--tc-uguisu); }
+.tc-chitose { color: var(--tc-chitose); } .tc-sabiasagi { color: var(--tc-sabiasagi); }
+.tc-omeshicha { color: var(--tc-omeshicha); } .tc-kon { color: var(--tc-kon); }
+.tc-fujinando { color: var(--tc-fujinando); } .tc-kodaimurasaki { color: var(--tc-kodaimurasaki); }
+.tc-ebizome { color: var(--tc-ebizome); } .tc-sumi { color: var(--tc-sumi); }
+mark[class*="hl-"] {
+  color: inherit; border-radius: 0.2em; padding: 0.08em 0.12em;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+}
+.hl-azuki { background: var(--hl-azuki); } .hl-kuriume { background: var(--hl-kuriume); }
+.hl-kigaracha { background: var(--hl-kigaracha); } .hl-uguisu { background: var(--hl-uguisu); }
+.hl-chitose { background: var(--hl-chitose); } .hl-sabiasagi { background: var(--hl-sabiasagi); }
+.hl-omeshicha { background: var(--hl-omeshicha); } .hl-kon { background: var(--hl-kon); }
+.hl-fujinando { background: var(--hl-fujinando); } .hl-kodaimurasaki { background: var(--hl-kodaimurasaki); }
+.hl-ebizome { background: var(--hl-ebizome); } .hl-sumi { background: var(--hl-sumi); }
+/* 舊文件仍可顯示；新文件一律使用上面的新 key。 */
+.tc-red { color: var(--tc-azuki); } .tc-orange { color: var(--tc-kuriume); }
+.tc-gold { color: var(--tc-kigaracha); } .tc-green { color: var(--tc-chitose); }
+.tc-teal { color: var(--tc-sabiasagi); } .tc-blue { color: var(--tc-kon); }
+.tc-purple { color: var(--tc-kodaimurasaki); } .tc-pink { color: var(--tc-ebizome); }
+.tc-gray { color: var(--tc-sumi); }
+.hl-yellow { background: var(--hl-kigaracha); } .hl-pink { background: var(--hl-azuki); }
+.hl-blue { background: var(--hl-kodaimurasaki); } .hl-green { background: var(--hl-sabiasagi); }
+.hl-purple { background: var(--hl-ebizome); } .hl-gray { background: var(--hl-sumi); }
 .md-preview u { text-decoration: underline; text-underline-offset: 0.2em; }
 .md-preview s { text-decoration: line-through; opacity: 0.7; }
 

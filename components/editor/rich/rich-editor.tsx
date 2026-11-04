@@ -8,10 +8,11 @@ import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { Placeholder } from "@tiptap/extensions";
 import type { EditorThemeConfig } from "@/lib/theme";
 import type { EditorPreferences } from "@/lib/preferences";
-import { getFontFamily } from "@/lib/editor-font";
+import { getFontStyle } from "@/lib/editor-font";
 import { contentClassFor } from "@/lib/export-image";
 import { renderToSafeHtml } from "@/lib/markdown";
 import { htmlToMarkdown } from "@/lib/rich-text";
+import { hasInlineMarkdown, hasRichFormatting, inlineMarkdownForPaste, richHtmlToPlainText } from "@/lib/clipboard";
 import { RICH_EXTENSIONS } from "./extensions";
 
 /** 停止打字多久之後才轉回 Markdown 存檔 */
@@ -31,6 +32,7 @@ function Inner({ initialHtml, content, onChange, onReady, preferences, theme, cl
   const lastSaved = useRef(content);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onChangeRef = useRef(onChange);
+  const editorRef = useRef<Editor | null>(null);
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
@@ -44,6 +46,30 @@ function Inner({ initialHtml, content, onChange, onReady, preferences, theme, cl
       // 工具列固定在頂端:游標跑到畫面邊緣時,捲動要留出工具列的高度
       scrollMargin: { top: 140, bottom: 80, left: 0, right: 0 },
       scrollThreshold: { top: 140, bottom: 80, left: 0, right: 0 },
+      handlePaste: (view, event) => {
+        const text = event.clipboardData?.getData("text/plain") ?? "";
+        const html = event.clipboardData?.getData("text/html") || null;
+        if (!hasInlineMarkdown(text) || hasRichFormatting(html)) return false;
+
+        const range = { from: view.state.selection.from, to: view.state.selection.to };
+        event.preventDefault();
+        void renderToSafeHtml("markdown", inlineMarkdownForPaste(text)).then((safeHtml) => {
+          editorRef.current?.commands.insertContentAt(range, safeHtml);
+        });
+        return true;
+      },
+      handleDOMEvents: {
+        copy: (view, event) => {
+          const clipboard = event.clipboardData;
+          if (!clipboard || view.state.selection.empty) return false;
+          const serialized = view.serializeForClipboard(view.state.selection.content());
+          const html = serialized.dom.innerHTML;
+          clipboard.setData("text/html", html);
+          clipboard.setData("text/plain", richHtmlToPlainText(html));
+          event.preventDefault();
+          return true;
+        },
+      },
     },
     onUpdate: ({ editor: current }) => {
       if (timer.current) clearTimeout(timer.current);
@@ -62,10 +88,12 @@ function Inner({ initialHtml, content, onChange, onReady, preferences, theme, cl
   }
 
   useEffect(() => {
+    editorRef.current = editor;
     onReady(editor);
     return () => {
       // 換檢視、換文件前,還沒存的那一點先存掉
       if (editor && timer.current) save(editor);
+      editorRef.current = null;
       onReady(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在編輯器換掉時通知
@@ -85,8 +113,7 @@ function Inner({ initialHtml, content, onChange, onReady, preferences, theme, cl
           style={{
             fontSize: `${preferences.fontSize}px`,
             lineHeight: preferences.lineHeight,
-            letterSpacing: `${preferences.letterSpacing}px`,
-            fontFamily: getFontFamily(preferences.fontFamily),
+            ...getFontStyle(preferences.fontFamily, preferences.letterSpacing),
           }}
         />
       </div>

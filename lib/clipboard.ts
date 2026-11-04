@@ -15,6 +15,27 @@ export function hasRichFormatting(html: string | null): boolean {
   return !!html && RICH_TAG.test(html);
 }
 
+/** 純文字裡是否有可轉成斜體／粗體的行內 Markdown。 */
+export function hasInlineMarkdown(text: string): boolean {
+  const strong = /\*\*(?=\S)(?:[^*\n]|\*(?!\*))*?\S\*\*(?!\*)/;
+  const italic = /(^|[^*])\*(?!\*)(?=\S)[^*\n]*?\S\*(?!\*)/;
+  return strong.test(text) || italic.test(text);
+}
+
+/**
+ * 貼進所見即所得編輯器前，把行內星號轉成明確 HTML。
+ * CommonMark 對標點旁的星號有額外限制；中文小說常見的 `*旁白：*「對話」`
+ * 仍應照使用者直覺視為斜體。
+ */
+export function inlineMarkdownForPaste(text: string): string {
+  const strong = text.replace(/\*\*([^*\n]+?)\*\*/g, (whole, content: string) =>
+    content.trim() === content ? `<strong>${content}</strong>` : whole
+  );
+  return strong.replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, (whole, before: string, content: string) =>
+    content.trim() === content ? `${before}<em>${content}</em>` : whole
+  );
+}
+
 /** 從 paste 事件取內容(不需要任何權限) */
 export function readPasteEvent(event: ClipboardEvent): PastePayload | null {
   const data = event.clipboardData;
@@ -205,4 +226,42 @@ export function htmlToItalicText(html: string): string {
       .replace(/[ \t]{2,}/g, " ")
       .trim()
   );
+}
+
+const PLAIN_BLOCK_TAGS = new Set([
+  "P", "DIV", "LI", "TR", "BLOCKQUOTE", "SECTION", "ARTICLE", "PRE",
+  "H1", "H2", "H3", "H4", "H5", "H6",
+]);
+
+function plainTextFromNode(node: Node): string {
+  if (node.nodeType === 3) return node.nodeValue ?? "";
+  if (node.nodeType !== 1) return "";
+  const element = node as Element;
+  if (element.tagName === "BR") return "\n";
+  if (element.tagName === "SCRIPT" || element.tagName === "STYLE") return "";
+
+  const pieces: string[] = [];
+  for (const child of Array.from(element.childNodes)) {
+    const value = plainTextFromNode(child);
+    pieces.push(value);
+    if (child.nodeType === 1 && PLAIN_BLOCK_TAGS.has((child as Element).tagName)) pieces.push("\n");
+  }
+  return pieces.join("");
+}
+
+/**
+ * 編輯器複製用的 text/plain：相鄰段落只隔一個換行，真的空白段落才多留一行。
+ * HTML 版仍由編輯器原樣提供，所以貼到支援格式的 App 時粗斜體不會遺失。
+ */
+export function richHtmlToPlainText(html: string): string {
+  if (typeof DOMParser === "undefined") return "";
+  const body = new DOMParser().parseFromString(html, "text/html").body;
+  const blocks: string[] = [];
+
+  for (const node of Array.from(body.childNodes)) {
+    if (node.nodeType === 3 && !(node.nodeValue ?? "").trim()) continue;
+    const text = plainTextFromNode(node).replace(/^\n+|\n+$/g, "");
+    blocks.push(text);
+  }
+  return blocks.join("\n").replace(/\u00a0/g, " ");
 }

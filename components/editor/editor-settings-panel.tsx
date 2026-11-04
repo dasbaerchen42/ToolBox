@@ -3,8 +3,9 @@
 // 工具列「⚙ 設定」點開的小視窗:字體、字級、行高、字距、斜體顯示、檢查提示,
 // 以及收在「進階」裡的其他寫作模式(YAML、JSON、CSS、HTML、Social)。
 
-import { EditorPreferences, FontFamilyName } from "@/lib/preferences";
-import { FONT_OPTIONS } from "@/lib/editor-font";
+import { EditorPreferences } from "@/lib/preferences";
+import { EDITOR_FONT_OPTIONS } from "@/lib/editor-font";
+import FontPicker from "@/components/font-picker";
 import { WritingMode } from "@/lib/storage";
 import type { EditorThemeConfig } from "@/lib/theme";
 
@@ -80,20 +81,10 @@ export default function EditorSettingsPanel({
 
   return (
     <div className="flex flex-col gap-3">
-      <label className="flex items-center justify-between gap-3">
-        <span className={`shrink-0 text-sm ${theme.mutedText}`}>字體</span>
-        <select
-          value={preferences.fontFamily}
-          onChange={(e) => set({ fontFamily: e.target.value as FontFamilyName })}
-          className={`${select} max-w-[12rem]`}
-        >
-          {FONT_OPTIONS.map((font) => (
-            <option key={font.key} value={font.key}>
-              {font.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div>
+        <p className={`mb-1.5 text-sm ${theme.mutedText}`}>字體（直接看預覽選擇）</p>
+        <FontPicker value={preferences.fontFamily} options={EDITOR_FONT_OPTIONS} onChange={(fontFamily) => set({ fontFamily })} />
+      </div>
 
       <Stepper label="字級" value={`${preferences.fontSize}px`} onMinus={() => adjustFontSize(-1)} onPlus={() => adjustFontSize(1)} theme={theme} />
       <Stepper label="行高" value={String(preferences.lineHeight)} onMinus={() => adjustLineHeight(-0.1)} onPlus={() => adjustLineHeight(0.1)} theme={theme} />

@@ -46,6 +46,7 @@ export default function RootLayout({
     <html
       lang="zh-TW"
       data-theme="sage"
+      data-color-mode="light"
       className={huninn.variable}
       suppressHydrationWarning
     >

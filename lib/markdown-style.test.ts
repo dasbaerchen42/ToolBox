@@ -1,4 +1,7 @@
-import { cleanInlineStyle, resolveBlockStyles, storeBlockStyles } from "./markdown";
+/**
+ * @jest-environment jsdom
+ */
+import { blockStylesToMarkup, cleanInlineStyle, resolveBlockStyles, storeBlockStyles } from "./markdown";
 
 describe("貼上的 HTML:行內樣式", () => {
   it("顏色、底色、字體、字級拿掉;粗體斜體底線對齊留著", () => {
@@ -39,5 +42,13 @@ describe("段落樣式存進文件", () => {
   it("同樣內容的段落有好幾段,挑原本位置最近的", () => {
     const stored = storeBlockStyles(["<p>同</p>", "<p>x</p>", "<p>同</p>"], [undefined, undefined, pink]);
     expect(resolveBlockStyles(["<p>同</p>", "<p>x</p>", "<p>同</p>"], stored)).toEqual([undefined, undefined, pink]);
+  });
+
+  it("段內已有逐字底色時，不再用舊資料把整段重複上色", () => {
+    const html = '<p>前面<mark class="hl-azuki">選取文字</mark>後面</p>';
+    const stored = storeBlockStyles([html], [{ align: "left", fill: "pink", underline: false }]);
+    const output = blockStylesToMarkup(html, stored);
+    expect(output.match(/<mark/g)).toHaveLength(1);
+    expect(output).toContain('<mark class="hl-azuki">選取文字</mark>');
   });
 });
