@@ -7,7 +7,7 @@ These fonts are loaded only when selected. The original license files are stored
 - `uoq-mun-then-khung.woff2`: UoqMunThenKhung / 宇文天穹.
 - `chenyu-luoyan.woff2`: ChenYu LuoYan / 辰宇落雁體.
 - `ryusenkei-regular.woff2`, `ryusenkei-bold.woff2`: 02 Ryusenkei / 流線形, regular and bold.
-- `kaitou-yokoku-gothic.woff2`: Kaitou Yokoku Gothic / 怪盜預告黑體.
+- `kaitou-yokoku-gothic.woff`: Kaitou Yokoku Gothic / 怪盜預告黑體. WOFF is used because the original 65,535-glyph font triggers a Turbopack data-index error when transformed to WOFF2.
 - `konatu.woff2`: Konatu, distributed under the MIT License.
 
 Ryusenkei and Kaitou Yokoku Gothic are distributed under SIL OFL 1.1; their source and copyright notices are recorded in `FONT-NOTICES.md` and the common license text is in `OFL-1.1.txt`.
