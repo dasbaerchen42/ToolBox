@@ -1,4 +1,4 @@
-import { checkCanvasSize, DEVICE_MAX_SIDE } from "@/lib/canvas-limits";
+import { checkCanvasSize, DEVICE_MAX_SIDE, fitWithinCanvas } from "@/lib/canvas-limits";
 import {
   clampRect,
   isPointInRect,
@@ -7,6 +7,7 @@ import {
   moveRectWithin,
   ratioRectFromPoints,
   rectFromPoints,
+  resizeRatioRect,
   toImagePoint,
 } from "./geometry";
 import {
@@ -337,6 +338,24 @@ describe("canvas 上限", () => {
     const result = checkCanvasSize(8000, 8000);
     expect(result).toMatchObject({ ok: false, reason: "area" });
   });
+
+  it("手機照片超過上限就等比縮到剛好畫得出來", () => {
+    // iPhone 2400 萬像素
+    const fit = fitWithinCanvas(5712, 4284);
+    expect(checkCanvasSize(fit.width, fit.height).ok).toBe(true);
+    expect(fit.width / fit.height).toBeCloseTo(5712 / 4284, 2);
+    expect(fit.width * fit.height).toBeGreaterThan(15_900_000);
+  });
+
+  it("超長圖照邊長上限縮", () => {
+    const fit = fitWithinCanvas(1000, 20000);
+    expect(fit.height).toBe(DEVICE_MAX_SIDE);
+    expect(fit.width).toBe(409);
+  });
+
+  it("本來就畫得出來的不動", () => {
+    expect(fitWithinCanvas(4032, 3024)).toEqual({ width: 4032, height: 3024 });
+  });
 });
 
 describe("merge:棋盤拼貼", () => {
@@ -510,6 +529,16 @@ describe("geometry:鎖定比例的裁切框", () => {
   it("選了比例先擺一個最大、置中的框", () => {
     expect(largestRatioRect(size, 4 / 5)).toEqual({ x: 180, y: 0, width: 640, height: 800 });
     expect(largestRatioRect(size, 16 / 9)).toEqual({ x: 0, y: 119, width: 1000, height: 563 });
+  });
+
+  it("縮放比例框時中心不動、比例不變", () => {
+    const full = largestRatioRect(size, 1);
+    expect(resizeRatioRect(full, 1, 0.5, size)).toEqual({ x: 300, y: 200, width: 400, height: 400 });
+  });
+
+  it("縮放時碰到邊就往內推,不會跑出圖外", () => {
+    const corner = { x: 600, y: 400, width: 400, height: 400 };
+    expect(resizeRatioRect(corner, 1, 1, size)).toEqual({ x: 200, y: 0, width: 800, height: 800 });
   });
 });
 

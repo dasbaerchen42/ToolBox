@@ -127,3 +127,21 @@ export function largestRatioRect(size: Size, ratio: number): Rect {
   height = Math.round(height);
   return { x: Math.round((size.width - width) / 2), y: Math.round((size.height - height) / 2), width, height };
 }
+
+/**
+ * 比例框改大小:變成最大框的 scale 倍(0–1),中心盡量留在原地,碰到邊就往內推。
+ * 裁切時先選比例、再縮放、再上下左右挪,三步各管一件事。
+ */
+export function resizeRatioRect(rect: Rect, ratio: number, scale: number, size: Size): Rect {
+  const full = largestRatioRect(size, ratio);
+  const s = Math.min(Math.max(scale, 0), 1);
+  const width = Math.max(1, Math.round(full.width * s));
+  const height = Math.max(1, Math.round(full.height * s));
+  const centerX = rect.x + rect.width / 2;
+  const centerY = rect.y + rect.height / 2;
+  return moveRectWithin(
+    { x: centerX - width / 2, y: centerY - height / 2, width, height },
+    { x: 0, y: 0 },
+    size
+  );
+}

@@ -1,7 +1,7 @@
 // 這一層是唯一碰 canvas 的地方,刻意寫薄:版面計算全部在 geometry / slice /
 // merge / frame 那幾支純函式裡算完再傳進來,這裡只負責照著畫。
 // (jest 的 testEnvironment 是 node,沒有 canvas,所以這支不寫測試。)
-import { assertCanvasSize } from "@/lib/canvas-limits";
+import { assertCanvasSize, fitWithinCanvas } from "@/lib/canvas-limits";
 import type { FrameLayout } from "./frame";
 import { baseNameOf, mimeFor, supportsAlpha } from "./format";
 import { spanToRect, type Span } from "./slice";
@@ -74,6 +74,112 @@ export async function createWorkImage(
   }
 }
 
+/**
+ * 用 <img> 解碼:createImageBitmap 遇到超大照片(iOS 上的 4800 萬像素)可能直接失敗,
+ * <img> 那條路瀏覽器會自己想辦法,至少拿得到尺寸、畫得進縮小後的 canvas。
+ * EXIF 方向現代瀏覽器的 <img> 預設就會套用。
+ */
+function decodeWithImg(blob: Blob, fileName: string): Promise<HTMLImageElement> {
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  img.decoding = "async";
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new ImageDecodeError(fileName));
+    img.src = url;
+  }).finally(() => URL.revokeObjectURL(url));
+}
+
+/** 畫完就把 canvas 縮成 0×0:iOS 的 canvas 記憶體有總量上限,不還的話做幾次就會開始畫出空白 */
+function releaseCanvas(canvas: HTMLCanvasElement) {
+  canvas.width = 0;
+  canvas.height = 0;
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob> {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error("無法產生圖片檔"));
+      },
+      type,
+      quality
+    );
+  });
+}
+
+export type ImportResult = {
+  image: WorkImage;
+  /** 原圖太大、已經縮過時是原本的尺寸;沒縮是 null */
+  resizedFrom: Size | null;
+};
+
+/**
+ * 使用者丟進來的圖都走這裡。
+ * 超過瀏覽器 canvas 上限的照片先等比縮到上限內,否則之後每個工具、連下載轉檔都會失敗。
+ * 原本是 JPEG 就縮成高品質 JPEG(照片存 PNG 會大到手機吃不消),其他維持 PNG 保留透明。
+ */
+export async function importWorkImage(blob: Blob, fileName: string): Promise<ImportResult> {
+  let source: ImageBitmap | HTMLImageElement;
+  let width: number;
+  let height: number;
+
+  try {
+    const bitmap = await decode(blob, fileName);
+    source = bitmap;
+    width = bitmap.width;
+    height = bitmap.height;
+  } catch (error) {
+    // HEIC 之類真的解不開的,<img> 也一樣解不開,照樣回報格式問題
+    const img = await decodeWithImg(blob, fileName).catch(() => {
+      throw error;
+    });
+    source = img;
+    width = img.naturalWidth;
+    height = img.naturalHeight;
+  }
+
+  try {
+    const fit = fitWithinCanvas(width, height);
+    if (fit.width === width && fit.height === height) {
+      return {
+        image: {
+          id: createId(),
+          name: baseNameOf(fileName),
+          blob,
+          url: URL.createObjectURL(blob),
+          width,
+          height,
+        },
+        resizedFrom: null,
+      };
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = fit.width;
+    canvas.height = fit.height;
+    try {
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("無法建立繪圖環境");
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(source, 0, 0, fit.width, fit.height);
+
+      const jpeg = blob.type === "image/jpeg";
+      const resized = await canvasToBlob(canvas, jpeg ? "image/jpeg" : "image/png", jpeg ? 0.95 : undefined);
+      return {
+        image: await toWorkImage(resized, baseNameOf(fileName)),
+        resizedFrom: { width, height },
+      };
+    } finally {
+      releaseCanvas(canvas);
+    }
+  } finally {
+    if ("close" in source) source.close();
+  }
+}
+
 /** 從畫完的 blob 再做一張 WorkImage,沿用指定的名字 */
 async function toWorkImage(blob: Blob, name: string): Promise<WorkImage> {
   const image = await createWorkImage(blob, name);
@@ -117,18 +223,12 @@ async function drawToBlob({
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
-  draw(ctx);
-
-  return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (blob) resolve(blob);
-        else reject(new Error("無法產生圖片檔"));
-      },
-      mimeFor(output.format),
-      output.quality
-    );
-  });
+  try {
+    draw(ctx);
+    return await canvasToBlob(canvas, mimeFor(output.format), output.quality);
+  } finally {
+    releaseCanvas(canvas);
+  }
 }
 
 /** 遮罩:壓平成新圖,原本的像素在輸出檔裡是真的不見了,不是蓋一層而已 */
@@ -420,7 +520,9 @@ export async function loadWatermarkImage(
       px[i + 3] = Math.round(px[i + 3] * keep);
     }
     ctx.putImageData(data, 0, 0);
-    return await createImageBitmap(canvas);
+    const cleaned = await createImageBitmap(canvas);
+    releaseCanvas(canvas);
+    return cleaned;
   } finally {
     bitmap.close();
   }

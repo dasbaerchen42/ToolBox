@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   countPieces,
   cutsToSpans,
@@ -11,14 +12,14 @@ import {
   type Span,
 } from "@/lib/tools/image/slice";
 import type { SlicePad } from "@/lib/tools/image/render";
-import { isUsableRect, largestRatioRect } from "@/lib/tools/image/geometry";
+import { isUsableRect, largestRatioRect, moveRectWithin, resizeRatioRect } from "@/lib/tools/image/geometry";
 import type { Ratio } from "@/lib/tools/image/frame";
-import type { Axis, Rect, WorkImage } from "@/lib/tools/image/types";
+import type { Axis, Point, Rect, WorkImage } from "@/lib/tools/image/types";
 import type { ThemeClasses } from "@/lib/theme";
-import ImageStage, { percent } from "./ImageStage";
+import ImageStage, { percent, pointFromEvent } from "./ImageStage";
 import { useDragRect } from "./useDragRect";
 import { ToolPane } from "./WorkbenchLayout";
-import { ActionButton, ColorField, Field, NumberField, RatioPicker, Segmented, StationHint, Toggle } from "./controls";
+import { ActionButton, ColorField, Field, NumberField, RangeField, RatioPicker, Segmented, StationHint, Toggle } from "./controls";
 
 type Mode = "equal" | "ratio" | "free" | "crop";
 
@@ -98,6 +99,40 @@ export default function SliceTool({ image, busy, t, onSlice, onCrop }: Props) {
   const previewRect = mode === "crop" ? (draft ?? crop) : null;
   const canCrop = !!crop && isUsableRect(crop);
 
+  // 在框裡面按住拖就是搬框(維持大小),在框外面拖才是重拉一個新框
+  const moving = useRef<{ origin: Point; rect: Rect } | null>(null);
+
+  function startMoveCrop(event: ReactPointerEvent<HTMLDivElement>) {
+    const element = ref.current;
+    if (busy || !crop || !element || event.button !== 0) return;
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    moving.current = { origin: pointFromEvent(element, event, image), rect: crop };
+  }
+
+  function moveCrop(event: ReactPointerEvent<HTMLDivElement>) {
+    const element = ref.current;
+    const state = moving.current;
+    if (!element || !state) return;
+    const current = pointFromEvent(element, event, image);
+    setCrop(
+      moveRectWithin(state.rect, { x: current.x - state.origin.x, y: current.y - state.origin.y }, image)
+    );
+  }
+
+  function endMoveCrop(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    moving.current = null;
+  }
+
+  const lockedRatio = cropRatio ? cropRatio.w / cropRatio.h : null;
+  const fullCrop = lockedRatio ? largestRatioRect(image, lockedRatio) : null;
+  const cropScale = crop && fullCrop ? Math.round((crop.width / fullCrop.width) * 100) : 100;
+  const roomX = crop ? image.width - crop.width : 0;
+  const roomY = crop ? image.height - crop.height : 0;
+
   return (
     <ToolPane
       workspace={
@@ -145,8 +180,15 @@ export default function SliceTool({ image, busy, t, onSlice, onCrop }: Props) {
                 border: "2px dashed var(--accent)",
                 // 框外壓暗,一眼看得出哪塊會被留下
                 boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.45)",
-                pointerEvents: "none",
+                // 拖新框的過程中別擋住底下的事件
+                pointerEvents: draft ? "none" : "auto",
+                cursor: busy ? "default" : "move",
+                touchAction: "none",
               }}
+              onPointerDown={startMoveCrop}
+              onPointerMove={moveCrop}
+              onPointerUp={endMoveCrop}
+              onPointerCancel={endMoveCrop}
             />
           )}
         </ImageStage>
@@ -159,7 +201,8 @@ export default function SliceTool({ image, busy, t, onSlice, onCrop }: Props) {
             {mode === "ratio" &&
               "選一個比例，長圖會照這個比例一張一張切下來，張數自己算。長截圖要拆成 IG 輪播就用這個。"}
             {mode === "free" && "在圖上點一下就下一刀，點幾刀就切幾段。"}
-            {mode === "crop" && "拖一個框，套用之後只留下框裡面那塊。選了比例，拖出來的框就固定是那個比例。"}
+            {mode === "crop" &&
+              "在框外拖一個新框，在框裡按住拖可以搬動位置。選了比例會先擺一個最大的框，再用下面的拉桿調大小、上下左右挪。"}
           </StationHint>
 
           <Field label="模式" t={t}>
@@ -299,6 +342,60 @@ export default function SliceTool({ image, busy, t, onSlice, onCrop }: Props) {
                 })}
                 {spans.length > 8 && <li>……共 {spans.length} 段</li>}
               </ul>
+            </div>
+          )}
+
+          {mode === "crop" && crop && (
+            <div className="space-y-3">
+              {fullCrop && (
+                <RangeField
+                  label="框的大小"
+                  display={`${cropScale}%`}
+                  value={cropScale}
+                  min={10}
+                  max={100}
+                  onChange={(value) => setCrop(resizeRatioRect(crop, lockedRatio!, value / 100, image))}
+                  t={t}
+                />
+              )}
+              {roomX > 0 && (
+                <RangeField
+                  label="左右位置"
+                  display={`${crop.x} px`}
+                  value={crop.x}
+                  min={0}
+                  max={roomX}
+                  onChange={(value) => setCrop({ ...crop, x: Math.round(value) })}
+                  t={t}
+                />
+              )}
+              {roomY > 0 && (
+                <RangeField
+                  label="上下位置"
+                  display={`${crop.y} px`}
+                  value={crop.y}
+                  min={0}
+                  max={roomY}
+                  onChange={(value) => setCrop({ ...crop, y: Math.round(value) })}
+                  t={t}
+                />
+              )}
+              {roomX > 0 || roomY > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {roomX > 0 && (
+                    <ActionButton tone="secondary" t={t} onClick={() => setCrop({ ...crop, x: Math.round(roomX / 2) })} disabled={busy}>
+                      左右置中
+                    </ActionButton>
+                  )}
+                  {roomY > 0 && (
+                    <ActionButton tone="secondary" t={t} onClick={() => setCrop({ ...crop, y: Math.round(roomY / 2) })} disabled={busy}>
+                      上下置中
+                    </ActionButton>
+                  )}
+                </div>
+              ) : (
+                fullCrop && <p className={`text-xs ${t.muted}`}>框已經跟圖一樣大，縮小一點才能移動。</p>
+              )}
             </div>
           )}
 

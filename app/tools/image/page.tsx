@@ -23,7 +23,7 @@ import {
   applyTextLayers,
   clearColorCache,
   convertForOutput,
-  createWorkImage,
+  importWorkImage,
   cropImage,
   ImageDecodeError,
   mergeImages,
@@ -94,10 +94,13 @@ export default function ImageWorkbenchPage() {
   const urls = useRef(new Set<string>());
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showNotice = useCallback((text: string, kind: "info" | "error" = "info") => {
+  const showNotice = useCallback((text: string, kind: "info" | "error" = "info", durationMs?: number) => {
     setNotice({ kind, text });
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
-    noticeTimer.current = setTimeout(() => setNotice(null), kind === "error" ? 8000 : 3000);
+    noticeTimer.current = setTimeout(
+      () => setNotice(null),
+      durationMs ?? (kind === "error" ? 8000 : 3000)
+    );
   }, []);
 
   const track = useCallback((added: WorkImage[]) => {
@@ -123,10 +126,17 @@ export default function ImageWorkbenchPage() {
       try {
         const loaded: WorkImage[] = [];
         const failed: string[] = [];
+        let resized = 0;
+        let resizedNote = "";
 
         for (const file of files) {
           try {
-            loaded.push(await createWorkImage(file, file.name));
+            const { image, resizedFrom } = await importWorkImage(file, file.name);
+            loaded.push(image);
+            if (resizedFrom) {
+              resized += 1;
+              resizedNote = `${resizedFrom.width} × ${resizedFrom.height} → ${image.width} × ${image.height}`;
+            }
           } catch (error) {
             failed.push(
               error instanceof ImageDecodeError ? error.message : `無法讀取「${file.name}」`
@@ -142,6 +152,14 @@ export default function ImageWorkbenchPage() {
         }
 
         if (failed.length > 0) showNotice(failed[0], "error");
+        else if (resized > 0)
+          showNotice(
+            resized === 1
+              ? `已加入 ${loaded.length} 張。照片超過瀏覽器能處理的大小，已等比縮成 ${resizedNote}。`
+              : `已加入 ${loaded.length} 張，其中 ${resized} 張超過瀏覽器能處理的大小，已等比縮小。`,
+            "info",
+            8000
+          );
         else if (loaded.length > 0) showNotice(`已加入 ${loaded.length} 張。`);
       } finally {
         setBusy(false);
