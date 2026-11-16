@@ -94,10 +94,13 @@ export default function ImageWorkbenchPage() {
   const urls = useRef(new Set<string>());
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showNotice = useCallback((text: string, kind: "info" | "error" = "info") => {
+  const showNotice = useCallback((text: string, kind: "info" | "error" = "info", durationMs?: number) => {
     setNotice({ kind, text });
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
-    noticeTimer.current = setTimeout(() => setNotice(null), kind === "error" ? 8000 : 3000);
+    noticeTimer.current = setTimeout(
+      () => setNotice(null),
+      durationMs ?? (kind === "error" ? 8000 : 3000)
+    );
   }, []);
 
   const track = useCallback((added: WorkImage[]) => {
@@ -153,7 +156,9 @@ export default function ImageWorkbenchPage() {
           showNotice(
             resized === 1
               ? `已加入 ${loaded.length} 張。照片超過瀏覽器能處理的大小，已等比縮成 ${resizedNote}。`
-              : `已加入 ${loaded.length} 張，其中 ${resized} 張超過瀏覽器能處理的大小，已等比縮小。`
+              : `已加入 ${loaded.length} 張，其中 ${resized} 張超過瀏覽器能處理的大小，已等比縮小。`,
+            "info",
+            8000
           );
         else if (loaded.length > 0) showNotice(`已加入 ${loaded.length} 張。`);
       } finally {
