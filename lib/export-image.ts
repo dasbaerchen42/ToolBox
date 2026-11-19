@@ -19,6 +19,7 @@ import {
   type ExportedImage,
 } from "@/lib/download";
 import { maskHtml, parseMaskTerms } from "./export-mask";
+import { splitDecoratedLines } from "./export-split-lines";
 
 // 這三個原本住在這裡,影像工作檯也要用,搬去 lib/download 後從這裡轉出,
 // 既有的匯入路徑就不用動。
@@ -367,7 +368,11 @@ export async function exportContentToImages({
         style.textContent = pageCss;
         clonedDoc.head.appendChild(style);
         const clonedPage = clonedDoc.body.querySelector<HTMLElement>("[data-export-page]");
-        if (clonedPage) await loadFontsFor(clonedPage, clonedDoc);
+        if (!clonedPage) return;
+        await loadFontsFor(clonedPage, clonedDoc);
+        // 跨行的底色、底線切成一行一段,不然會被畫成一整塊、蓋掉後面的字。
+        // 在複製文件裡、字型載好之後切,量到的換行就是實際截圖的換行
+        splitDecoratedLines(clonedPage);
       },
     });
   };
