@@ -18,12 +18,14 @@ const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&
 
 /**
  * 遮罩的樣子:主題色的底、字透明;用行內樣式,轉圖的複製文件也吃得到。
- * inline-block + nowrap:一個詞不會被折成兩行。折行的話,轉圖工具會把跨兩行的底色
+ * nowrap:一個詞不會被折成兩行。折行的話,轉圖工具會把跨兩行的底色
  * 畫成一整塊、把整段蓋掉;預覽用同一份樣式,看到的換行跟圖一樣。
- * line-height 1.2:色塊只蓋住字本身的高度,不會撐滿整個行高,上下兩行的遮罩之間留得出空隙。
+ * 刻意用一般的行內元素、不用 inline-block:html2canvas 先畫 inline-block 才畫行內元素的底色,
+ * 遮罩落在螢光筆底色裡時會被那層底色蓋掉,圖上只剩一個空洞。
+ * 行內元素的底色只蓋字本身的高度,不會撐滿整個行高,上下兩行的遮罩之間留得出空隙。
  */
 export const MASK_STYLE =
-  "display: inline-block; white-space: nowrap; line-height: 1.2; background: var(--accent); color: transparent; border-radius: 0.15em; text-decoration: none;";
+  "white-space: nowrap; background: var(--accent); color: transparent; border-radius: 0.15em; text-decoration: none;";
 
 /** 不能放在行尾的標點 */
 const LEADING_PUNCTUATION = "[「『（《〈(]";
