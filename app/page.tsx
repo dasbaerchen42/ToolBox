@@ -50,7 +50,7 @@ const tools = [
 const aside = {
   title: "發條驛站 · 恩佐的輓歌",
   note: "文字生存 Roguelike",
-  href: "https://the-clockwork-station.vercel.app/",
+  href: "https://the-clockwork-station.dasbaerchen.site/",
 };
 
 export default function HomePage() {
