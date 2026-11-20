@@ -67,7 +67,7 @@ export default function SiteNavigation() {
         <div className="flex shrink-0 items-center gap-3">
           <div className="hidden items-center text-[11px] tracking-[0.08em] text-(--ink-tertiary) opacity-50 transition-opacity duration-500 hover:opacity-100 xl:flex">
             <a
-              href="https://elsewhere.zeabur.app/"
+              href="https://dasbaerchen.site/"
               target="_blank"
               rel="noopener noreferrer"
             >
